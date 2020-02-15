@@ -162,9 +162,42 @@ However, such a spelling would introduce a weird novelty into the C++ language: 
 
 A seeming advantage is the consistency with the closely related \tcode{std::assume_aligned} \cite{P1007R3}, which was adopted for C++20. However, they are different. For \tcode{std::assume_aligned},  unlike for an assumption, the operand may be evaluated, so the problem above does not arise for \tcode{std::assume_aligned} (or, in fact, any other current ``magic'' library function).
 
-\section{Wording}
+\section{Proposed wording}
 
-The formal wording for this proposal will be provided in a future revision.
+Add the following subclause to [dcl.attr]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\begin{addedblock}
+\subsection*{Assumption attribute \hspace{7.33cm} [dcl.attr.assume]}
+
+The \textit{attribute-token} \tcode{assume} may be applied to a null statement; such a statement is an assumption. The attribute-token \tcode{assume} shall appear at most once in each attribute-list. An \textit{attribute-argument-clause} shall be present and shall have the form:
+
+\hspace{5mm}\tcode{( }\textit{assignment-expression}\tcode{ )}
+
+The epression shall be contextually convertible to \tcode{bool}. The expression is not evaluated, however, it is potentially evaluated [basic.ref.odr]. If the expression would not evaluate to \tcode{true}, the behavior is undefined.
+
+
+\begin{note}
+The use of assumptions is intended to allow implementations to analyze the form of the expression and deduce from that information used to optimize the program.
+\end{note}
+
+\begin{example}
+\begin{codeblock}
+int divide_by_32(int x)  {
+    [[assume(x >= 0)]];
+    return x/32;   // The instructions produced for the division
+                   //  may omit handling of negative values
+}
+\end{codeblock}
+\end{example}
+\end{addedblock}
+\end{adjustwidth}
+
+Modify [expr.const] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If \tcode{e} satisfies the constraints of a core constant expression, but evaluation of e would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) that has a predicate that would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
+\end{adjustwidth}
 
 \section*{Document history}
 
@@ -173,7 +206,7 @@ The formal wording for this proposal will be provided in a future revision.
 \item \textbf{R1}, 2019-10-06: Updated text to reflect removal of Contracts from C++20; made proposed attribute syntax backwards-compatible by replacing colon with parentheses.
 \item \textbf{R2}, 2019-11-25: Changed title to ``Portable assumptions''; changed semantics from UB if expression would evaluate to \tcode{false} to UB if expression would \emph{not} evaluate to \tcode{true}; changed syntax section to propose attribute-syntax only, dropping ``magic'' library function syntax as a viable alternative.
 \item \textbf {R3}, 2020-01-13: Updated text to clarify the discussion of the proposed semantics and syntax.
-\item \textbf{R4}, 2020-??-??:
+\item \textbf{R4}, 2020-??-??:  Added wording
 \end{itemize}
 
 \renewcommand{\bibname}{References}

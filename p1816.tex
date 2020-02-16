@@ -1,0 +1,102 @@
+\input{wg21common}
+
+\newcommand{\forceindent}{\parindent=1em\indent\parindent=0pt\relax} % For indenting a paragraph containing code that can't be laid out as a {codeblock} because it also contains \emph
+
+\pretolerance=10000 % prevent overfull lines
+
+\begin{document}
+\title{Wording for class template argument deduction forr aggregates}
+\author{
+  Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P1816R0 \\
+Date: & 2019-07-17\\
+Project: & Programming Language C++ \\
+Audience: & Core Working Group
+\end{tabular}
+
+
+\begin{abstract}
+This paper provides wording for class template argument deduction for aggregates \cite{P1021R4}.
+\end{abstract}
+
+\section{Proposed wording}
+
+The proposed changes are relative to the C++ working draft \cite{N4820}. 
+
+In [over.match.class.deduct], append to paragraph 1 as follows:
+
+\begin{adjustwidth}{0.9cm}{0.9cm}
+\begin{itemize}
+\item For each \grammarterm{deduction-guide}, a function or function template with the following properties:
+\begin{itemize}
+\item The template parameters, if any, and function parameters are those of the \grammarterm{deduction-guide}.
+\item The return type is the \grammarterm{simple-template-id} of the \grammarterm{deduction-guide}.
+\end{itemize}
+\end{itemize}
+
+\begin{addedblock}
+In addition, if \tcode{C} satisfies the conditions for an aggregate class with the assumption that any dependent base class has no virtual functions and no virtual base classes, and the initializer is a non-empty \grammarterm{braced-init-list} or parenthesized \grammarterm{expression-list}, the set contains an additional function template, called the \grammarterm{aggregate deduction candidate}, defined as follows. Let $x_1, ..., x_n$ be the elements of the \grammarterm{initializer-list} or \grammarterm{designated-initializer-list} of the \grammarterm{braced-init-list}, or of the \grammarterm{expression-list}. For each $x_i$, let $e_i$ be the corresponding element of \tcode{C} or of one of its (possibly recursive) subaggregates that would be initialized by $x_i$ ([dcl.init.aggr]) if brace elision is not considered for any subaggregate that has a dependent type. If there is no such element $e_i$, the program is ill-formed. The aggregate deduction candidate is derived as above from a hypothetical constructor $\tcode{C}(\tcode{T}_1, ..., \tcode{T}_n)$, where $\tcode{T}_i$ is the declared type of the element $e_i$.
+\end{addedblock}
+\end{adjustwidth}
+
+In [over.match.class.deduct], paragraph 3, add to the example as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\begin{codeblock}
+B b{(int*)0, (char*)0};      // OK, deduces \tcode{B<char*>}
+\end{codeblock}
+\begin{addedblock}
+\begin{codeblock}
+template <typename T>
+struct S {
+    T x;
+    T y; 
+};
+
+template <typename T>
+struct C {
+    S<T> s;
+    T t; 
+};
+
+template <typename T>
+struct D {
+    S<int> s;
+    T t; 
+};
+
+C c1 = {1, 2};         // error: deduction failed 
+C c2 = {1, 2, 3};      // error: deduction failed 
+C c3 = {{1u, 2u}, 3};  // OK, \tcode{C<int>} deduced
+
+D d1 = {1, 2};         // error: deduction failed
+D d2 = {1, 2, 3};      // OK, braces elided, \tcode{D<int>} deduced
+
+template <typename T>
+struct I {
+    using type = T;
+};
+
+template <typename T>
+struct E {
+    typename I<T>::type i;
+    T t; 
+};
+
+E e1 = {1, 2};          // OK, \tcode{E<int>} deduced
+\end{codeblock}
+\end{addedblock}
+---  \emph{end example} ]
+\end{adjustwidth}
+
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

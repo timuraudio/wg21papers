@@ -1,0 +1,242 @@
+\input{wg21common}
+
+\newcommand{\forceindent}{\parindent=1em\indent\parindent=0pt\relax} % For indenting a paragraph containing code that can't be laid out as a {codeblock} because it also contains \emph
+
+\begin{document}
+\title{Types with array-like object representations}
+\author{
+  Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P1912R1 \\
+Date: & 2020-01-13\\
+Project: & Programming Language C++ \\
+Audience: & Evolution Working Group
+\end{tabular}
+
+
+\begin{abstract}
+We propose a new specifier declaring that a given standard-layout type \tcode{T} with data members of type \tcode{U} has an object representation compatible with an array of \tcode{U}s. This allows to convert pointers and references to those types to those of an array without invoking undefined behaviour. This facility plugs a very unfortunate hole in the current C++ type system.
+
+As a side benefit, our proposed facility regularises the unusual interconvertibility properties of \tcode{std::complex}, such that it is no longer a ``magic'' type unimplementable without special compiler support.
+\end{abstract}
+
+\vspace{4mm} 
+
+\section{Motivation}
+
+It is often useful, especially with fundamental types, to observe the object representation (i.e. the bytes) of an object of type \tcode{T1} as if it were the representation of an object of a different type \tcode{T2}. Such techniques are sometimes called \emph{type punning} and are widely used in performance-sensitive C++ programs. In some cases, they are essential to achieve acceptable performance. 
+
+Typically, this is done using \tcode{reinterpret_cast} or \tcode{union}. Often, such code compiles fine on all major compilers and achieves the desired results, but is undefined behaviour according to the C++ standard, violating either aliasing rules, object lifetime rules, or both. This very unfortunate situation arises over and over again due to certain holes in the C++ type system. 
+
+Recent proposals attempt to plug several of these holes, giving programmers tools to achieve the desired result without running into undefined behaviour. However, one important hole still remains. This paper proposes to fix that last hole.
+
+\section{Related proposals}
+
+\cite{P0476R2}, adopted for C++20, introduces \tcode{std::bit_cast} as a portable means to type-pun between objects of two types \tcode{T1} and \tcode{T2}, as long as they are trivially copyable and have equal sizes:
+
+\begin{codeblock}
+float fast_inverse_sqrt(float y) 
+{
+    auto i = std::bit_cast<int>(y);   // type-pun \tcode{float} to \tcode{int} without UB
+    i  = 0x5f3759df - ( i >> 1 );
+    y = std::bit_cast<float>(i);   // type-pun \tcode{int} back to \tcode{float} without UB
+    // ...
+}
+\end{codeblock}
+
+\cite{P0593R4} proposes a mechanism to implicitly create an object of type \tcode{T} from a sequence of bytes that holds a valid representation of such an object. This allows conversions which would be undefined behaviour in the current C++ standard:
+
+\begin{codeblock}
+void process(Stream* stream) 
+{
+    std::unique_ptr<char[]> buffer = stream->read();
+    auto* foo = reinterpret_cast<Widget*>(buffer.get());// type-pun \tcode{char[]} to \tcode{Foo} without UB
+    process_foo(foo);
+}
+\end{codeblock}
+
+Finally, \cite{P1839R0} proposes a fix to the object model that allows the reverse: directly accessing the sequence of bytes that makes up the representation of an existing object of type \tcode{T}. This would be again undefined behaviour in the current C++ standard:
+
+\begin{codeblock}
+void print_bytes(float f)
+{
+    auto* bytes = reinterpret_cast<unsigned char*>(&f);
+    for (int i = 0; i < sizeof(float); ++i)
+        std::cout << bytes[i];    // print byte i of representation of f without UB
+}
+
+\end{codeblock}
+
+\section{The remaining type system hole}
+
+However, there remains an important use case that is not addressed by any of those proposals. 
+
+\subsection{No pointer-interconvertibility}
+
+Consider a standard-layout type such as
+
+\begin{codeblock}
+struct two_floats {
+    float x, y;
+};
+\end{codeblock}
+
+The object representation of such a type will typically be identical to that of an array of two floats. However, if we wish to access it as such, we immediately invoke undefined behaviour:
+
+\begin{codeblock}
+two_floats* tf = read_data();
+auto* f = reinterpret_cast<float*>(tf);
+std::cout << f[0] << ',' << f[1];   // UB! Can't do pointer arithmetic on \tcode{f}
+\end{codeblock}
+
+According to the current language rules, \tcode{two_floats} and \tcode{float[2]} are not pointer-interconvertible. \tcode{std::bit_cast} does not help at all in this case.
+
+In real life, the need for such casts arises e.g. when working with packs of fundamental types that interoperate with a SIMD type such as \tcode{__m128}. To pass a data stream across an API boundary, it is often necessary to cast between an array of such packs and an array of objects of the underlying fundamental type.
+
+Another, related use case is representing numeric types like complex numbers, quaternions, etc. as user-defined types, and then passing them on to a C API such as the GNU scientific library which might expect arrays instead. Again, the existing practice is to use \tcode{reinterpret_cast} which is currently undefined behaviour.
+
+\subsection{No layout-compatibility}
+
+A similar situation occurs when using unions instead of \tcode{reinterpret_cast} to pun between the types. Consider the following class (which actually exists in the Qt framework):
+
+\begin{codeblock}
+struct QColor {
+    union {
+        struct {
+            ushort alpha;
+            ushort red;
+            ushort green;
+            ushort blue;
+            ushort pad;
+        } argb;
+
+        struct {
+            ushort alpha;
+            ushort hue;
+            ushort saturation;
+            ushort value;
+            ushort pad;
+        } ahsv;
+        
+        // more structs laid out in the same way...
+
+        ushort array[5];
+    } ct;
+};
+\end{codeblock}
+
+This class relies on the user being able to type-pun between the structs \tcode{argb}, \tcode{ahsv}, etc. on the one hand, and the \tcode{ushort[5]} array on the other hand. In practice, this has worked for many years, but as far as the standard is concerned, this is undefined behaviour, as the structs and the array are not layout-compatible, even though they typically have identical object representations. Writing to \tcode{argb} followed by reading from the non-active union member \tcode{array} is therefore undefined behaviour.
+
+
+\section{The curious case of \tcode{std::complex}}
+
+Curiously, the C++ standard already allows exactly the kind of interconvertibility that we are proposing (at least for the \tcode{reinterpret_cast} case), but only for one specific class in the standard library: \tcode{std::complex}. The wording in [complex.numbers]p4 says:
+
+\begin{adjustwidth}{0.9cm}{0.9cm}
+If \tcode{z} is an lvalue of type \cv{} \tcode{complex<T>} then:
+
+\begin{itemize}
+\item the expression \tcode{reinterpret_cast<\cv{} T(\&)[2]>(z)} shall be well-formed,
+\item \tcode{reinterpret_cast<\cv{} T(\&)[2]>(z)[0]} shall designate the real part of \tcode{z}, and
+\item \tcode{reinterpret_cast<\cv{} T(\&)[2]>(z)[1]} shall designate the imaginary part of \tcode{z}.
+\end{itemize}
+\end{adjustwidth}
+
+This is interesting, because it allows interconvertibility between \tcode{std::complex<T>} and \tcode{T[2]} by fiat, regardless of how \tcode{std::complex<T>} is defined, because the implementation ``knows'' that the two types have the same layout. 
+
+If \tcode{std::complex<T>} is implemented as having a data member of type \tcode{T[2]}, the above cast would work due to existing pointer-interconvertibility rules, which allow to type-pun between a standard-layout class object and its first non-static data member. 
+
+However, if \tcode{std::complex<T>} is implemented as having two data members of type \tcode{T}, like our \tcode{struct two_floats} above (notably, the libc++ implementation of \tcode{std::complex} does exactly this), there is no way to reconcile the above requirement on \tcode{std::complex} with the language rules, except by allowing the specific casts \emph{by fiat} for this specific type. This is exactly what the C++ standard is doing here -- arguably, an unfortunate solution.
+
+The subsequent part of the wording in [complex.numbers]p4 is even more interesting:
+
+\begin{adjustwidth}{0.9cm}{0.9cm}
+Moreover, if \tcode{a} is an expression of type \cv{}~\tcode{complex<T>*} and the expression \tcode{a[i]} is well-defined for an integer expression \tcode{i}, then:
+
+\begin{itemize}
+\item \tcode{reinterpret_cast<\cv{} T*>(a)[2*i]} shall designate the real part of \tcode{a[i]}, and
+\item \tcode{reinterpret_cast<\cv{} T*>(a)[2*i + 1]} shall designate the imaginary part of \tcode{a[i]}.
+\end{itemize}
+\end{adjustwidth}
+
+This essentially allows to arbitrarily pointer-interconvert between \tcode{std::complex<T>*} and \tcode{T*}. Unlike the first part of [complex.numbers]p4, there is no way to make this work with the current C++ language rules \emph{regardless} of how \tcode{std::complex<T>} is implemented under the hood, except by fiat for this specific type.
+
+Crucially, taken together, the conversions above are exactly what we want to allow for our user-defined types such as \tcode{two_floats} and \tcode{QColor}. Our task is therefore to turn these rules that currently exist only for \tcode{std::complex} into a generic tool that a C++ programmer can use for their own types, and to extend them to layout-compatibility as well as pointer-interconvertibility, so that they work with the union technique as well as with \tcode{reinterpret_cast}.
+
+\section{Proposed solution}
+
+We propose a new specifier that can be added to the declaration of a standard-layout type to specify that the type has an \emph{array-like object representation}. The actual spelling of such a specifier is of course subject to bikeshedding. In the meantime, we use a new keyword \tcode{layoutas(\emph{type-id})}, where \tcode{\emph{type-id}} names an array type, as a placeholder for the final spelling. This new specifier has properties similar to the existing \tcode{alignas} specifier specifying an alignment requirement, and should occupy a similar place in the grammar. Using this temporary placeholder syntax, we can now express our intent as follows:
+
+\begin{codeblock}
+struct two_floats layoutas(float[2]) {
+    float x, y;
+};
+\end{codeblock}
+
+This declares that an object of type \tcode{two_floats} has an object representation compatible with a \tcode{float[2]}. If the implementation cannot guarantee this, for example because the non-static data members of the type are not exactly two \tcode{float}s, the program is ill-formed. Otherwise, we can use this information to allow for relaxed interconvertibility rules, such that \tcode{two_floats} and \tcode{float[2]} become pointer-interconvertible and layout-compatible.
+
+We can now print all the floats in an array of \tcode{two_floats} objects like this, without invoking undefined behaviour:
+
+\begin{codeblock}
+two_floats tfs[100];
+
+for (int i = 0; i < 200; ++i)
+    std::cout << reinterpret_cast<float*>(&tfs)[i] << `\n';  // now OK
+\end{codeblock}
+
+just in the same way it was already allowed for \tcode{std::complex}.
+
+Similarly, the class \tcode{QColor} can now be declared as follows:
+
+\begin{codeblock}
+struct QColor {
+    union {
+        struct layoutas(ushort[5]) {
+            ushort alpha;
+            ushort red;
+            ushort green;
+            ushort blue;
+            ushort pad;
+        } argb;
+        
+        // more structs laid out in the same way...
+
+        ushort array[5];
+    } ct;
+};
+\end{codeblock}
+
+This now makes the members \tcode{argb} and \tcode{array} layout-compatible, and removes the undefined behaviour present in current programs that use this class.
+
+Note that \tcode{layoutas} cannot be an attribute, because the removal of an attribute is not allowed to alter the semantic meaning of a valid C++ program, whereas in this case, the removal of \tcode{layoutas} may add undefined behaviour to the program.
+
+It is important that this paper does not propose to allow circumventing the type system and the object lifetime rules. It will not allow the user to arbitrarily type-pun between two unrelated types. We propose to only allow this for the case where the other type is an array. The mental model is that the actual underlying object, which exists in memory and is within its lifetime, is the array. The user-defined type simply provides alternative names to the elements of the array through its data members. The user-defined type will be treated as an array for ABI purposes. This proposal therefore essentially introduces strong typedefs for arrays.
+
+Some compilers have modes where the object representation of the array might actually be different from an object that has matching data members, for example ``hardening'' modes that add extra data to diagnose out-of-bounds array access. In these cases, the \tcode{layoutas} specifier will disable this functionality for the type in question.
+
+Note that this functionality does not extend to a \tcode{constexpr} context.
+
+\section{Wording}
+
+The formal wording for this proposal will be provided in a future revision.
+
+\section*{Document history}
+
+\begin{itemize}
+\item \textbf{R0}, 2019-10-06: Initial version.
+\item \textbf{R1}, 2020-01-13: Changed proposal to consider only conversions to an array type, instead of between arbitrary types; added layout-compatibility to enable conversion via unions.
+\end{itemize}
+
+\section*{Acknowledgements}
+
+Many thanks to Fabian Renn-Giles and Richard Smith for encouraging this proposal. Many thanks to Andrey Davydov for reviewing the paper and suggesting valuable improvements.
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

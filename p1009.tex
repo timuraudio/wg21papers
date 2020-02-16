@@ -1,0 +1,149 @@
+\input{wg21common}
+
+\begin{document}
+\title{Array size deduction in new-expressions}
+\author{
+  Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P1009R2 \\
+Date: & 2019-02-22\\
+Project: & Programming Language C++ \\
+Audience: & Core Working Group
+\end{tabular}
+
+
+\begin{abstract}
+In this paper we propose to fix a particular inconsistency in the initialization rules of C++ by allowing array size deduction in \emph{new-expression}s. This aligns their behaviour with that of initialization everywhere else in the language. Our proposed solution also creates consistency for a parenthesized list of values, which P0960 allows to to be used for initializing an array.
+\end{abstract}
+
+\vspace{5mm}
+
+\section{Motivation}
+
+Bjarne Stroustrup pointed out the following inconsistency in the C++ language:
+
+\begin{codeblock}
+double a[]{1,2,3};                // this declaration is OK, ...
+double* p = new double[]{1,2,3};  // ...but this one is ill-formed!
+\end{codeblock}
+
+Jens Maurer provided the explanation why it doesn't work: For a \emph{new-expression}, the expression inside the square brackets is currently mandatory according to the C++ grammar. When uniform initialization was introduced for C++11, the rule about deducing the size of the array from the number of initializers was never extended to the \emph{new-expression} case. Presumably this was simply overlooked. There is no fundamental reason why we cannot make this work.
+
+Admittedly, deducing the array size in a \emph{new-expression} is code that probably only very few people would actually write. One could therefore argue that this is a problem not worth fixing.
+
+However, when teaching C++ initialization rules, we observe that most people intuitively expect uniform initialization in a \emph{new-expression} to follow the same rules as uniform initialization everywhere else in the language. This exception is very unfortunate and tends to upset and surprise people when pointed out to them.
+
+The existence of such exceptions is exactly the reason why C++ initalization rules are so notorious for being complicated, and why most C++ developers struggle with them. There are just too many non-obvious inconsistencies. We therefore propose to remove this particular one---not because this is a problem that people would frequently run into (they don't), but because fixing it is straightforward, the fix is a pure extension that does not impact any other part of the standard, and it would make initialization rules in C++ simpler, more uniform, and easier to teach.
+
+\pagebreak
+
+\section{Solution}
+
+We propose to allow omitting the array bound in a \emph{new-expression}, as long as the array size can be deduced from the initializer list, in the same way it is already allowed in regular array declarations:
+
+\begin{table}[h]
+\small
+\begin{tabularx}{\textwidth}{|X|X|}
+\hline
+C++17 & This proposal  \\
+\hline 
+\tcode{double a[]\{1,2,3\}; {} {} {} {} {} {} {} {} {} {} {} {} {} {} // OK} &  \tcode{double a[]\{1,2,3\}; {} {} {} {} {} {} {} {} {} {} {} {} {} {} // OK}  \\
+\tcode{double* p = new double[]\{1,2,3\};  // Error} &  \tcode{double* p = new double[]\{1,2,3\};  // OK}  \\  \hline
+\end{tabularx}
+\end{table}
+
+A special case are arrays with no elements. While a declaration of an object of such type is ill-formed, it is fine to allocate one in a \emph{new-expression}:
+
+\begin{codeblock}
+int a[0]{};             // this declaration is ill-formed, ...
+int* p = new int[0]{};  // ...but this one is OK!
+\end{codeblock}
+
+This keeps consistency with C, where \tcode{malloc(0)} returns a (non-dereferenceable) pointer, and is occasionally useful in C++, e.g. in templates where the array size is a non-type template parameter. To be maximally consistent, we propose that an array size of \tcode{0} in a \emph{new-expression} should be deduced if the initializer consists of empty braces:
+\begin{table}[h]
+\small
+\begin{tabularx}{\textwidth}{|X|X|}
+\hline
+C++17 & This proposal  \\
+\hline 
+\tcode{double* p = new double[0]\{\};   // OK} & \tcode{double* p = new double[0]\{\};   // OK}  \\ 
+\tcode{double* p = new double[]\{\};  {} // Error} &  \tcode{double* p = new double[]\{\};  {} // OK} \\  \hline
+\end{tabularx}
+\end{table}
+
+Here, both versions (with or without the \tcode{0}) would have the same effect. This way, array size deduction in \emph{new-expression}s behaves the exact same way for any array size that is allowed in a \emph{new-expression}.
+
+Another variation of this inconsistency is an array initialized with a string literal. The proposed wording fixes this case, too:
+
+\begin{table}[h]
+\small
+\begin{tabularx}{\textwidth}{|X|X|}
+\hline
+C++17 & This proposal  \\
+\hline 
+\tcode{char c[]\{"Hello"\}; {} {} {} {} {} {} {} {} {} {} {} {} {} {}// OK} & \tcode{char c[]\{"Hello"\}; {} {} {} {} {} {} {} {} {} {} {} {} {} // OK}  \\ 
+\tcode{char* d = new char[]\{"Hello"\};  {} // Error} &  \tcode{char* d = new char[]\{"Hello"\};  {} // OK} \\  \hline
+\end{tabularx}
+\end{table}
+
+\section{Interaction with P0960}
+
+\cite{P0960} introduces aggregate initialization with a parenthesized list of values, which includes arrays. The proposed wording ensures consistency in this case, too:
+
+\begin{table}[h]
+\small
+\begin{tabularx}{\textwidth}{|X|X|}
+\hline
+P0960 & P0960 + this proposal  \\
+\hline 
+\tcode{double a[](1,2,3); {} {} {} {} {} {} {} {} {} {} {} {} {} {} // OK} &  \tcode{double a[](1,2,3); {} {} {} {} {} {} {} {} {} {} {} {} {} {} // OK}  \\
+\tcode{double* p = new double[](1,2,3);  // Error} &  \tcode{double* p = new double[](1,2,3);  // OK}  \\  \hline
+\end{tabularx}
+\end{table}
+
+\section{Previous work}
+
+The issue discussed here was already mentioned in an earlier paper by Ville Voutilainen \cite{P0965}, although that paper did not propose a technical solution for it. It also mentioned another inconsistency dealing with pointers to pointers. It admitted that this other inconsistency ``may be beyond fixing'' and would require modifying the grammar in what ``is certainly a breaking change''. It is a much rarer corner case and we do not consider it here.
+
+\section{Proposed wording}
+
+The reported issue is intended as a defect report with the proposed resolution as follows. The effect of the wording changes should be applied in implementations of all previous versions of C++ where they apply. The changes are relative to the C++ working paper \cite{Smith2018}. 
+
+Modify [expr.new] paragraph 1 as follows:
+
+\begin{adjustwidth}{0.9cm}{0.9cm}
+\emph{noptr-new-declarator} : \\
+    \phantom{xxx} \tcode{[} \emph{expression\added{$_{opt}$}} \tcode{]} \emph{attribute-specifier-seq}$_{opt}$ \\
+    \phantom{xxx} \emph{noptr-new-declarator} \tcode{[} \emph{constant-expression} \tcode{]} \emph{attribute-specifier-seq}$_{opt}$ \\
+\end{adjustwidth}
+
+Modify [expr.new] paragraph 6 as follows:
+
+\begin{adjustwidth}{0.9cm}{0.9cm}
+Every \emph{constant-expression} in a \emph{noptr-new-declarator} shall be a converted constant expression of type \tcode{std::size_t} and shall evaluate to a strictly positive value. \removed{T}\added{If t}he \emph{expression} in a \emph{noptr-new-declarator} \added{is present, it }is implicitly converted to \tcode{std::size_t}. \begin{example}
+Given the definition \tcode{int n = 42}, \tcode{new float[n][5]} is well-formed (because \tcode{n} is the \emph{expression} of a \emph{noptr-new-declarator}), but \tcode{new float[5][n]} is ill-formed (because \tcode{n} is not a constant expression). \end{example} 
+
+\added{If the \emph{type-id} or \emph{new-type-id} denotes an array type of unknown bound ([dcl.array]), the \emph{new-initializer} shall not be omitted; the allocated object  is an array with \tcode{n} elements, where \tcode{n} is determined from the number of initial elements supplied in the \emph{new-initializer} ([dcl.init.aggr], [dcl.init.string]).}
+\end{adjustwidth}
+
+\section*{Document history}
+
+\begin{itemize}
+\item \textbf{R0}, 2018-10-08: Initial version
+\item \textbf{R1}, 2018-11-26: Added discussion of no-elements case; revised wording; made proposal a DR; added reference to P0965.
+\item \textbf{R2}, 2019-02-22: Added discussion of string literal case and P0960; revised wording.
+\end{itemize}
+
+\section*{Acknowledgements}
+
+Many thanks to Richard Smith and Tim Song for their help with the wording, and to JF Bastien and Patrice Roy for their comments.
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

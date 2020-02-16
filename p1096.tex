@@ -1,0 +1,120 @@
+\input{wg21common}
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\title{Simplify the customization point for structured bindings}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})}
+\date{} %unused. Type date explicitly below.
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{tabular}{ll}
+Document \#: & P1096R0 \\
+Date: &\today \\
+Project: & Programming Language C++ \\
+Audience: & Evolution Working Group
+\end{tabular}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\vspace{10mm}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+In C++17, enabling structured bindings for a user-defined type requires implementing all of \tcode{std::tuple_element}, \tcode{std::tuple_size}, and \tcode{get}. This is unnecessarily verbose, error-prone, and hard to teach. In this paper, we show that \tcode{std::tuple_element} can safely be made optional, therefore significantly simplifying the customization point for structured bindings. 
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\vspace{10mm}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Motivation}
+\label{sec:motivation}
+
+Structured bindings were introduced in C++17 as a convenient syntax to name the elements of a ``tuple-like'' object instead of naming the whole object in an initializing declaration. Since then, structured bindings became one of the most popular features of C++17. 
+
+Several extensions to this syntax have already been proposed, such as letting them introduce a pack \cite{P1061R0} and being able to mark them as \tcode{static} and \tcode{constexpr} \cite{P1091R0}. Various other extensions are possible. We expect usage of structured bindings to increase in the future.
+
+Ideally, any type that is conceptually just a set of elements could be used with the structured bindings syntax. Many types would greatly benefit from adding structured bindings support, for example  \tcode{std::complex} and \tcode{std::chrono::year_month_day}. Many more such types exist in user code outside of the standard library. 
+
+Unfortunately, enabling structured bindings for such a type today requires implementing all of \tcode{std::tuple_element}, \tcode{std::tuple_size}, and \tcode{get}. This customization point is unnecessarily verbose, error-prone, and hard to teach. 
+
+In this paper, we show that \tcode{std::tuple_element} can safely be made optional. The type of the tuple elements can easily be deduced from the \tcode{decltype} of \tcode{get} instead. This significantly reduces the boilerplate that a user is required to write in order to enable structured bindings for a user-defined type.
+
+
+
+
+
+%This change also makes the customization point of structured bindings more consistent with that of \tcode{std::apply}, which already uses only \tcode{std::tuple_size} and \tcode{get} today. As a consequence, our proposal would automatically enable structured bindings for all types that support \tcode{std::apply}, even if they do not define \tcode{std::tuple_element}.
+
+%There are some cases where \tcode{std::tuple_element} is still useful, and therefore we do not propose to deprecate or remove it. We also do not propose to make any changes to the currently existing specializations of \tcode{std::tuple_element} in the standard library (for \tcode{std::tuple}, \tcode{std::pair}, and \tcode{std::array}).
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Proposed solution}
+\label{sec:proposal}
+
+We propose to make the presence of \tcode{std::tuple_element} optional when constructing structured bindings from a type for which \tcode{std::tuple_size} is defined. Whenever \tcode{std::tuple_element} is present for such a type, it will be used to determine the types of the bindings, exactly as today. When it is missing, instead of making the program ill-formed (situation today) the types of the bindings will now be determined from the \tcode{decltype} of the \tcode{get} expression that is used as the initializer for the binding in question (either \tcode{e.get<i>} or \tcode{get<i>(e)}, depending on which declaration of \tcode{get} is found by name lookup).
+
+For the vast majority of use cases, this will result in the exact same types being deduced. There is one exception where a subtle difference arises: tuple-like types containing elements of reference type. Consider:
+
+\begin{codeblock}
+int n = 0;
+std::tuple<int, int&> t{n, n};
+auto& tref{t};
+auto [i, iref] = tref;
+\end{codeblock}
+
+When using \tcode{std::tuple_element} for determining the types of \tcode{i} and \tcode{iref}, they will be \tcode{int} and \tcode{int\&} respectively, preserving the distinction between reference-type tuple elements and elements of a tuple decomposed by reference. However, when using \tcode{get} instead, this information would get lost: \tcode{decltype(std::get<0>(tref))} and \tcode{decltype(std::get<1>(tref))} are both \tcode{int\&}. The ability to make this distinction was the reason that the \tcode{std::tuple_element} requirement was not removed from the original design for C++17 \cite{P0144R2}.
+
+Now that there is more experience with using structured bindings in practice, we argue that the ability to make this distinction is only relevant in extremely rare cases. In fact, we are not aware of any such case. It is certainly not necessary for perfect forwarding, since that always forwards a reference anyway. We therefore believe that making \tcode{std::tuple_element} opt-in (and therefore modifying the current rules) is a cheap price to pay considering that it will significantly simplify structured bindings for everyone.
+
+At the same time, we do not propose any changes to the existing \tcode{std::tuple_element} specializations for \tcode{std::tuple}, \tcode{std::pair}, and \tcode{std::array}. This ensures that our proposed change can never break, or change the behaviour of, existing C++ code.
+
+If this proposal gets adapted, we will recommend library writers to always use the simpler customization point by just defining \tcode{std::tuple_size} and \tcode{get}, unless they have a very good reason to also define \tcode{std::tuple_element}. 
+
+An additional benefit of the change proposed here is that it makes the customization point of structured bindings more consistent with that of \tcode{std::apply}, which already today requires only \tcode{std::tuple_size} and \tcode{get} to be present. Our proposal would automatically enable structured bindings for all types that support \tcode{std::apply}, even if they do not define \tcode{std::tuple_element}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Further considerations}
+\label{sec:considerations}
+
+We also considered the possibility to make \tcode{std::tuple_size} optional, to simplify the customization point even further. In theory, all the required information can be deduced from only a suitably defined \tcode{get} and the number of \emph{declarator}s in the structured binding's \emph{declarator-list}. In practice however, implementing this approach creates some complications for which we did not yet find satisfactory solutions. Therefore, at this time we  do not propose any changes to the way \tcode{std::tuple_size} works.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Proposed wording}
+\label{sec:wording}
+
+The proposed changes are relative to the C++ working paper \cite{Smith2018}.  
+
+Modify \textbf{[dcl.struct.bind]} paragraph 3 as follows:
+
+\begin{adjustwidth}{0.9cm}{0.9cm}
+Otherwise, if the \emph{qualified-id} \tcode{std::tuple\_size<E>} names a complete type, the expression \tcode{std::tuple\_size<E>::value}
+shall be a well-formed integral constant expression and the number of elements in the \emph{identifier-list} shall be equal to the value of that
+expression. The \emph{unqualified-id} \tcode{get} is looked up in the scope of \tcode{E} by class member access lookup (6.4.5), and if that finds at least one declaration that is a function template whose first template parameter
+is a non-type parameter, the initializer is \tcode{e.get<i>()}. Otherwise, the initializer is \tcode{get<i>(e)}, where \tcode{get} is looked up in the associated namespaces (6.4.2). In either case, \tcode{get<i>} is interpreted as a \emph{template-id}.
+\begin{note}
+Ordinary unqualified lookup (6.4.1) is not performed.
+\end{note}
+In either case, \tcode{e} is an lvalue if the type of the entity \tcode{e} is an lvalue reference and an xvalue otherwise. Given the type $\tcode{T}_i$
+designated by \tcode{std::tuple\_element<i, E>::type}\added{ if it names a type, otherwise by the \tcode{decltype} of the initializer}, variables are introduced with unique names $\tcode{r}_i$ of type ``reference to $\tcode{T}_i$'' initialized with the initializer (11.6.3), where the reference is an lvalue reference if the initializer is an lvalue and an rvalue reference otherwise. Each $\tcode{v}_i$ is the name of an lvalue of type $\tcode{T}_i$ that refers to the object bound to $\tcode{r}_i$; the referenced type is $\tcode{T}_i$.
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Acknowledgements}
+
+Many thanks to Herb Sutter, Ville Voutilainen, Peter Dimov, Tony Van Eerd, Tomasz Kami\' nski, Arthur O'Dwyer, Jens Maurer, Barry Revzin, Gabriel Dos Reis, and Mathias Stearn for their very helpful comments.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

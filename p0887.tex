@@ -1,0 +1,234 @@
+\input{wg21common}
+
+\begin{document}
+\title{The identity metafunction}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) }
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P0887R1 \\
+Date: &2018-03-18 \\
+Project: & Programming Language C++ \\
+Audience: & Library Working Group
+\end{tabular}
+
+\begin{abstract}
+This paper proposes the library utility \tcode{std::type_identity}, which implements the identity metafunction. The functionality it provides is both fundamental and surprisingly useful. It can be used to selectively disable template argument deduction (for which there is currently no standard mechanism), and as a basic building block for other metafunctions. The main issue with standardising this utility has long been the lack of consensus on a name. This paper summarises the history, discusses different names, and provides a rationale for the chosen name.
+\end{abstract}
+
+\section{Definition}
+\label{sec:def}
+This paper proposes to add the most fundamental metafunction to the C++ standard library: the identity metafunction. It takes one template argument, type \tcode{T}, and provides the member typedef \tcode{type} which is the same type \tcode{T}.
+
+The implementation is trivial: 
+
+\begin{codeblock}
+template <typename T>
+struct type_identity { using type = T; };
+
+template <typename T>
+using type_identity_t = typename type_identity<T>::type;
+\end{codeblock}
+
+Despite its simplicity, this metafunction is surprisingly useful in various situations.
+
+\section{Motivation}
+\subsection{Disabling template argument deduction}
+Commonly, the need arises to disable template argument deduction for one or more arguments of a function, and force client code to explicitly specify the template parameter. Consider:
+\begin{codeblock}
+template <typename T>
+void foo(T t) {@\commentellip@}
+\end{codeblock}
+If we wish to disable deduction on \tcode{t}, it can be accomplished as follows:
+\begin{codeblock}
+template <typename T>
+void foo(type_identity_t<T> t) {@\commentellip@}
+\end{codeblock}
+In fact, this technique has become a common idiom (let's call it the ``type identity idiom''). Currently, the idiom requires one to type out their own identity metafunction, defined as above. We should instead provide it in the standard library. This would standardise existing practice and make the idiom more convenient to use and easier to teach (somewhat similar to how \tcode{enable_if} is a standard metafunction for selectively removing functions from overload resolution).
+
+\subsection{Disabling deduction guides}
+C++17 introduced class template argument deduction, creating a new use case for the identity metafunction. Often, the need arises to explicitly disable deduction guides to prevent unsafe or unexpectedly behaving code. For example, consider a library smart pointer class that takes a raw pointer to an object as its constructor argument, and then somehow manages the object (for a real-world example, see \cite{JuceScopedPointer}):
+
+\begin{codeblock}
+template <class T>
+class smart_pointer
+{
+public:
+    smart_pointer(T* object);
+    // Other public methods...
+}
+\end{codeblock}
+
+If the users of this library switch to C++17, this becomes well-formed:
+
+\begin{codeblock}
+Widget* widget{@\commentellip@};
+smart_pointer ptr{widget};  // using implicit deduction guide
+\end{codeblock}
+
+This is inherently dangerous as the constructor of \tcode{smart_pointer} cannot differentiate between a pointer to an object and an array. In cases like this, the automatic deduction guide for the offending constructor  is usually disabled. This forces the client code to explicitly specify the template parameter. The ``type identity idiom'' is the easiest way to achieve this:
+\begin{codeblock}
+smart_pointer(type_identity_t<T>* object);
+\end{codeblock}
+\subsection{Fundamental metafunction building block}
+
+There are two ubiquitous idioms for type traits: 
+\begin{itemize}
+\item define a public data member \tcode{value} with a given value
+\item define a public member typedef \tcode{type} that names a given type
+\end{itemize}
+It is surprising that there is a standard utility providing the former (\tcode{std::integral_constant}), but no standard utility providing the latter.
+
+\tcode{type_identity} is this utility. It is a fundamental building block that other metafunctions can simply inherit from. For example, \tcode{remove_const} could be implemented as follows:
+\begin{codeblock}
+template <typename T>
+struct remove_const : type_identity<T> {};
+
+template <typename T>
+struct remove_const<T const> : type_identity<T> {};
+\end{codeblock}
+Several other examples are given by Walter E. Brown in his talk ``Modern Template Metaprogramming: A Compendium'' \cite{Brown2014}.
+
+\section{Alternative approaches}
+
+For disabling deduction guides, an alternative to \tcode{type_identity} is to add a new core language feature. This would require new syntax, such as using \tcode{= delete} on deduction guides. This was proposed in \cite{P0091} in Kona 2017 but not adopted. Such a facility would be more limited than \tcode{type_identity}: it could not be used to selectively disable single arguments, and would not work for template argument deduction on functions. A core language change is also more difficult to justify if the same effect\footnote{It is somewhat unclear whether such a language feature should remove deduction guides from deduction, as \tcode{type_identity} does, or instead make the program ill-formed if that deduction guide is selected by deduction (similar to existing \tcode{= delete} for function bodies), although for most real-world use cases this distinction would probably not matter.} can be accomplished with a simple library utility that already follows an established idiom.
+
+Another alternative is repurposing other standard metafunctions to do the job of the identity metafunction. However the resulting code ends up:
+\begin{itemize}
+\item redundant, for example \tcode{enable_if_t<true, T>},
+\item confusing, for example \tcode{remove_reference_t<T>} can often be used, but then ends up in contexts where \tcode{T} could not even be a reference in the first place,
+\item not providing the same functionality, for example \tcode{common_type_t<T>} is not equivalent to \tcode{type_identity_t<T>} because it decays \tcode{T}.
+ \end{itemize}
+ The standard should give us a way to write what we actually mean. See \cite{N3766} for further discussion and real-world examples.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Historical context}
+The fact that the identity metafunction is not yet standardised has historical reasons.
+
+Pre-C++98 implementations of the standard library had an entity named \tcode{std::identity}. This was different from the utility discussed here: it was a function object for value identity and defined an \tcode{operator()}. This original version of \tcode{std::identity} still survives today as a legacy SGI extension to the C++ standard library and in an extension namespace of stdlibc++.
+
+Later, a metafunction \tcode{std::identity} with an implementation identical to the one discussed here was proposed in \cite{N1856} in 2005 and merged into the C++0x working draft \cite{N2284} in 2007. The motivation at the time was to simplify usage of \tcode{std::forward}, via the same mechanism as discussed above: it forces client code to explicitly specify the template parameter.
+
+This caused a defect report \cite{700} because of the name clash with the older SGI extension. The defect was resolved by adding \tcode{operator()} to align both definitions of \tcode{std::identity}. However this addition caused further issues and led to two more defect reports \cite{823}\cite{939}. Ultimately, \tcode{std::forward} evolved and no longer needed \tcode{std::}\tcode{identity} to work correctly. The defects were resolved by completely removing \tcode{std::identity} from the working draft.
+
+The wish to have this fundamental metafunction in the standard library persisted, and so \tcode{identity} was proposed again in \cite{N3766} in 2013. The two (mutually exclusive) options proposed in that paper were: either fixing the still unresolved issues with \tcode{operator()}, or removing \tcode{operator()} and changing the name to \tcode{identity_of}. Neither of the options received consensus in LEWG; there was no further work on these issues.
+
+The prevalent opinion has always been that the identity metafunction is useful and should be standardised, and that the only hurdle is the current lack of consensus on a name for it. Overcoming this hurdle is exactly the goal of this proposal.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Choosing a name}
+
+\subsection{Names suggested so far}
+
+Since \cite{N3766}, various alternative names for the identity metafunction were suggested. Below is a summary of all serious naming suggestions we are currently aware of, along with their drawbacks.
+\begin{itemize}
+\item \tcode{identity} --- The original name. It is currently unclear whether the name clash with the old SGI version of \tcode{identity} would still be a problem for a relevant number of people. However, the bigger problem with the word ``identity'' is its ambiguity: it could stand either for the type identity metafunction proposed here, or for the value identity function object (notably, the Ranges TS \cite{N4685} currently uses \tcode{std::ranges::identity} for the latter), or even for a combination of both (which was proposed in \cite{N3766} but failed to get LEWG consensus).
+\item \tcode{identity_of} --- This was an alternative proposal in \cite{N3766} to circumvent the name clash with the old SGI version of \tcode{identity}. However the name does nothing to resolve the inherent ambiguity of \tcode{identity} and failed to get LEWG consensus.
+\item \tcode{type} --- A simple and clear alternative. Unfortunately it has two problems. First, it is a very popular and generic identifier and could create unforeseen name clashes if added to namespace \tcode{std}. Second, it is not possible in C++ to define a member typedef that has the same name as the class itself. Therefore, \tcode{type<T>::type} can only be implemented with a workaround via a helper struct (Boost.Hana does this; see \ref{subsec:names_existing}). Alternatively, one could omit the member \tcode{type} form altogether and only use the \tcode{_t} form. Both solutions would no longer satisfy the concept of \textit{UnaryTypeTrait} and thus create a new inconsistency in header \tcode{type_traits}.
+\item \tcode{type_identity} --- Arguably the most logical and precise name from the English language perspective, resolving the ambiguity of ``identity''. \cite{Boost.TypeTraits} uses this name. The downsides of this name are that some consider it too long for such a basic utility, and that there is is some unwanted similarity with the \tcode{typeid} operator. 
+\item \tcode{identity_type} --- A variation of \tcode{type_identity}, equally long and perhaps less optimal from the English language perspective.
+\item \tcode{meta_identity} --- Yet another attempt to resolve the ambiguity of ``identity''. However the prefix \tcode{meta_} feels out of place in this context, because the other type traits do not have such a prefix despite also being metafunctions.
+\item \tcode{id} --- Abbreviating the word ``identity'' does not fix the problem of its ambiguity. Also, this causes a name clash with the Objective-C keyword \tcode{id}, creating problems for codebases that mix both languages.
+\item \tcode{type_is} --- Walter E. Brown's choice \cite{Brown2014}. However some people consider code like \tcode{type_is<T>} to be too ``cute'' for a standard library utility.
+\item \tcode{type_of} --- This is clearly wrong. The ``type of a type'' is not the same as ``the type that is this type''. A type of a type would be a higher-order thing (which has no obvious and natural corresponding C++ language construct).
+\item \tcode{this_type} --- This could be misinterpreted as ``type of \tcode{this}'' (the \tcode{this} pointer).
+\item \tcode{same_type} --- This name sounds too much like a query and would be better fitting for a variadic metafunction that takes several types and checks whether they are the same, similarly to existing \tcode{std::common_type}.
+\item \tcode{same} --- This is too similar to existing \tcode {std::is_same}.
+\item \tcode{omit_from_deduction}, \tcode{no_deduce}, etc. --- Such names are great when used in the context of disabling argument deduction, but preclude other possible use cases of the identity metafunction.
+\item \tcode{wrapper_type}, \tcode{nested_type}, \tcode{type_alias},  \tcode{type_wrapper}, etc. --- Such names attempt to describe the implementation of the identity metafunction rather than its meaning, and are not clear enough.
+\item \tcode{type_constant} --- This name emphasises the relation to \tcode{integral_constant}. Unfortunately, it seems to suggest that the type could somehow be mutable.
+\end{itemize}
+
+The discussion and plethora of suggested names makes it clear that there is no ideal name that fixes all problems. The task at hand is to decide on the name that is the least bad one.
+
+\subsection{Names used in existing libraries}
+\label{subsec:names_existing}
+
+It is illuminating to look at existing practice: what names do popular third-party metaprogramming libraries use for the identity metafunction? Below is an incomplete list.
+
+\begin{itemize}
+\item \cite{Boost.MPL} has \tcode{boost::mpl::identity}. The definition matches the one in section \ref{sec:def}.
+\item \cite{Boost.TypeTraits} has \tcode{boost::type_identity}. The definition matches the one in section \ref{sec:def}.
+\item \cite{Boost.Hana} has \tcode{boost::hana::type}. To avoid the name shadowing issue with its member typedef also called \tcode{type}, it employs the following workaround:
+\begin{codeblock}
+template <typename T>
+struct __type { using type = T; };
+
+template <typename T>
+using type = __type<T>;
+
+template <typename T>
+using type_t = typename type<T>::type;
+\end{codeblock}
+\item \cite{Boost} further has \tcode{boost::type} in header \tcode{boost/type.hpp}. It avoids the name shadowing issue by not having a member typedef \tcode{type}.
+\item \cite{Brigand} has \tcode{brigand::identity}. The definition matches the one in section \ref{sec:def}.
+\item \cite{Meta} does not have the identity metafunction as such, however it does have a utility typedef for the \tcode{T::type} idiom, named \tcode{_t}, which is used all over the code, demonstrating its usefulness:
+\begin{codeblock}
+template <typename T>
+using _t = typename T::type;
+\end{codeblock}
+\item \cite{Erasure} has both a typedef \tcode{_t} like Meta and a struct \tcode{type_} defined as in section \ref{sec:def}. The trailing underscore avoids the name shadowing issue.
+\item \cite{Mp11} has \tcode{mp_identity} (\tcode{mp_} is the common prefix in this library). The definition matches the one in section \ref{sec:def}.
+\end{itemize}
+
+To summarise, as far as we are aware, all popular implementations of the identity metafunction use as a name either \tcode{identity}, \tcode{type}, or \tcode{type_identity}.
+
+\subsection{LEWG consensus in Jacksonville}
+
+At the 2018 Jacksonville meeting, LEWG reviewed R0 of the present paper and discussed all of the above considerations for naming the identity metafunction. As a result, the name \tcode{type_identity} was approved by unanimous consent. 
+
+This name is the most logical and unambiguous one. It is unfortunately somewhat long for such a basic utility, but apart from that, \tcode{type_identity} does not create any technical, denotative, or connotative issues (unlike all of the other suggestions).
+
+We recognise that the naming of existing metafunctions in the standard is not very consistent in general, and proposals for a more consistent naming policy would be welcome. Going even further, it would be very interesting to consider adopting a new, more modern metaprogramming library for the standard. \cite{P0949} is a recent proposal in this direction. Nevertheless, \tcode{type_identity} is useful today, and these directions should not delay its addition to the currently existing type traits.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Proposed wording}
+
+The proposed changes are relative to the C++ working paper \cite{Smith2018}.
+
+In 23.15.2 Header \tcode{<type_traits>} synopsis [meta.type.synop], add:
+
+\begin{codeblock}
+// 23.15.7.6, other transformations
+\end{codeblock}
+\begin{addedblock}
+\begin{codeblock}
+template<class T> struct type_identity;
+
+template<class T>
+  using type_identity_t = typename type_identity<T>::type;
+\end{codeblock}
+\end{addedblock}
+
+
+In 23.15.7.6 Other transformations [meta.trans.other], add to Table 50 --- Other transformations:
+
+\begin{tabularx}{\textwidth}{| X X |}
+\hline
+\small
+\added{\tcode{template<class T> }} \hspace{3cm} \added{\tcode{struct type_}}\added{\tcode{identity;}}
+ &
+ \small
+\added{The member typedef \tcode{type} names the type \tcode{T}.} \\
+\hline
+\end{tabularx}
+
+\section*{Document history}
+
+\begin{itemize}
+\item \textbf{R0}, 2018-02-12: initial version, proposing wording for \tcode{identity} and \tcode{type} as mutually exclusive alternatives.
+\item \textbf{R1}, 2018-03-18: Added wording for \tcode{type_identity}; removed wording for \tcode{identity} and \tcode{type}; updated text to reflect the LEWG result in Jacksonville; fixed incorrect description of Boost.Hana's \tcode{type}.
+\end{itemize}
+
+\section*{Acknowledgements}
+
+Many thanks to Michael Spertus, Richard Smith, Zhihao Yuan, John Bytheway, Andrey Davydov, Graham Haynes, Ga\v sper A\v zman, Simon Brand, Jonathan Wakely, Jon Chesterfield, Thomas K\" oppe, and Louis Dionne for their very helpful comments and suggestions on earlier versions of this paper. Many thanks to Titus Winters, Walter E. Brown, and all of LEWG for the very productive discussion in Jacksonville.
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

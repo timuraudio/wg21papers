@@ -1,0 +1,262 @@
+\input{wg21common}
+
+\begin{document}
+\title{\texttt{std::assume_aligned}}
+\author{
+  Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})  \\
+  Chandler Carruth \small(\href{mailto:chandlerc@google.com}{chandlerc@google.com})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P1007R3 \\
+Date: & 2018-11-07 \\
+Project: & Programming Language C++ \\
+Audience: & Library Working Group
+\end{tabular}
+
+\begin{abstract}
+We propose a new function template \tcode{std::assume_aligned}. This utility takes a pointer and hints to the compiler that the value of this pointer is a memory address aligned to a certain number of bytes. This will allow the compiler to generate better-optimised code. Currently, compiler vendors offer various built-ins to achieve the same effect. We propose to standardise this existing practice. This paper is a follow-up to \cite{P0886R0}. We propose to add this functionality via a library function instead of a core language attribute.
+\end{abstract}
+
+\vspace{10mm}
+\section{Motivation}
+Consider a pointer to data allocated at an over-aligned memory address. Such data can be obtained, for example, from the \mbox{\tcode{std::align_val_t}} version of \tcode{operator new}, or from \tcode{std::align}. If such a pointer is passed on to another function, or returned from one, it is often desirable to make the over-alignment property transparent to the compiler. This will allow the compiler to generate better optimised code. Use cases include:
+
+\begin{itemize}
+\item Often, the compiler will auto-vectorise a loop over a buffer with contiguous data, generating SIMD instructions. We can make such a buffer  to be over-aligned to the SIMD register size. If we could make this property visible to the compiler, it could skip the loop prologue and epilogue, resulting in fewer branches and instructions, and generate aligned SIMD move instructions instead of unaligned ones. This results in a significant performance improvement on some platforms.
+\item To implement low-latency file I/O, it is useful to have pointers to data known to be aligned to the cache line size, the page size, the huge page size and so on. This way the algorithm can make the correct assumptions for data that can be accessed via DMA (direct memory access).
+\end{itemize}
+
+See \cite{P0886R0} for a more detailed discussion of these use cases and motivating code examples.
+
+\section{The problem}
+\label{sec:problem}
+
+Consider a function modifying a range of contiguously stored numerical data:
+
+\begin{codeblock}
+void mult(float* x, int size, float factor)
+{    
+    for (int i = 0; i < size; ++i)
+        x[i] *= factor;
+}
+\end{codeblock}
+
+Assume further that a static invariant of the program is that \tcode{float* x} will always point to a buffer aligned to the SIMD register size.
+
+How can we make the over-alignment property transparent to the compiler? In case \tcode{size} is known at compile time, we could wrap the buffer into a class with an alignment specification:
+\begin{codeblock}
+template <typename T, std::size_t size, std::size_t alignment>
+struct alignas(alignment) aligned_pack 
+{
+   T data[size];
+};
+\end{codeblock}
+
+But what if the data is dynamically allocated and \tcode{size} is not known at compile time?
+
+In this case, even if there is some class wrapping the data, access will ultimately be through a pointer of some type \tcode{T*}. Given such a pointer, the compiler will always assume the natural alignment requirement of type \tcode{T}, because any such pointer value is considered valid. We are missing out on optimisations that would otherwise be easy for the compiler to perform.
+
+How can we fix this? Any attempt to create a wrapper class that works like \tcode{aligned_pack} above, but with a dynamic buffer size, will not work using current standard C++. Existing tools such as \tcode{alignof} and \tcode{alignas} are useless: they only operate on \emph{types}, but here, alignment is the property of a \emph{value}. This property is not static, but dynamic ---  it will cease to be true after the pointer is incremented or assigned to. There is currently no way in C++ to express such a property, and this problem cannot be solved via the type system. 
+
+\section{Status quo: platform-specific compiler built-ins}
+\label{sec:quo}
+
+Several popular compiler vendors already offer custom built-ins that exist specifically to solve this problem. Unfortunately, the syntax and semantics vary between vendors. 
+
+GCC and Clang offer a built-in function 
+
+\begin{codeblock}
+void* __builtin_assume_aligned(const void* ptr, size_t N);
+\end{codeblock}
+
+which returns its first argument, and allows the compiler to assume that the pointer returned is aligned to least \tcode{N} bytes. ICC offers a similar built-in,
+
+
+\begin{codeblock}
+__assume_aligned(ptr, N);
+\end{codeblock}
+
+Note that unlike GCC/Clang's built-in, the ICC built-in semantics are that of an assertion on the pointer passed in, and not an assumption on the pointer returned. 
+
+MSVC does not have a built-in specifically for the aligned assumption, but instead a more generic built-in
+
+\begin{codeblock}
+__assume(expression)
+\end{codeblock}
+
+which however can be used to achieve the same effect. Other languages offer similar tools: OpenMP has \tcode{\#pragma omp simd aligned}, and Fortran has a compiler directive \tcode{ASSUME_ALIGNED}.
+
+The goal of the paper is to standardise existing practice: we propose to add a standard C++ version of the above built-ins to enable cross-platform use of this feature.
+
+\section{Proposed solution}
+
+We propose the following new standard library function template:
+
+\begin{codeblock}
+template<size_t N, class T> 
+[[nodiscard]] constexpr T* assume_aligned(T* ptr);
+\end{codeblock}
+
+It takes a pointer and returns it unchanged, but allows the compiler to assume that the pointer returned is aligned to at least \tcode{N} bytes. If the pointer passed in is not aligned to at least \tcode{N} bytes, calling \tcode{assume_aligned} results in undefined behaviour. If \tcode{N} is not an alignment requirement (a power of two), the program is ill-formed.
+
+Note that we chose the semantics of an assumption on the pointer returned (like GCC/Clang's built-in), and not that of an assertion on the pointer passed in (like ICC/MSVC's built-in). The reason is that the former can be implemented in terms of the latter (see example implementation in section \ref{sec:impl}), but not vice versa.
+
+The function proposed here has some differences to GCC and Clang's \tcode{__builtin_assume_aligned} to facilitate its usage in modern, generic C++ code. The alignment \tcode{N} is a non-type template parameter (rather than a function parameter). The function operates on a pointer of some concrete type \tcode{T*} (instead of a \tcode{void*} pointer). We added \tcode{[[nodiscard]]} to emphasise that the alignment guarantee holds for the \emph{returned} pointer. We further added \tcode{constexpr}. Following the guidelines in \cite{N3279} and \cite{P0884R0}, even though this function will never throw, the function is not marked \tcode{noexcept} because it has a narrow contract.
+
+A call to this function in client code (re-using the example from section \ref{sec:problem}) could look like this:
+
+\begin{codeblock}
+void mult(float* x, int size, float factor)
+{
+    float* ax = std::assume_aligned<64>(x);   // we promise that \tcode{x} is aligned to 64 bytes
+    for (int i = 0; i < size; ++i)            // loop will be optimised accordingly
+        ax[i] *= factor;
+}
+\end{codeblock}
+
+A function that returns a pointer \tcode{T*}, and guarantees that it will point to over-aligned memory, could return like this:
+
+\begin{codeblock}
+T* get_overaligned_ptr()
+{
+    // code...
+    return std::assume_aligned<N>(_data);
+}
+\end{codeblock}
+
+This technique can be used e.g. in the \tcode{begin()} and \tcode{end()} implementations of a class wrapping an over-aligned range of data. As long as such functions are inline, the over-alignment will be transparent to the compiler at the call-site, enabling it to perform the appropriate optimisations without any extra work by the caller.
+
+\section{Possible implementations}
+\label{sec:impl}
+
+\tcode{std::assume_aligned} is implementable today on all major C++ compilers by exploiting the aforementioned compiler built-ins. The following example implementation works for $\tcode{N} \leq 128$ on current versions of Clang, GCC, MSVC, and ICC:
+
+\begin{codeblock}
+#include <cstddef>
+#include <cstdint>
+
+template <std::size_t N, typename T>
+#if defined(__clang__) || defined(__GNUC__)
+__attribute__((always_inline))
+#elif defined(_MSC_VER)
+__forceinline
+#endif
+[[nodiscard]] constexpr T* assume_aligned(T* ptr) 
+{
+#if defined(__clang__) || (defined(__GNUC__) && !defined(__ICC))
+    return reinterpret_cast<T*>(__builtin_assume_aligned(ptr, N));
+#elif defined(_MSC_VER)
+    if ((reinterpret_cast<std::uintptr_t>(ptr) & ((1 << N) - 1)) == 0)
+        return ptr;
+    else
+        __assume(0);
+#elif defined(__ICC)
+    switch (N) {
+        case 2:   __assume_aligned(ptr, 2);   break;
+        case 4:   __assume_aligned(ptr, 4);   break;
+        case 8:   __assume_aligned(ptr, 8);   break;
+        case 16:  __assume_aligned(ptr, 16);  break;
+        case 32:  __assume_aligned(ptr, 32);  break;
+        case 64:  __assume_aligned(ptr, 64);  break;
+        case 128: __assume_aligned(ptr, 128); break;
+    }
+    return ptr;
+#else      
+    // Unknown compiler --- do nothing
+    return ptr; 
+#endif
+}
+\end{codeblock}
+
+For compilers that do not support this optimisation at all, we can provide a trivial implementation that does nothing and just returns its argument unchanged. Calling it would have no effect. Such behaviour is conforming to the wording proposed here.
+
+In principle, \tcode{std::assume_aligned} could be implemented using a contract. The following might work on some compilers:
+
+\begin{minipage}{\textwidth}
+\begin{codeblock}
+#include <cstddef>
+#include <cstdint>
+
+template <std::size_t N, typename T>
+[[nodiscard]] constexpr T* assume_aligned(T* ptr)
+    [[expects: reinterpret_cast<std::uintptr_t>(ptr) & ((1 << N) - 1)) == 0]] 
+{
+    return ptr;
+}
+\end{codeblock}
+\end{minipage}
+
+However, the expression inside the contract precondition above is not portable. The current definition of [basic.align] does not allow for the conclusion that this expression (or, in fact, \emph{any} expression in standard C++) is equivalent to the statement ``the value of \tcode{ptr} is an address aligned to \tcode{N} bytes''. Further, such an implementation has to rely on the compiler being able to correctly interpret the meaning of such an expression and derive the desired optimisation opportunity from it.
+
+Even though the \emph{implementation} of \tcode{std::assume_aligned} relies on the compiler to work, it would provide a platform-independent \emph{interface}, thus freeing the end user from using compiler-specific built-ins or incantations like the contract expression above.
+
+\pagebreak 
+\section{Proposed wording}
+
+The proposed changes are relative to the C++ working paper \cite{Smith2018}. 
+
+Add to \textbf{Header \tcode{memory} synopsis [memory.syn]}:
+
+\begin{addedblock}
+\begin{codeblock}
+// [ptr.aligned], pointer alignment hint
+template<size_t N, class T>
+  [[nodiscard]] constexpr T* assume_aligned(T* ptr);
+\end{codeblock}
+\end{addedblock}
+
+
+Add to \textbf{Memory [memory]}:
+
+\begin{addedblock}
+\textbf{Pointer alignment hint \hspace{97mm}[ptr.aligned]}
+
+\begin{codeblock}
+template<size_t N, class T> [[nodiscard]] constexpr T* assume_aligned(T* ptr);
+\end{codeblock}
+
+\emph{Mandates:} \tcode{N} is a power of two.
+
+\emph{Expects:} \tcode{ptr} points to an object \tcode{X} of type similar ([conv.qual]) to \tcode{T}, where \tcode{X} has alignment \tcode{N}.
+
+\emph{Returns:} \tcode{ptr}.
+
+\emph{Throws:} Nothing.
+
+\begin{note}
+The alignment assumption on an object \tcode{X} expressed by a call to \tcode{assume_aligned} may result in generation of more efficient code. It is up to the program to ensure that the assumption actually holds. The call does not cause the compiler to verify or enforce this. An implementation might only make the assumption for those operations on \tcode{X} that access \tcode{X} through the pointer returned by \tcode{assume_aligned}.
+\end{note}
+%Note: similar wording "the pointer returned is suitably aligned" occurs in [basic.stc.dynamic.allocation]/2
+\end{addedblock}
+
+
+\section{Previous work}
+
+A previous paper \cite{P0886R0} proposed to add this functionality to C++ through a new standard attribute, \tcode{[[assume_aligned(N)]]}. The guidance given by EWG in Jacksonville (2018) was that having this functionality in C++ is desirable, but not as an attribute. We should not introduce an attribute that actually appertains to \emph{values}, even though syntactically it appears to appertain to \emph{objects}. We should also not add this functionality as a core language feature, since this can be avoided, and instead add it to the library through a ``magic'' function. This proposal supersedes P0886 and addresses all of EWG's concerns.
+
+\section{Document history}
+
+\begin{itemize}
+\item \textbf{R0}, 2018-05-04: Initial version, following EWG guidance on P0886R0.
+\item \textbf{R1}, 2018-06-25: Revised wording; added \tcode{[[nodiscard]]} following LEWG guidance.
+\item \textbf{R2}, 2018-10-08: Revised wording; removed \tcode{noexcept} following LWG guidance.
+\item \textbf{R3}, 2018-11-07: Revised wording.
+\end{itemize}
+
+
+\section*{Acknowledgements}
+
+Many thanks to Fabian Renn-Giles for the original idea and motivation that led to this work.
+
+Many thanks to Jens Maurer for his help with the wording.
+
+Many thanks to Ga\v sper A\v zman, Arthur O'Dwyer, Niall Douglas, Mathias Gaunard, Peter Dimov, Jason McGuiness, Antony Peacock, Bryce Adelstein Lelbach, Robert Schumacher, Daniel Kr\"ugler, Graham Haynes, Timothy Mattox, Ville Voutilainen, Tim Song, and Casey Carter for their helpful comments.
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

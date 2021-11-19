@@ -12,14 +12,14 @@
 
 \begin{tabular}{ll}
 Document \#: & P1774R4 \\
-Date: & 2021-11-14\\
+Date: & 2021-11-15\\
 Project: & Programming Language C++ \\
 Audience: & Evolution Working Group
 \end{tabular}
 
 
 \begin{abstract}
-We propose a standard facility providing the semantics of existing compiler intrinsics such as \tcode{__builtin_assume} (Clang) and \tcode{__assume} (MSVC, Intel). It gives the programmer a way to allow the compiler to assume that a given C++ expression is true, without evaluating it, and to optimise based on this assumption. This is very useful for high-performance and low-latency applications in order to generate both faster and smaller code.
+We propose a standard facility providing the semantics of existing compiler intrinsics such as \tcode{__builtin_assume} (Clang) and \tcode{__assume} (MSVC, ICC). It gives the programmer a way to allow the compiler to assume that a given C++ expression is true, without evaluating it, and to optimise based on this assumption. This is very useful for high-performance and low-latency applications in order to generate both faster and smaller code.
 \end{abstract}
 
 \vspace{5mm}
@@ -28,7 +28,7 @@ We propose a standard facility providing the semantics of existing compiler intr
 
 All major compilers offer built-ins that give the programmer a way to allow the compiler to assume that a given C++ expression is true, and to optimise based on this assumption. They are very useful for high-performance and low-latency applications in order to generate both faster and smaller code. Use cases include more efficient code generation for mathematical operations, better vectorisation of loops, elision of unnecessary branches, function calls, and more.
 
-Consider the following function:
+Consider the following function (from \cite{Regehr2014}):
 
 \begin{codeblock}
 int divide_by_32(int x) 
@@ -64,13 +64,14 @@ With \tcode{__builtin_assume}:
 
 \end{multicols}
 
-All major compilers offer this functionality by providing the following built-ins (see \cite{N4425} for a more thorough discussion):
+All major compilers offer this functionality by providing the following built-ins (see \cite{N4425} and Section \ref{sec:semantics} below for a more thorough discussion):
 \begin{itemize}
-\item MSVC and Intel provide \tcode{__assume(\emph{expression});}
-\item Clang provides \tcode{__builtin_assume(\emph{expression});}
-\item GCC does not provide an analogous built-in. The desired effect can be achieved with \\
- \tcode{if (\emph{expression}) \{\} else  \{ __builtin_unreachable(); \}} \\
-However, an important difference is that here, unlike in the other cases, \tcode{\emph{expression}} will be evaluated, at least in principle (in practice, this can often be optimised away).
+\item MSVC and ICC have \tcode{__assume(\emph{expr});}
+\item Clang has \tcode{__builtin_assume(\emph{expr});}
+\item GCC has \tcode{__builtin_unreachable()}, which works slightly differently. Assuming an expression can be written as \vspace{3mm}
+\\ \vspace{3mm}
+ \tcode{if (\emph{expr}) \{\} else  \{ __builtin_unreachable(); \}} \\
+However, this has slightly different semantics: on GCC, \tcode{\emph{expr}} will be evaluated, at least notionally. In practice, this will often be optimised away if evaluating \tcode{\emph{expr}} has no side effects. 
 \end{itemize}
 
 Assumptions are a useful expert-level feature, and they are existing practice. However, they are spelled differently on every compiler and subject to subtle differences and ambiguities in semantics, which are not properly defined anywhere. The goal of this proposal is to introduce a unified syntax and well-defined semantics for assumptions in a way that is compatible with all existing compiler implementations and fits well into the existing C++ standard.
@@ -92,53 +93,126 @@ First of all, we propose that the word ``assume'' is used in the spelling this f
 
 The syntax above (using parentheses) is chosen such that it is fully compatible with standard attribute syntax and therefore backwards-compatible with a compiler that does not support this feature. 
 
-We advise against a syntax involving a colon, such as \tcode{[[assume:\phantom{x}\emph{expression}]]} or other variations that deviate from existing C++ attribute grammar, because this would require otherwise unnecessary changes to the C++ grammar, and make it harder to add assumptions to existing code.
-
-Making this an attribute also makes it clear to the user that, given a valid C++ program that contains the attribute, ignoring it does not change the observable semantics of such a program.
+Making this an attribute also makes it clear that assumptions share an important property with the other C++ attributes: given a valid C++ program that contains the attribute, ignoring it does not change the observable semantics of such a program.
 
 It is further consistent with existing optimisation-related attributes (\tcode{[[likely]]}, \tcode{[[unlikely]]}, \tcode{[[carries_dependency]]}) as well as existing attributes that increase the space of undefined behaviour in a C++ program (\tcode{[[noreturn]]}).
 
-We also believe that this syntax has the least impact on the core language as opposed to the alternatives (see below).
+We further believe that this syntax has the least impact on the core language as opposed to the alternatives (see below).
+
+Finally, the attribute syntax would also allow to add this feature to the C language with the same spelling.
+
+Herb Sutter argues in \cite{P2064R0} against this attribute syntax, saying that it would ``make assumes awkward to write in the one place they should appear, which is a statement'', and that it ``would allow asuumes to be written outside of function bodies''. Neither of these are true. We specify \tcode{[[assume(expr)]]} to be an attribute that can only be applied to a null statement, just like we already do with \tcode{[[fallthrough]]}. The effect of this is that it can only appear on its own, as a statement, followed by a semicolon, and only inside a function body, which is exactly the intended use.
 
 \subsection{Alternatives considered (not proposed)}
 
+\subsubsection{New syntax}
+
+We explored syntax involving a colon, such as \tcode{[[assume:\phantom{x}\emph{expression}]]}, the syntax used in \cite{P0542R5} for contracts, and other variations that deviate from existing C++ attribute grammar. 
+
+We do not see any benefit of introducing a new syntax to C++ over using existing attribute syntax. New syntax would require otherwise unnecessary changes to the C++ grammar, making it harder to add assumptions to existing code due to lack of backwards-compatibility. At the same time, it does not provide any benefits over the attribute syntax we propose.
+
+In addition, using syntax too similar to that used by contracts proposals is actively harmful: assumptions are a feature completely separate from contracts (see Section \ref{sec:contracts}), and the syntax should therefore be separate from contracts as well.
+
 \subsubsection{Keyword}
 
-An assumption can be characterised as an operator with an unevaluated operand, somewhat similar to \tcode{decltype(\emph{expression})}. We could consider proposing a new keyword for this new operator, such that \tcode{__builtin_assume(\emph{expression})} instead becomes:
+An assumption can be characterised as an operator with an unevaluated operand, somewhat similar to \tcode{decltype(\emph{expression})}, where \tcode{decltype} is a keyword. We therefore considered to add a new keyword for assumptions, so that the spelling becomes:
 
 \forceindent
 \tcode{assume(\emph{expression})}
 
-However, portable assumptions are a low-level expert feature, with the potential to inject undefined behaviour into an otherwise valid program. It should be used carefully and sparingly. We therefore advise against introducing a new keyword for this feature.
+We could also spell such a keyword differently. \cite{P2064R0} suggests the spelling \tcode{unsafe_assume} to highlight that this is a narrow, low-level, expert-only feature, with the potential to inject undefined behaviour into an otherwise valid program, and should therefore be used with great care.
 
+However, for exactly this reason, we believe that a new keyword is not the right approach. Adding a new keyword is a very significant change to the language. A narrow, expert-only feature that will only be used by a small fraction of developers does not justify a new keyword.
 
 \subsubsection{Macro}
 
-Instead of introducing a keyword, we could introduce an \tcode{assume} macro, analogous to how \tcode{assert} is already defined as a macro. However, macros are known to cause many problems. Their lack of scoping can lead to name clashes, the preprocessor grammar makes it impossible to use curly braces inside the expression, etc. For these and other reasons, modern C++ tries to minimise the use of macros. We therefore advise against introducing a new macro for this feature.
+Instead of introducing a keyword, we could introduce an \tcode{assume} macro, analogous to how \tcode{assert} is already defined as a macro (and again, we could spell it in different ways). However, macros are known to cause many problems. Their lack of scoping can lead to name clashes, the preprocessor grammar makes it impossible to use curly braces inside the expression, etc. For these and other reasons, modern C++ tries to minimise the use of macros. We don't see any good reason to deviate from this principle.
 
 \subsubsection{``Magic'' library function}
 
-Alternatively, we could introduce portable assumptions in the form of a ``magic'' library function, so \tcode{__builtin_assume(\emph{expression})} instead becomes:
+One option that at first glance seems very attractive is to spell an assumption as a ``magic'' library function:
 
 \forceindent
  \tcode{std::assume(\emph{expression});}
+ 
+Herb Sutter \cite{P2064R0} and others have argued for such an approach. However, a deeper analysis reveals that this is not a viable route. Making assumptions a function would introduce a weird novelty into the C++ language: something that is syntactically a function call, yet does not evaluate its operand. This would be very different in nature to all existing ``magic'' library functions. Apart from not evaluating the argument of the function call, such a function would differ from other C++ language functions in many other ways. It would look like a standard C++ function, but it would behave like built-ins such as \tcode{__builtin_assume} behave today: the only thing that you can do with them is to directly call them. You can't take their address, you can’t assign them to a function pointer, etc. By making assumptions a function, we would essentially be saying that it's a function but it's so special that the only properties it shares with an actual function is that it has a name and an argument list. It would effectively be a namespaced keyword.
 
-However, such a spelling would introduce a weird novelty into the C++ language: something that is syntactically a function call, yet does not evaluate its operand. It would essentially be something like a ``namespaced keyword'', and very different in nature to all existing ``magic'' library functions. Significant core language changes would be needed to make it work. We also believe that such a construct would be surprising to C++ developers. We therefore advise against adding this feature as a library function.
+Significant core language changes would be needed to make such a novelty work, adding more complexity to a fundamental part of the core language (what is a function call?). We do not believe that assumptions come anywhere close to justifying such changes to the language. The proposed attribute syntax avoids all this complexity by using a mechanism that already exists in the language.
 
-A seeming advantage is the consistency with the closely related \tcode{std::assume_aligned} \cite{P1007R3}, which was adopted for C++20. However, they are different. For \tcode{std::assume_aligned},  unlike for an assumption, the operand may be evaluated, so the problem above does not arise for \tcode{std::assume_aligned} (or, in fact, any other current ``magic'' library function).
+It has been pointed out that the spelling \tcode{std::assume} would be consistent with the related \tcode{std::assume_aligned}, which was adopted for C++20. However, as should be clear from the above discussion, they are fundamentally different. For \tcode{std::assume_aligned},  unlike for an assumption, the operand may be evaluated, just like for any other function call in C++. The problem described above does therefore not arise for \tcode{std::assume_aligned} (or any other existing ``magic'' library function in C++).
 
 
 
 \section{Semantics}
+\label{sec:semantics}
 
-The design goal is to provide a portable facility closely following the compiler built-ins \tcode{__assume} and \tcode{__builtin_assume}, therefore standardising existing practice. The facility should be implementable with the existing built-ins on those compiler implementations who have them, without unnecessarily constraining implementations who do not. Therefore, we propose the following semantics:
-\begin{itemize}
-\item It is a statement with a single argument, which is a C++ expression contextually convertible to \tcode{bool}.
-\item The expression is an unevaluated operand, like for example the operand of \tcode{decltype}. Therefore, expressions with side effects are allowed (which is useful, consider \tcode{++ptr != end}). However, as the expression is not evaluated, these side effects do not affect the behaviour of the program\footnote{However, just like with \tcode{decltype}, the expression might cause a template instantiation if this is required to analyse the expression. Thanks to Nathan Sidwell for pointing this out.}.
-\item However, the optimiser may analyse the form of the expression, and deduce from that information used to optimise the program.
-\item The behaviour is undefined if the expression would \emph{not} evaluate to \tcode{true}\footnote{Note that there is a subtle difference between behaviour being undefined if the expression would evaluate to \tcode{false}, or if the expression would \emph{not} evaluate to \tcode{true}. The latter (proposed here) also includes the assumption that the expression itself would not result in undefined behaviour if it were evaluated. This enlarges the space of assumptions that can be stated by the programmer. Thanks to Joshua Berne for pointing this out.}. This allows the optimiser to optimise the program based on the assumption that it always will.
-\item Simply ignoring the whole statement is a conforming implementation, i.e. the optimiser is not required in any way to make use of the assumption.
-\end{itemize}
+We collaborated with compiler engineers from MSVC, GCC, Clang, ICC, and EDG, to make sure that the semantics proposed here for standard C++ are implementable on all these compilers and are compatible with the de-facto semantics of all the existing assumption built-ins.
+
+\subsection{Assumptions do not evaluate their operand}
+
+The expression inside an assumption is an unevaluated operand, like for example the operand of \tcode{decltype}. This is a fundamental property of assumptions. The whole point is to assume the operand without checking it (see also section \ref{sec:contracts}, and Herb Sutter's discussion in \cite{P2064R0} why assumptions are fundamentally different from assertions).
+
+Therefore, expressions with side effects are allowed, which is useful (consider \tcode{[[assume(++ptr != end)]]}), and there is a guarantee that those side effects will not be executed and will not affect the behaviour of the program. This is consistent with both the semantics of attributes in C++ and the semantics of existing \tcode{__assume} and \tcode{__builtin_assume}.
+
+GCC is currently the only major compiler that doesn't have an intrinsic with the unevaluated operand semantics. In GCC, we have to spell assumptions like this:
+
+\begin{codeblock}
+if (expr) {} else { __builtin_unreachable(); }
+\end{codeblock}
+
+which evaluates \tcode{expr}. However, GCC can implement assume in a way conforming to the semantics proposed here relatively easily, by employing the following strategy. First, we check whether \tcode{expr} can have side effects if evaluated. If we can prove that it cannot, we can use the existing GCC mechanism to implement assumptions. Otherwise, we simply ignore the assumption. Ignoring assumptions with potential side effects is a conforming implementation of the semantics proposed here.
+
+Ignoring assumptions altogether is also a conforming implementation. A trivial implementation of assumptions is therefore possible on any C++ compiler.
+
+\subsection{Assumptions that would not evaluate to \tcode{true} are undefined behaviour}
+
+The operand of an assumption is not evaluated, however the optimiser may analyse it, and deduce from that information used to optimise the program. The crucial property of an assumption is that if such analysis reveals that it would not evaluate to \tcode{true}, the behaviour is undefined. This gives the compiler the freedom to optimise away any code path that could be reached if the assumption would not hold. This includes so-called time-travel optimisation. Consider the following function (example from \cite{P2064R0}:
+
+\begin{codeblock}
+int f(int j) {
+  int i = 42;
+  if (j == 0)
+    i = 0;
+
+   [[assume(j != 0)]];
+   return i;
+}
+\end{codeblock}
+
+The proposed semantics allow the optimiser to assume that \tcode{j != 0} was already true before the code reached the assumption, since \tcode{j} was not modified. It can therefore remove the branch before the assumption, and reduce the whole function to \tcode{return 42}. This is merely specifying existing practice: both GCC and Clang actually perform this optimisation.
+
+There is a subtle difference between behaviour being undefined if the expression would evaluate to \tcode{false}, or if the expression would \emph{not} evaluate to \tcode{true}. The latter (proposed here) also includes the assumption that the expression itself would not result in UB if it were evaluated. This enlarges the space of assumptions that can be stated by the programmer (Thanks to Joshua Berne for pointing this out). In other words, UB inside the assumed expression is allowed to escape the assumption, even if the expression is notionally unevaluated.
+
+\subsection{Assumptions ODR-use their operand}
+
+At first glance, this requirement seems unnecessary. If the operand of an assumption is not evaluated, why would we want to specify that it is ODR-used?
+
+The answer is: ODR-use is what existing implementations do. Implementing assumptions without ODR-use of the operand would be extremely difficult. As far as we know, such an implementation does not exist.
+
+MSVC, ICC, and Clang all follow the same basic principle to implement assumptions. The compiler actually generates intermediate representation for the expression inside the assumption (which requires ODR-use). This code is then used during optimisation of the program. At a later stage of the optimiser, the assumption-related code is then stripped out again (the exact mechanics of this vary from compiler to compiler).
+
+\subsection{Behaviour of assumptions during constant evaluation}
+
+What should happen if an assumption is encountered during constant evaluation? We propose that, if such an assumption would not evaluate to \tcode{true}, it is implementation-defined whether the program is ill-formed or not. This way, we leave freedom for implementations to conduct such an analysis at compile time and emit a compiler error for a failed assumption (which can be useful), while not requiring an implementation to do so (because it might be very difficult to implement). If an assumption holds during constant evaluation, this should have no effect.
+
+Another subtlety is the question what should happen if inside a \tcode{constexpr} function we encounter an assumption that would evaluate to \tcode{true}, but can not be evaluated during constant evaluation? Currently, there is implementation divergence. MSVC rejects the following code, while GCC and Clang accept it (when using the appropriate platform-specific built-in for the assumption):
+
+\begin{codeblock}
+int foo() {     // not a constexpr function
+  return 0; 
+}
+
+constexpr int bar() {
+  [[assume(foo() == 0)]];  // this assumption holds but isn't constexpr
+  return 1;
+}
+
+int main() {
+  return bar();
+}
+\end{codeblock}
+
+We propose that this code should be well-formed. If an assumption cannot be checked at compile time, the assumption should simply be ignored, rather than making the whole program ill-formed. Otherwise, in order to be able to make the function \tcode{constexpr}, the user would have to branch on \tcode{std::is_constant_evaluated()} just for the purpose of using such an assumption.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -156,52 +230,84 @@ Since assumptions are not standardised yet, for this study we use an \tcode{ASSU
 #endif
 \end{codeblock}
 
-As discussed above, there are subtle differences in semantics across compilers; however, these differences have no relevance for the benchmarks presented here.
+As discussed above, there are differences in semantics across compilers, in particular whether or not \tcode{expr} is evaluated; however, by assuming only expressions without side effects we can make sure this has no impact on the benchmarks.
 
 \subsection{Code size}
 
-TODO
-
-Another example: consider looping over an array of numbers and performing math on the elements. Often, there are invariants on the array size such as: it's a power of two, it's a multiple of the SIMD register size, etc (all very common e.g. in audio processing code). Telling the optimiser about such invariants leads to a much better optimisation and vectorisation of the loop:
+Consider looping over a range of \tcode{float}s and clamping all values between -1 and 1. This is an operation that often occurs in audio processing and is known as a \emph{limiter}:
 
 \begin{codeblock}
-void limiter(float* buffer, size_t size) 
-{
-  __builtin_assume(size % 8 == 0);
-  for (size_t i = 0; i < size; ++i)
-     data[i] = std::clamp(data[i], -1.0f, 1.0f);
+void limiter(float* data, size_t size) 
+{   
+    for (size_t i = 0; i < size; ++i)
+        data[i] = std::clamp(data[i], -1.0f, 1.0f);
 }
 \end{codeblock}
 
-For this function, clang (trunk) with \tcode{-O3} generates 70 lines of assembly without the assumption, and only 42 lines with it.
+Often, such data has invariants which are guaranteed by the surrounding code, but this information is invisible to the optimiser, for example because the code is too complex for the optimiser to see through, or because there is a TU boundary in between. We can inject such invariants via assumptions. In this example, we inject the knowledge that data buffers contain at least 32 frames and the buffer size is a multiple of 32 (a common scenario in audio processing), and that the data does not contain NaNs or infinity:
 
-See \cite{Regehr2014} for more examples and use cases. 
+\begin{codeblock}
+void limiter(float* data, size_t size) 
+{
+    ASSUME(size > 0);
+    ASSUME(size % 32 == 0);
+    
+    for (size_t i = 0; i < size; ++i) {
+        ASSUME(std::isfinite(data[i]));
+        data[i] = std::clamp(data[i], -1.0f, 1.0f);
+    }
+}
+\end{codeblock}
 
+We have compiled both versions of this function on godbolt.org with MSVC, GCC, Clang, and ICC, respectively. We have used the latest trunk versions of these compilers at the time of writing, and compiled the code with the maximum optimisation setting (\tcode{-O3} and \tcode{/O2}, respectively). As a crude estimate of code size, we counted the number of instructions emitted, with the following results.
+
+\begin{table}[h!]
+%\caption{Nonlinear Model Results} % title of Table
+\centering % used for centering table
+\begin{tabular}{c c c} % centered columns (4 columns)
+%\hline\hline %inserts double horizontal lines
+Compiler & Without \tcode{ASSUME} & With \tcode{ASSUME}  \\ [0.5ex] % inserts table
+%heading
+\hline % inserts single horizontal line
+MSVC & 88 & 52  \\ % inserting body of the table
+GCC & 77 & 42  \\
+Clang & 74 & 20  \\
+ICC & 62 & 62  \\
+%\hline %inserts single line
+\end{tabular}
+%\label{table:nonlin} % is used to refer this table in the text
+\end{table}
+
+On all compilers except ICC, using \tcode{ASSUME} leads to significantly less code being emitted. The injected assumptions lead to a better optimisation of the loop as well as elimination of unnecessary code inside \tcode{std::clamp}.
 \subsection{Execution time}
 
-TODO
+Benchmarks comparing execution time of the same code compiled with and without assumptions are planned for the next revision of this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{History and related work}
 
 \subsection{N4425 and Contracts}
+\label{sec:contracts}
 
-Adding such portable optimisation hints was already proposed once \cite{N4425} and discussed by EWG in 2015 in Lenexa\footnote{\url{https://cplusplus.github.io/EWG/ewg-closed.html\#179}}. The paper was rejected. EWG's guidance was that this functionality should be provided within the proposed contracts facility, and not as a separate feature.
+Adding portable assumptions was already proposed once \cite{N4425} and discussed by EWG in 2015 in Lenexa\footnote{\url{https://cplusplus.github.io/EWG/ewg-closed.html\#179}}. The paper was rejected. EWG's guidance was that this functionality should be provided within the proposed contracts facility, and not as a separate feature.
 
-Unfortunately, contracts as merged into the C++20 working draft in June 2018 in Rapperswil \cite{P0542R5}, actually failed to provide such portable optimisation hints \cite{P1773R0}. Later, in July 2019 in Cologne, contracts were pulled from C++20 altogether.
+However, contracts as merged into the C++20 working draft in June 2018 in Rapperswil \cite{P0542R5}, actually failed to provide such portable optimisation hints \cite{P1773R0}. Later, in July 2019 in Cologne, contracts were pulled from C++20 altogether. More recent proposals \cite{P2358R0} for adding contracts to C++ no longer include the possibility to assume contracts for purposes of optimisation. These ideas will also take time to develop. Assumptions are useful, well-understood, existing practice, and we should standardise them now, rather than waiting for progress on contracts.
 
-Regardless of whether contracts will eventually make it into a future C++ standard, and whether or not assumptions might be a feature of such contracts, we need an independent low-level ``assume'' facility.  The present paper focuses on proposing exactly this low-level facility. Its purpose is to introduce a standard way to provide an optimisation hint to the compiler, as an implementation detail of a C++ program, locally, with clearly defined semantics that are expressed in C++ code, independent of any build modes, build flags, etc.
+Contracts and assumptions are very different features. The purpose of contracts is to find and avoid bugs, and to document pre- and postconditions in code; they are meant to be used at API boundaries; and they are a ``cross-cutting'' feature that is meant to be used widely throughout a codebase by many developers. By contrast, the purpose of assumptions is to make specific invariants of your code visible to the optimiser; they are meant to be an implementation detail; and they are a ``local'' feature that will only be used rarely, at specific locations in performance bottlenecks, and by experts only.
 
-In case contracts or other higher-level features will make use of such assumptions in the future, it can then be implemented in terms of this low-level facility.
+More specifically, assertions and assumptions are fundamentally different in nature (see also \cite{P2064R0}). We are not aware of any study that could conclusively show that there is a measurable performance benefit from turning assertions into assumptions throughout a codebase. \cite{P2064R0} found that it actually degrades performance, while \cite{Amini2021} found that it makes no statistically significant difference at all. Therefore, we should not combine assertions and assumptions in the same language feature. Instead, we should use assumptions explicitly in the few cases where it actually matters for performance, while making sure that assertions are a ``safe-to-use'' feature that cannot inject undefined behaviour and ``time travel'' into a program.
 
-\subsection{PXXXX: \tcode{std::unreachable}}
+We need a low-level assumptions facility that is independent of contracts or assertions. The present paper focuses on proposing exactly this low-level facility. In case contracts or other higher-level features will incorporate assumptions in some form in the future, they can then be specified and implemented in terms of this low-level facility.
 
-TODO
+\subsection{\tcode{std::unreachable}}
 
-\subsection{P2064: Herb Sutter's Assumptions paper}
+\cite{P0627R6} is a related paper proposing a function \tcode{std::unreachable()}, standardising GCC's \tcode{__builtin_unreachable()} (see above): a function that invokes UB when called, and therefore can be used to mark unreachable code paths.
 
-TODO
+It is important to recognise that the functionality provided by \tcode{std::unreachable()} is a strict subset of the functionality provided by assumptions as proposed here. \tcode{std::unreachable()} has the exact same semantics as \tcode{[[assume(false)]]}. Assuming an expression without side effects can be expressed with either \tcode{assume} or \tcode{std::unreachable} (although the latter is significantly more verbose), while assuming an expression with side effects can only be expressed with \tcode{assume}, and at least one existing compiler (MSVC) is capable of using such assumptions for optimisations. Therefore, \tcode{assume} is the more general feature, and the one that should be standardised first.
+
+That being said, the possibility to spell \tcode{[[assume(false)]]} as \tcode{std::unreachable} might still be desirable. If 
+what the user wants to do is to mark unreachable control flow (unreachable branches, unreachable switch cases etc.), for example to avoid compiler warnings, then the spelling \tcode{std::unreachable} better communicates that intent. If we want to standardise \tcode{std::unreachable}, we should specify it in terms of assumptions as proposed here.
 
 \section {Previous polls}
 
@@ -331,6 +437,12 @@ Modify [expr.const] as follows:
 If \tcode{e} satisfies the constraints of a core constant expression, but evaluation of e would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) that has a predicate that would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
 \end{adjustwidth}
 
+Add to [cpp.predefined]/table 21:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\tcode{\added{__cpp_assume}} with the appropriate value.
+\end{adjustwidth}
+
 \section*{Document history}
 
 \begin{itemize}
@@ -338,12 +450,12 @@ If \tcode{e} satisfies the constraints of a core constant expression, but evalua
 \item \textbf{R1}, 2019-10-06: Updated text to reflect removal of Contracts from C++20; made proposed attribute syntax backwards-compatible by replacing colon with parentheses.
 \item \textbf{R2}, 2019-11-25: Changed title to ``Portable assumptions''; changed semantics from UB if expression would evaluate to \tcode{false} to UB if expression would \emph{not} evaluate to \tcode{true}; changed syntax section to propose attribute-syntax only, dropping ``magic'' library function syntax as a viable alternative.
 \item \textbf {R3}, 2020-01-13: Updated text to clarify the discussion of the proposed semantics and syntax.
-\item \textbf{R4}, 2021-11-14:  Added wording. Clarified that the assumed expression is unevaluated, but odr-used. Added polls. Added code size measurement results. Updated and re-structured text; added discussion of recent related work.
+\item \textbf{R4}, 2021-11-15:  Added wording. Added polls. Added code size measurement results. Updated and restructured text, adding discussion of proposed semantics and recent related work.
 \end{itemize}
 
 \section*{Acknowledgements}
 
-Many thanks to Herb Sutter, Chandler Carruth, Michael Spencer, Jonathan Caves, and Hal Finkel for their very helpful comments and explanations.
+Many thanks to Herb Sutter, Chandler Carruth, Joshua Berne, Michael Spencer, Jonathan Caves, Hal Finkel, Erich Keane, Judy Ward, Inbal Levi, Eric Brumer, Nathan Sidwell, and Daveed Vandevoorde for their help with this proposal.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

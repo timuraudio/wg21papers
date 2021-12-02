@@ -408,15 +408,14 @@ Add the following subclause to [dcl.attr]:
 \begin{addedblock}
 \subsection*{Assumption attribute \hspace{7.33cm} [dcl.attr.assume]}
 
-The \textit{attribute-token} \tcode{assume} may be applied to a null statement; such a statement is an assumption. The attribute-token \tcode{assume} shall appear at most once in each attribute-list. An \textit{attribute-argument-clause} shall be present and shall have the form:
+The \textit{attribute-token} \tcode{assume} may be applied to a null statement; such a statement is an assumption. An \textit{attribute-argument-clause} shall be present and shall have the form:
 
 \hspace{5mm}\tcode{( }\textit{assignment-expression}\tcode{ )}
 
-The epression shall be contextually convertible to \tcode{bool}. The expression is not evaluated, however, it is potentially evaluated [basic.ref.odr]. If the expression would not evaluate to \tcode{true}, the behavior is undefined.
-
+The expression shall be contextually convertible to \tcode{bool} [conv.general]. The expression is not evaluated. If the converted expression would not evaluate to \tcode{true}, the behavior is undefined.
 
 \begin{note}
-The use of assumptions is intended to allow implementations to analyze the form of the expression and deduce from that information used to optimize the program.
+The expression is potentially evaluated [basic.ref.odr]. The use of assumptions is intended to allow implementations to analyze the form of the expression and deduce information used to optimize the program.
 \end{note}
 
 \begin{example}
@@ -434,13 +433,7 @@ int divide_by_32(int x)  {
 Modify [expr.const] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-If \tcode{e} satisfies the constraints of a core constant expression, but evaluation of e would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) that has a predicate that would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
-\end{adjustwidth}
-
-Add to [cpp.predefined]/table 21:
-
-\begin{adjustwidth}{0.5cm}{0.5cm}
-\tcode{\added{__cpp_assume}} with the appropriate value.
+If \tcode{e} satisfies the constraints of a core constant expression, but evaluation of e would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{assignment-expression} would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
 \end{adjustwidth}
 
 \section*{Document history}
@@ -451,11 +444,12 @@ Add to [cpp.predefined]/table 21:
 \item \textbf{R2}, 2019-11-25: Changed title to ``Portable assumptions''; changed semantics from UB if expression would evaluate to \tcode{false} to UB if expression would \emph{not} evaluate to \tcode{true}; changed syntax section to propose attribute-syntax only, dropping ``magic'' library function syntax as a viable alternative.
 \item \textbf {R3}, 2020-01-13: Updated text to clarify the discussion of the proposed semantics and syntax.
 \item \textbf{R4}, 2021-11-15:  Added wording. Added polls. Added code size measurement results. Updated and restructured text, adding discussion of proposed semantics and recent related work.
+\item \textbf{R5}, 2021-12-02: Updated wording.
 \end{itemize}
 
 \section*{Acknowledgements}
 
-Many thanks to Herb Sutter, Chandler Carruth, Joshua Berne, Michael Spencer, Jonathan Caves, Hal Finkel, Erich Keane, Judy Ward, Inbal Levi, Eric Brumer, Nathan Sidwell, and Daveed Vandevoorde for their help with this proposal.
+Many thanks to Herb Sutter, Chandler Carruth, Joshua Berne, Michael Spencer, Jonathan Caves, Hal Finkel, Erich Keane, Judy Ward, Inbal Levi, Eric Brumer, Nathan Sidwell, Daveed Vandevoorde, Jens Maurer, and Ga\v sper A\v zman for their help with this proposal.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

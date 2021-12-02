@@ -68,9 +68,7 @@ All major compilers offer this functionality by providing the following built-in
 \begin{itemize}
 \item MSVC and ICC have \tcode{__assume(\emph{expr});}
 \item Clang has \tcode{__builtin_assume(\emph{expr});}
-\item GCC has \tcode{__builtin_unreachable()}, which works slightly differently. Assuming an expression can be written as \vspace{3mm}
-\\ \vspace{3mm}
- \tcode{if (\emph{expr}) \{\} else  \{ __builtin_unreachable(); \}} \\
+\item GCC has \tcode{__builtin_unreachable()}, which works slightly differently. Assuming an expression can be written as \tcode{if (\emph{expr}) \{\} else  \{ __builtin_unreachable(); \}} \\ 
 However, this has slightly different semantics: on GCC, \tcode{\emph{expr}} will be evaluated, at least notionally. In practice, this will often be optimised away if evaluating \tcode{\emph{expr}} has no side effects. 
 \end{itemize}
 
@@ -84,10 +82,10 @@ Assumptions are a useful expert-level feature, and they are existing practice. H
 
 \subsection{Proposed}
 
-We propose an attribute syntax to spell portable assumptions. \tcode{__builtin_assume(\emph{expression})} instead becomes:
+We propose an attribute syntax to spell portable assumptions:
 
 \forceindent
-\tcode{[[assume(\emph{expression})]]}
+\tcode{[[assume(\emph{expr})]]}
 
 First of all, we propose that the word ``assume'' is used in the spelling this feature. This is the name already used in existing built-ins, therefore choosing it means standardising existing practice. This name will be least surprising and most self-explanatory to the user.
 
@@ -95,9 +93,9 @@ The syntax above (using parentheses) is chosen such that it is fully compatible 
 
 Making this an attribute also makes it clear that assumptions share an important property with the other C++ attributes: given a valid C++ program that contains the attribute, ignoring it does not change the observable semantics of such a program.
 
-It is further consistent with existing optimisation-related attributes (\tcode{[[likely]]}, \tcode{[[unlikely]]}, \tcode{[[carries_dependency]]}) as well as existing attributes that increase the space of undefined behaviour in a C++ program (\tcode{[[noreturn]]}).
+It is further consistent with existing optimisation-related attributes (\tcode{[[likely]]}, \tcode{[[unlikely]]}, \tcode{[[carries_dependency]]}) as well as existing attributes that increase the space of undefined behaviour in a C++ program (\tcode{[[noreturn]]}). More generally, attributes tend to target the back-end of the compiler and/or other tools in the C++ ecosystem, rather than the front-end. This is true for assumptions as well, which are targeting the optimiser. Therefore, assumptions should be an attribute.
 
-We further believe that this syntax has the least impact on the core language as opposed to the alternatives (see below).
+We further believe that this syntax has the least impact on the existing core language as opposed to the alternatives discussed below.
 
 Finally, the attribute syntax would also allow to add this feature to the C language with the same spelling.
 
@@ -292,13 +290,15 @@ Benchmarks comparing execution time of the same code compiled with and without a
 
 Adding portable assumptions was already proposed once \cite{N4425} and discussed by EWG in 2015 in Lenexa\footnote{\url{https://cplusplus.github.io/EWG/ewg-closed.html\#179}}. The paper was rejected. EWG's guidance was that this functionality should be provided within the proposed contracts facility, and not as a separate feature.
 
-However, contracts as merged into the C++20 working draft in June 2018 in Rapperswil \cite{P0542R5}, actually failed to provide such portable optimisation hints \cite{P1773R0}. Later, in July 2019 in Cologne, contracts were pulled from C++20 altogether. More recent proposals \cite{P2358R0} for adding contracts to C++ no longer include the possibility to assume contracts for purposes of optimisation. These ideas will also take time to develop. Assumptions are useful, well-understood, existing practice, and we should standardise them now, rather than waiting for progress on contracts.
+However, contracts as merged into the C++20 working draft in June 2018 in Rapperswil \cite{P0542R5}, actually failed to provide such portable optimisation hints \cite{P1773R0}. Later, in July 2019 in Cologne, contracts were pulled from C++20 altogether. More recent proposals for adding contracts to C++  \cite{P2388R4}, \cite{P2461R1}, \cite{P2487R0} no longer include the possibility to assume contracts for purposes of optimisation. It will take time to develop these more recent contracts proposals until they can be added to the standard. Assumptions are useful, well-understood, existing practice, and we should standardise them now, rather than waiting for progress on contracts.
 
-Contracts and assumptions are very different features. The purpose of contracts is to find and avoid bugs, and to document pre- and postconditions in code; they are meant to be used at API boundaries; and they are a ``cross-cutting'' feature that is meant to be used widely throughout a codebase by many developers. By contrast, the purpose of assumptions is to make specific invariants of your code visible to the optimiser; they are meant to be an implementation detail; and they are a ``local'' feature that will only be used rarely, at specific locations in performance bottlenecks, and by experts only.
+Contracts and assumptions are very different features. The purpose of contracts is to find and avoid bugs, and to document pre- and postconditions in code; they are meant to be used at API boundaries; they are primarily targeting the front-end of the compiler (or a static analyser); and they are a ``cross-cutting'' feature that is meant to be used widely throughout a codebase by many developers. By contrast, the purpose of assumptions is to make specific invariants of your code visible to the optimiser; they are meant to be an implementation detail; they are primarily targeting the back-end of the compiler; and they are a ``local'' feature that will only be used rarely, at specific locations in performance bottlenecks, and by experts only.
 
 More specifically, assertions and assumptions are fundamentally different in nature (see also \cite{P2064R0}). We are not aware of any study that could conclusively show that there is a measurable performance benefit from turning assertions into assumptions throughout a codebase. \cite{P2064R0} found that it actually degrades performance, while \cite{Amini2021} found that it makes no statistically significant difference at all. Therefore, we should not combine assertions and assumptions in the same language feature. Instead, we should use assumptions explicitly in the few cases where it actually matters for performance, while making sure that assertions are a ``safe-to-use'' feature that cannot inject undefined behaviour and ``time travel'' into a program.
 
-We need a low-level assumptions facility that is independent of contracts or assertions. The present paper focuses on proposing exactly this low-level facility. In case contracts or other higher-level features will incorporate assumptions in some form in the future, they can then be specified and implemented in terms of this low-level facility.
+Further, the expressions that are typical for assumptions tend to look very different from the ones typically found in contracts. Assumptions are practically always either statements about a \tcode{bool}, or very simple mathematical expressions involving a single number or pointer. By contrast, contract preconditions and postconditions can contain significantly more complicated statements about the program, even including lambdas.
+
+Finally, standardising the existing practice of a low-level assumptions facility that is independent of contracts or assertions is not closing off future work. In case contracts or other higher-level features will incorporate assumptions in some form in the future, this can be specified and implemented using the low-level facility proposed here.
 
 \subsection{\tcode{std::unreachable}}
 
@@ -444,7 +444,7 @@ If \tcode{e} satisfies the constraints of a core constant expression, but evalua
 \item \textbf{R2}, 2019-11-25: Changed title to ``Portable assumptions''; changed semantics from UB if expression would evaluate to \tcode{false} to UB if expression would \emph{not} evaluate to \tcode{true}; changed syntax section to propose attribute-syntax only, dropping ``magic'' library function syntax as a viable alternative.
 \item \textbf {R3}, 2020-01-13: Updated text to clarify the discussion of the proposed semantics and syntax.
 \item \textbf{R4}, 2021-11-15:  Added wording. Added polls. Added code size measurement results. Updated and restructured text, adding discussion of proposed semantics and recent related work.
-\item \textbf{R5}, 2021-12-02: Updated wording.
+\item \textbf{R5}, 2021-12-02: Updated wording, removed feature-test macro, allowed duplicate attributes.
 \end{itemize}
 
 \section*{Acknowledgements}

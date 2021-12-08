@@ -12,7 +12,7 @@
 
 \begin{tabular}{ll}
 Document \#: & D1774R5 \\
-Date: & 2021-12-02\\
+Date: & 2021-12-08\\
 Project: & Programming Language C++ \\
 Audience: & Evolution Working Group, Core Working Group
 \end{tabular}
@@ -618,7 +618,7 @@ The \textit{attribute-token} \tcode{assume} may be applied to a null statement; 
 
 \hspace{5mm}\tcode{( }\textit{assignment-expression}\tcode{ )}
 
-The expression shall be contextually convertible to \tcode{bool} [conv.general]. The expression is not evaluated. If the converted expression would not evaluate to \tcode{true}, the behavior is undefined.
+The expression shall be contextually convertible to \tcode{bool} [conv.general]. The expression is not evaluated. If the converted expression would evaluate to \tcode{true} at the point where the assumption appears, the assumption has no effect. Otherwise, the behavior is undefined.
 
 \begin{note}
 The expression is potentially evaluated [basic.ref.odr]. The use of assumptions is intended to allow implementations to analyze the form of the expression and deduce information used to optimize the program.
@@ -627,9 +627,14 @@ The expression is potentially evaluated [basic.ref.odr]. The use of assumptions 
 \begin{example}
 \begin{codeblock}
 int divide_by_32(int x)  {
-    [[assume(x >= 0)]];
-    return x/32;   // The instructions produced for the division
-                   //  may omit handling of negative values
+  [[assume(x >= 0)]];
+  return x/32;   // The instructions produced for the division
+                 //  may omit handling of negative values
+}
+
+int f(int y) {
+  [[assume(++y == 43)]];   // y is not incremented
+  return y;   // Statement may be replaced by return 42
 }
 \end{codeblock}
 \end{example}

@@ -177,22 +177,22 @@ the reference count increments and decrements and the conditional calls to
 
 \subsection{Proposed}
 
-We propose an attribute syntax to spell portable assumptions:
+We propose to spell assumptions as an attribute:
 
 \forceindent
 \tcode{[[assume(\emph{expr})]];}
 
 First of all, we propose that the word ``assume'' is used in the spelling this feature. This is the name already used in existing built-ins, therefore choosing it means standardising existing practice. This name will be least surprising and most self-explanatory to the user.
 
-The syntax above (using parentheses) is chosen such that it is fully compatible with standard attribute syntax and therefore backwards-compatible with a compiler that does not support this feature. 
+Using standard attribute syntax means that assumptions are backwards-compatible with a compiler that does not support this feature. 
 
-Making this an attribute also makes it clear that assumptions share an important property with the other C++ attributes: given a valid C++ program that contains the attribute, ignoring it does not change the observable semantics of such a program.
+Making assumptions an attribute makes it clear that assumptions share an important property with the other C++ attributes: given a valid C++ program that contains the attribute, ignoring it does not change the observable semantics of such a program.
 
 It is further consistent with existing optimisation-related attributes (\tcode{[[likely]]}, \tcode{[[unlikely]]}, \tcode{[[carries_dependency]]}) as well as existing attributes that increase the space of undefined behaviour in a C++ program (\tcode{[[noreturn]]}). More generally, attributes tend to target the back-end of the compiler and/or other tools in the C++ ecosystem, rather than the front-end. This is true for assumptions as well, which are targeting the optimiser. Therefore, assumptions should be an attribute.
 
-We further believe that this syntax has the least impact on the existing core language as opposed to the alternatives discussed below.
+Attribute syntax has the least impact on the existing core language as opposed to the alternatives discussed below, as it avoid adding any new syntax or grammar and therefore does not add more complexity to the language.
 
-Finally, the attribute syntax would also allow to add this feature to the C language with the same spelling.
+Finally, the attribute syntax would also allow to add this feature to the C language with the same spelling. Note that the existing assumption built-ins work in C in the same way they do in C++.
 
 Herb Sutter argues in \cite{P2064R0} against this attribute syntax, saying that it would ``make assumes awkward to write in the one place they should appear, which is a statement'', and that it ``would allow assumes to be written outside of function bodies''. Neither of these are true. We specify \tcode{[[assume(expr)]]} to be an attribute that can only be applied to a null statement, just like we already do with \tcode{[[fallthrough]]}. The effect of this is that it can only appear on its own, as a statement, followed by a semicolon, and only inside a function body, which is exactly the intended use.
 

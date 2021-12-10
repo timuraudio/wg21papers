@@ -359,7 +359,7 @@ int f(int i) {
 
 Of course, nobody should ever write such an assumption, as it obviously does not express an invariant of the program and therefore cannot serve a useful purpose. But nevertheless we need to be able to determine what assumption this code expresses and what semantics it has. The crucial difference to a Category 2 assumption is that the input value received from \tcode{std::cin} is non-deterministic. We cannot determine whether the assumption holds and the program is well-defined by analysing the expression, only by actually calling \tcode{std::cin}, but we are not allowed to do that, since an assumed expression is unevaluated.
 
-At first glance, this seems like a paradox, and various contradicting interpretations seem possible, including:
+At first glance, this may seem like a paradox, and various contradicting interpretations seem possible, including:
 \begin{itemize}
 \item There is no useful information that can be derived from this assumption, therefore it should have no effect. The compiler must translate the program as written ignoring the assumption.
 \item The compiler cannot actually call \tcode{std::cin} inside the assumption, since assumptions are unevaluated. It is therefore impossible to determine what the value of the expression would be. Since it does not ``evaluate to \tcode{true}'', the program is undefined behaviour, and the compiler is allowed to optimise out the whole function \tcode{f} and all code paths leading to it.
@@ -372,7 +372,7 @@ If we follow the correct reasoning, it turns out that actually all three of the 
 
 First of all, note that we do not need to consider the behaviour on any system where the above assumption does not hold, since the specification does not put any constraints on the behaviour of such a system. Therefore, we only need to consider systems where the assumption \emph{does} hold, i.e. where \tcode{std::cin}, if executed at the place where the assumption appears, would always read in the number 42. This can be, for example, a computer controlled by a robot which is programmed to always enter the number 42 when prompted. On this system, the assumption is doing exactly what it is intended to do: it expresses an invariant of the system\footnote{Although it is not actually useful even on such a system: a more efficient approach is to simply not read the input at all, since we already know the result.} (the robot will always type 42) which the C++ compiler cannot see (as it is unaware of the robot).
 
-Now, on such a system where the assumption holds, its semantics are precisely defined: it has no effect. The program therefore \emph{must} call \tcode{std::cin}, as this is an observable side effect; the compiler is not allowed to optimise out the call. However, under the as-if rule, it is allowed to throw out the value read by \tcode{std::cin}, as it knows that it will always be 42. Therefore, the compiler can either leave \tcode{f} as is, or optimise it as follows:
+Now, on such a system where the assumption holds, its semantics are precisely defined: it has no effect. The program therefore \emph{must} call \tcode{std::cin}, as this is an observable side effect; the compiler is not allowed to optimise out the call. However, under the as-if rule, it is allowed to throw out the value read by \tcode{std::cin}, as it knows that it will always be 42. Therefore, the compiler can either ignore the assumption, or optimise \tcode{f} as follows:
 \begin{codeblock}
 int f(int) {
   int tmp;

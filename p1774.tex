@@ -242,7 +242,7 @@ It has been pointed out that the spelling \tcode{std::assume} would be consisten
 
 We corresponded with compiler engineers from MSVC, GCC, Clang, ICC, and EDG, to make sure that the semantics proposed here for standard C++ are implementable on all these compilers and are compatible with the de-facto semantics of all the existing assumption built-ins. We also incorporated feedback from all previous rounds of EWG review as well as discussions on the WG21 reflectors.
 
-\subsection{Constraints on the argument}
+\subsection{Constraints on the attribute argument clause}
 
 The argument clause of an \tcode{assume} attribute must be present and must contain a single expression contextually convertible to \tcode{bool}. %It has been pointed out that this allows to write non-sensical assumptions such as \tcode{[[assume("Hello")]]}. However, this is fully consistent with existing assumption built-ins as well as the rest of the C++ language. Carving out exceptions to prevent users from writing certain types of non-sensical assumptions would add unnecessary complexity for little benefit.
 The proposed specification requires this expression to be an \emph{assignment-expression}, rather than the top-level \emph{expression} grammar production. This has the effect that top-level commas are not allowed.
@@ -251,7 +251,11 @@ There are three reasons for this. First, if we were to allow writing \tcode{[[as
 
 Second, what \tcode{[[assume(\emph{expr1}, \emph{expr2})]]} is actually saying is ``assume \tcode{\emph{expr2}} after \tcode{\emph{expr1}} has been evaluated just for its side effects''. Since assumed expressions are not actually evaluated, reasoning about side effects can get confusing (see discussion in section \ref{subsec:side_effects}) and such assumptions should be used with special care. It is therefore preferable to make this more explicit and more difficult to spell by requiring an extra pair of parentheses.
 
-Third, there is no consistent existing practice to allow top-level commas. Clang does not accept them in its \tcode{__builtin_assume}, while ICC and MSVC do accept them in their \tcode{__assume}. However, according to Gabriel Dos Reis, ``the `acceptance' by MSVC is a parser accident -- don't use it as existing practice to standardise'', and we decided to follow his advice.
+Third, there is no consistent existing practice to allow top-level commas. Clang does not accept them in its \tcode{__builtin_assume}, while MSVC and ICC do accept them in their \tcode{__assume}. However, according to Gabriel Dos Reis, ``the `acceptance' by MSVC is a parser accident -- don't use it as existing practice to standardise'', and we decided to follow his advice.
+
+Peter Brett has proposed that we could go down one more level in the grammar production and require the expression to be a \emph{conditional-expression}. This would additionally exclude expressions containing an assignment operator\footnote{Note that the other possible grammar productions of \emph{assignment-expression}, namely \emph{throw-expression} and \emph{yield-expression}, are already excluded by the requirement that the expression is contextually convertible to \tcode{bool}. Therefore, the only grammar productions allowed by \emph{assignment-expression} in the wording proposed here are \emph{conditional-expression} and \emph{logical-or-expression assignment-operator initializer-clause}.}, such as \tcode{[[assume(x=1)]]}. We are not aware of any use case where assuming the result of a conversion to \tcode{bool} of the return value of an unevaluated assignment expression would be useful. Should this appear in real-world code, it is most likely not what the user intended to write. So on the one hand, making this ill-formed seems like a good idea. On the other hand, unlike with top-level commas, there is consistent existing practice to make this well-formed: \tcode{__builtin_assume(x=1)} will compile on Clang, and \tcode{__assume(x=1)} will compile on both MSVC and ICC, and all three behave correctly\footnote{\tcode{__assume(x=1)} is a tautology, since evaluating this expression would always return \tcode{1}, and therefore equivalent to \tcode{__assume(true)}, i.e. a null statement. Conversely, \tcode{__assume(x=0)} is equivalent to \tcode{__assume(false)}, which in turn is equivalent to \tcode{__builtin_unreachable()}. In both cases, \tcode{x} is not actually being modified.}. We therefore chose \emph{assignment-expression} over \emph{conditional-expression} to follow existing practice.
+
+Since this paper was approved by EWG and sent to electronic polling with the \emph{assignment-expression} grammar production, we cannot modify the design at this point. The question whether or not to change the grammar production to \emph{conditional-expression} to make \tcode{[[assume(x=0)]]} ill-formed is instead proposed in a separate paper \cite{P2507R0} and will be considered by EWG in due course.
 
 \subsection{The expression is not evaluated}
 
@@ -578,7 +582,6 @@ SF & F & N & A & SA \\
 1 & 0 & 9 & 9 & 5
 \end{tabular}
 
-\pagebreak %%%%% COSMETIC %%%%%
 4. We like the proposed attribute syntax \tcode{[[assume(expr)]]}
 
 \hspace{6mm}
@@ -632,11 +635,12 @@ SF & F & N & A & SA \\
 \end{tabular}
 \hspace{5mm}Consensus against
 
+\pagebreak %%% COSMETIC
 2. In D1774R5, we prefer assume’s parameter to be just an “attribute-grammar-conforming token soup”, not an expression.
 
 \hspace{6mm}
 \begin{tabular}{lllll}
-SF & F & N & A & SA \\sub-clause
+SF & F & N & A & SA \\
 0 & 0 & 2 & 8 & 6
 \end{tabular}
 \hspace{5mm}Consensus against
@@ -726,7 +730,7 @@ disqualifies $E$ from being a core constant expression.
 
 \section*{Acknowledgements}
 
-Many thanks to Herb Sutter, Chandler Carruth, Joshua Berne, Michael Spencer, Jonathan Caves, Hal Finkel, Erich Keane, Judy Ward, Inbal Levi, Eric Brumer, Nathan Sidwell, Daveed Vandevoorde, Jens Maurer, Ga\v sper A\v zman, Peter Dimov, Gabriel Dos Reis, Arthur O'Dwyer, Aaron Ballman, and Martin Uecker for their help with this proposal.
+Many thanks to Herb Sutter, Chandler Carruth, Joshua Berne, Michael Spencer, Jonathan Caves, Hal Finkel, Erich Keane, Judy Ward, Inbal Levi, Eric Brumer, Nathan Sidwell, Daveed Vandevoorde, Jens Maurer, Ga\v sper A\v zman, Peter Dimov, Gabriel Dos Reis, Arthur O'Dwyer, Aaron Ballman, Martin Uecker, and Peter Brett for their help with this proposal.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

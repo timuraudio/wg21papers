@@ -11,10 +11,10 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P1774R5 \\
-Date: & 2021-12-15\\
+Document \#: & P1774R6 \\
+Date: & 2022-02-15\\
 Project: & Programming Language C++ \\
-Audience: & Evolution Working Group, Core Working Group
+Audience: & Core Working Group
 \end{tabular}
 
 
@@ -186,13 +186,13 @@ First of all, we propose that the word ``assume'' is used in the spelling this f
 
 Using standard attribute syntax means that assumptions are backwards-compatible with a compiler that does not support this feature. 
 
-Making assumptions an attribute makes it clear that assumptions share an important property with the other C++ attributes: given a valid C++ program that contains the attribute, ignoring it does not change the observable semantics of such a program.
+Making assumptions an attribute makes it clear that assumptions share an important property with the other C++ attributes: given a valid C++ program that contains the attribute, ignoring it does not change the observable semantics of such a program (see \cite{P2552R0} for a thorough discussion of the ignorability of standard attributes).
 
 It is further consistent with existing optimisation-related attributes (\tcode{[[likely]]}, \tcode{[[unlikely]]}, \tcode{[[carries_dependency]]}) as well as existing attributes that increase the space of undefined behaviour in a C++ program (\tcode{[[noreturn]]}). More generally, attributes tend to target the back-end of the compiler and/or other tools in the C++ ecosystem, rather than the front-end. This is true for assumptions as well, which are targeting the optimiser. Therefore, assumptions should be an attribute.
 
-Attribute syntax has the least impact on the existing core language as opposed to the alternatives discussed below, as it avoid adding any new syntax or grammar and therefore does not add more complexity to the language.
+Attribute syntax has the least impact on the existing core language as opposed to the alternatives discussed below, as it avoids adding any new syntax or grammar and therefore does not add more complexity to the language.
 
-Finally, the attribute syntax would also allow to add this feature to the C language with the same spelling. Note that the existing assumption built-ins work in C in the same way they do in C++.
+Finally, the attribute syntax would also allow to add this feature to the C language with the same spelling (SG22 voted in favour of this; see polls in Section \ref{sec:polls}). Note that the existing assumption built-ins work in C in the same way they do in C++.
 
 Herb Sutter argues in \cite{P2064R0} against this attribute syntax, saying that it would ``make assumes awkward to write in the one place they should appear, which is a statement'', and that it ``would allow assumes to be written outside of function bodies''. Neither of these are true. We specify \tcode{[[assume(expr)]]} to be an attribute that can only be applied to a null statement, just like we already do with \tcode{[[fallthrough]]}. The effect of this is that it can only appear on its own, as a statement, followed by a semicolon, and only inside a function body, which is exactly the intended use.
 
@@ -252,7 +252,7 @@ Second, what \tcode{[[assume(\emph{expr1}, \emph{expr2})]]} is actually saying i
 
 Third, there is no consistent existing practice to allow top-level commas. Clang does not accept them in its \tcode{__builtin_assume}, while MSVC and ICC do accept them in their \tcode{__assume}. However, according to Gabriel Dos Reis, ``the `acceptance' by MSVC is a parser accident -- don't use it as existing practice to standardise'', and we decided to follow his advice.
 
-In \cite{P2507R0}, Peter Brett argues that we could go down one more level in the grammar production and require the expression to be a \emph{conditional-expression}. This would additionally exclude expressions containing an assignment operator, such as \tcode{[[assume(x = 1)]]}, as well as \emph{yield-expression}s\footnote{Note that \emph{throw-expression}, the other possible grammar production under \emph{assignment-expression}, is already excluded due to the requirement that the expression shall be contextually convertible to \tcode{bool}.}.
+In \cite{P2507R1}, Peter Brett argues that we could go down one more level in the grammar production and require the expression to be a \emph{conditional-expression}. This would additionally exclude expressions containing an assignment operator, such as \tcode{[[assume(x = 1)]]}, as well as \emph{yield-expression}s\footnote{Note that \emph{throw-expression}, the other possible grammar production under \emph{assignment-expression}, is already excluded due to the requirement that the expression shall be contextually convertible to \tcode{bool}.}.
 
 We are currently not aware of any use case where assuming the result of an assignment expression would be useful: it would most likely be a typo for \tcode{[[assume(x == 1)]]}. So on the one hand, excluding this case seems like a good idea (even though the user would still have plenty of other ways to write nonsensical expressions inside an assumption).
 
@@ -450,7 +450,7 @@ We propose that this code should be well-formed. If an assumption cannot be chec
 \subsection{Ill-formed expressions need to be diagnosed}
 \label{subsec:well_formed}
 
-The C++ standard specifies that attributes not recognised by an implementation can be ignored. However, this does not extend to attributes that are part of the C++ standard itself. For the latter, the standard imposes constraints on both the argument clause of the attribute (e.g. \tcode{[[noreturn]]} must have none, \tcode{[[deprecated]]} can have one but it must be a string literal, and so on) and what entities the attribute may appertain to. If these constraints are violated, the program is ill-formed and the compiler must issue a diagnostic.
+The C++ standard specifies that attributes not recognised by an implementation can be ignored. However, this does not extend to attributes that are part of the C++ standard itself. For the latter, the standard imposes constraints on both the argument clause of the attribute (e.g. \tcode{[[noreturn]]} must have none, \tcode{[[deprecated]]} can have one but it must be a string literal, and so on) and what entities the attribute may appertain to. If these constraints are violated, the program is ill-formed and the compiler must issue a diagnostic (see \cite{P2552R0} for a thorough discussion of the ignorability of standard attributes).
 
 Since assumptions as proposed are attributes, the same applies. A conforming compiler doesn't have to implement an assumption facility, and is free to  ignore a well-formed assumption. However, if the \tcode{assume} attribute is written in the wrong place, or doesn't have an expression as its argument, or the expression is not contextually convertible to \tcode{bool} or ill-formed, the compiler must detect this and issue a diagnostic. Further, an assumed expression is ODR-used, which can trigger template instantiations. If any of these instantiations makes the program ill-formed, for example by containing a \tcode{static_assert} that does not evaluate to \tcode{true}, this needs to be diagnosed as well.
 
@@ -536,10 +536,10 @@ what the user wants to do is to mark unreachable control flow (unreachable branc
 \section {Previous polls}
 \label{sec:polls}
 
-Below are the polls taken by WG21 subgroups on previous revisions of this paper.
+Below are the polls taken by WG21 subgroups on previous revisions of this paper, in chronological order.
 
 
-\subsection{EWG, Belfast (November 2019)}
+\subsection*{EWG, Belfast (November 2019)}
 
 1.. P1774 with \tcode{[[assume(expr)]]} syntax.
 
@@ -557,7 +557,7 @@ SF & F & N & A & SA \\
 1 & 3 & 4 & 10 & 4
 \end{tabular}
 
-\subsection{EWG, Prague (February 2020)}
+\subsection*{EWG, Prague (February 2020)}
 
 1. We want assumptions now and independent of future contract facilities.
 
@@ -615,7 +615,7 @@ SF & F & N & A & SA \\
 0 & 0 & 0 & 9 & 14
 \end{tabular}
 
-\subsection{SG21, Prague (February 2020)}
+\subsection*{SG21, Prague (February 2020)}
 
 Assumptions should proceed independently of contracts.
 
@@ -625,7 +625,7 @@ SF & F & N & A & SA \\
 9 & 8 & 5 & 6 & 5
 \end{tabular}
 
-\subsection{EWG, online telecon (2021-12-02)}
+\subsection*{EWG, online telecon (2021-12-02)}
 
 1. In D1774R5, we should spell the assume as \tcode{[[assume: expr]]}.
 
@@ -654,6 +654,32 @@ SF & F & N & A & SA \\
 6 & 8 & 5 & 0 & 0
 \end{tabular}
 \hspace{5mm}Consensus
+
+\subsection*{EWG electronic poll (January 2022)}
+
+Forward P1774R5 ``Portable assumptions'' to Core for C++23.
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+14 & 17 & 3 & 4 & 0
+\end{tabular}
+\hspace{5mm}Consensus
+
+Abstain: 7
+
+%Poll results and salient comments published in \cite{P1018R15}.
+
+\subsection*{SG22, online telecon (2022-02-11)}
+
+Does SG22 encourage proposing the functionality in P1774R5 to WG14?
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+Committee & For & Against & Abstain &  \\
+WG14 & 6 & 1 & 1 & Consensus \\
+WG21 & 8 & 1 & 2 & Consensus
+\end{tabular}
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -727,7 +753,10 @@ disqualifies $E$ from being a core constant expression.
 \item \textbf {R3}, 2020-01-13: Updated text to clarify the discussion of the proposed semantics and syntax.
 \item \textbf{R4}, 2021-11-15:  Added wording. Added polls. Added code size measurement results. Updated and restructured text, adding discussion of proposed semantics and recent related work.
 \item \textbf{R5}, 2021-12-09: Updated wording (removed feature-test macro, allowed duplicate attributes, added clarifications). Updated and restructured text, expanding semantics section to reflect discussion in EWG and on the WG21 reflectors. Added Peter Dimov's refcounted smart pointer code example.
+\item \textbf{R6}, 2022-02-15: Updated polls; minor fixes.
 \end{itemize}
+
+\pagebreak %%% COSMETIC
 
 \section*{Acknowledgements}
 

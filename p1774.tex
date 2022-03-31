@@ -700,7 +700,7 @@ The \textit{attribute-token} \tcode{assume} may be applied to a null statement; 
 The expression shall be contextually convertible to \tcode{bool} [conv.general]. The expression is not evaluated. If the converted expression would evaluate to \tcode{true} at the point where the assumption appears, the assumption has no effect. Otherwise, the behavior is undefined.
 
 \begin{note}
-The expression is potentially evaluated [basic.ref.odr]. The use of assumptions is intended to allow implementations to analyze the form of the expression and deduce information used to optimize the program.
+The expression is potentially evaluated [basic.ref.odr]. The use of assumptions is intended to allow, but not require, implementations to analyze the form of the expression and deduce information used to optimize the program. Implementations are allowed to deduce no information from any particular assumption.
 \end{note}
 
 \begin{example}
@@ -723,6 +723,12 @@ int f(int y) {
 Modify [expr.const] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
+
+An expression $E$ is a \emph{core constant expression} unless the evaluation of $E$, following the rules of the abstract machine ([intro.execution]), would evaluate one of the following:
+\begin{itemize}
+\item an operation that would have undefined behavior as specified in [intro] through [cpp]\added{, excluding [dcl.attr.assume]};
+\end{itemize}
+
 If $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{assignment-expression} would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
 
 For the purposes of determining
@@ -741,7 +747,13 @@ to storage allocated with \tcode{std::allocator<T>} or
 to an object whose lifetime began within the evaluation of $E$, or
 the evaluation of the underlying constructor call
 disqualifies $E$ from being a core constant expression.
-\added{Further, a statement with an assumption ([dcl.attr.assume]) whose converted \textit{assignment-expression} is itself not a core constant expression does not disqualify $E$ from being a core constant expression.}
+
+\begin{addedblock}
+\begin{note}
+A statement with an assumption ([dcl.attr.assume]) whose converted \textit{assignment-expression} is itself not a core constant expression does not disqualify $E$ from being a core constant expression.
+\end{note}
+\end{addedblock}
+
 \end{adjustwidth}
 
 \section*{Document history}

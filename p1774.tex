@@ -244,19 +244,24 @@ We corresponded with compiler engineers from MSVC, GCC, Clang, ICC, and EDG, to 
 
 \subsection{Constraints on the attribute argument clause}
 
-The argument clause of an \tcode{assume} attribute must be present and must contain a single expression contextually convertible to \tcode{bool}. The proposed specification requires this expression to be an \emph{assignment-expression}, rather than the top-level \emph{expression} grammar production. This has the effect that top-level commas are not allowed.
+The argument clause of an \tcode{assume} attribute must be present and must contain a single expression contextually convertible to \tcode{bool}. The proposed specification requires this expression to be a \emph{conditional-expression}. This has the effect that expressions with top-level commas and \emph{assignment-expression}s are not allowed by the grammar under this proposal, even if they are contextually convertible to \tcode{bool}. If necessary, this restriction can be bypassed by adding an extra pair of parentheses around the expression:
 
-There are three reasons for this. First, if we were to allow writing \tcode{[[assume(\emph{expr1}, \emph{expr2})]]}, a user might erroneously read this as ``\tcode{\emph{expr1}} and \tcode{\emph{expr2}} are both assumed'', whereas in reality, only \tcode{\emph{expr2}} is assumed.
+\begin{codeblock}
+[[assume(expr1, expr2)]];  // Error
+[[assume((expr, expr2))]]; // OK
+[[assume(x = 1)]];         // Error
+[[assume(x == 1)]];        // OK
+[[assume((x = 1))]];       // OK
+\end{codeblock}
 
-Second, what \tcode{[[assume(\emph{expr1}, \emph{expr2})]]} is actually saying is ``assume \tcode{\emph{expr2}} after \tcode{\emph{expr1}} has been evaluated just for its side effects''. Since assumed expressions are not actually evaluated, reasoning about side effects can get confusing (see discussion in section \ref{subsec:side_effects}) and such assumptions should be used with special care. It is therefore preferable to make this more explicit and more difficult to spell by requiring an extra pair of parentheses.
+If we were to allow writing \tcode{[[assume(\emph{expr1}, \emph{expr2})]]}, a user might erroneously read this as ``\tcode{\emph{expr1}} and \tcode{\emph{expr2}} are both assumed'', whereas in reality, only \tcode{\emph{expr2}} is assumed. What this code is actually saying is ``assume \tcode{\emph{expr2}} after \tcode{\emph{expr1}} has been evaluated just for its side effects''. Since assumed expressions are not actually evaluated, reasoning about side effects can get confusing (see discussion in section \ref{subsec:side_effects}) and such assumptions should be used with special care. It is therefore preferable to make this more explicit and more difficult to spell by requiring an extra pair of parentheses.
 
-Third, there is no consistent existing practice to allow top-level commas. Clang does not accept them in its \tcode{__builtin_assume}, while MSVC and ICC do accept them in their \tcode{__assume}. However, according to Gabriel Dos Reis, ``the `acceptance' by MSVC is a parser accident -- don't use it as existing practice to standardise'', and we decided to follow his advice.
+In order to disallow top-level commas, previous revisions of this paper went down one level in the \emph{expression} grammar production, and used the \emph{assignment-expression}. However, in \cite{P2507R1}, it was argued that we should go down one more level and require the expression to be a \emph{conditional-expression}, to additionally exclude \emph{assignment-expression}s\footnote{Note that the other possible grammar productions under \emph{assignment-expression}, \emph{throw-expression} and \emph{yield-expression}, are already excluded due to the requirement that the expression shall be contextually convertible to \tcode{bool} and that the expression shall appear only within a suspension context of a function, respectively.} such as \tcode{[[assume(x = 1)]]}. EWG voted in favour of the direction of \cite{P2507R1}, so we adopted this change in R7.
 
-In \cite{P2507R1}, Peter Brett argues that we could go down one more level in the grammar production and require the expression to be a \emph{conditional-expression}. This would additionally exclude expressions containing an assignment operator, such as \tcode{[[assume(x = 1)]]}, as well as \emph{yield-expression}s\footnote{Note that \emph{throw-expression}, the other possible grammar production under \emph{assignment-expression}, is already excluded due to the requirement that the expression shall be contextually convertible to \tcode{bool}.}.
+We are currently not aware of any use case where assuming the result of an assignment expression like \tcode{[[assume(x = 1)]]} would be useful\footnote{\tcode{__assume(x = 1)} is a tautology, since evaluating this expression would always return \tcode{1}, and therefore equivalent to \tcode{__assume(true)}, i.e. a null statement. Conversely, \tcode{__assume(x = 0)} is equivalent to \tcode{__assume(false)}, which in turn is equivalent to \tcode{__builtin_unreachable()}. In both cases, \tcode{x} is not actually being modified.}: it would most likely be a typo for \tcode{[[assume(x == 1)]]}. So excluding it is the safer choice. If the user really wants to assume the converted \tcode{bool} value of an assignment, they can always do so by adding an extra pair of parentheses.
 
-We are currently not aware of any use case where assuming the result of an assignment expression would be useful: it would most likely be a typo for \tcode{[[assume(x == 1)]]}. So on the one hand, excluding this case seems like a good idea (even though the user would still have plenty of other ways to write nonsensical expressions inside an assumption).
 
-On the other hand, unlike with top-level commas, there is consistent existing practice to make this well-formed: \tcode{__builtin_assume(x = 1)} will compile on Clang, and \tcode{__assume(x = 1)} will compile on both MSVC and ICC, and all three behave correctly\footnote{\tcode{__assume(x = 1)} is a tautology, since evaluating this expression would always return \tcode{1}, and therefore equivalent to \tcode{__assume(true)}, i.e. a null statement. Conversely, \tcode{__assume(x = 0)} is equivalent to \tcode{__assume(false)}, which in turn is equivalent to \tcode{__builtin_unreachable()}. In both cases, \tcode{x} is not actually being modified.}. Choosing \emph{assignment-expression} (proposed here) over \emph{conditional-expression} therefore follows existing practice. Moreover, it is at least hypothetically conceivable that there could be a use case for \tcode{[[assume(co_yield \emph{value})]]}\footnote{Thanks to Mathias Stearn for pointing this out.}. We do not see a good reason to exclude cases like this by making the grammar of assumptions more specific than it has to be.
+Existing practice on allowing top-level commas is inconsistent. Clang does not accept them in its \tcode{__builtin_assume}, while MSVC and ICC do accept them in their \tcode{__assume}. However, according to Gabriel Dos Reis, ``the `acceptance' by MSVC is a parser accident -- don't use it as existing practice to standardise'', and we decided to follow his advice. Assumptions with \emph{assignment-expression}s are allowed by today's compiler built-ins: \tcode{__builtin_assume(x = 1)} will compile on Clang, and \tcode{__assume(x = 1)} will compile on both MSVC and ICC. However, after speaking with compiler implementers, it seems that this is more coincidental than intentional, similar to top-level commas.
 
 \subsection{The expression is not evaluated}
 
@@ -636,7 +641,6 @@ SF & F & N & A & SA \\
 \end{tabular}
 \hspace{5mm}Consensus against
 
-\pagebreak %%% COSMETIC
 2. In D1774R5, we prefer assume’s parameter to be just an “attribute-grammar-conforming token soup”, not an expression.
 
 \hspace{6mm}
@@ -668,8 +672,6 @@ SF & F & N & A & SA \\
 
 Abstain: 7
 
-%Poll results and salient comments published in \cite{P1018R15}.
-
 \subsection*{SG22, online telecon (2022-02-11)}
 
 Does SG22 encourage proposing the functionality in P1774R5 to WG14?
@@ -680,6 +682,17 @@ Committee & For & Against & Abstain &  \\
 WG14 & 6 & 1 & 1 & Consensus \\
 WG21 & 8 & 1 & 2 & Consensus
 \end{tabular}
+
+\subsection*{EWG, online telecon (2022-04-14)}
+
+EWG would like P1774 to be modified with the changes proposed in P2507R1 before inclusion into C++23.
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+4 & 6 & 6 & 0 & 0
+\end{tabular}
+\hspace{5mm}Consensus
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -695,7 +708,7 @@ Add the following sub-clause to [dcl.attr]:
 
 The \textit{attribute-token} \tcode{assume} may be applied to a null statement; such a statement is an assumption. An \textit{attribute-argument-clause} shall be present and shall have the form:
 
-\hspace{5mm}\tcode{( }\textit{assignment-expression}\tcode{ )}
+\hspace{5mm}\tcode{( }\textit{conditional-expression}\tcode{ )}
 
 The expression shall be contextually convertible to \tcode{bool} [conv.general]. The expression is not evaluated. If the converted expression would evaluate to \tcode{true} at the point where the assumption appears, the assumption has no effect. Otherwise, the behavior is undefined.
 
@@ -729,7 +742,7 @@ An expression $E$ is a \emph{core constant expression} unless the evaluation of 
 \item an operation that would have undefined behavior as specified in [intro] through [cpp]\added{, excluding [dcl.attr.assume]};
 \end{itemize}
 
-If $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{assignment-expression} would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
+If $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression} would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
 
 For the purposes of determining
 whether an expression $E$ is a core constant expression,
@@ -750,7 +763,7 @@ disqualifies $E$ from being a core constant expression.
 
 \begin{addedblock}
 \begin{note}
-A statement with an assumption ([dcl.attr.assume]) whose converted \textit{assignment-expression} is itself not a core constant expression does not disqualify $E$ from being a core constant expression.
+A statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression} is itself not a core constant expression does not disqualify $E$ from being a core constant expression.
 \end{note}
 \end{addedblock}
 
@@ -766,6 +779,7 @@ A statement with an assumption ([dcl.attr.assume]) whose converted \textit{assig
 \item \textbf{R4}, 2021-11-15:  Added wording. Added polls. Added code size measurement results. Updated and restructured text, adding discussion of proposed semantics and recent related work.
 \item \textbf{R5}, 2021-12-09: Updated wording (removed feature-test macro, allowed duplicate attributes, added clarifications). Updated and restructured text, expanding semantics section to reflect discussion in EWG and on the WG21 reflectors. Added Peter Dimov's refcounted smart pointer code example.
 \item \textbf{R6}, 2022-02-15: Updated polls; minor fixes.
+\item \textbf{R7}, 2022-04-21: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review.
 \end{itemize}
 
 \pagebreak %%% COSMETIC

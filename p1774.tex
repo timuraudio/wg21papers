@@ -727,7 +727,7 @@ The \textit{attribute-token} \tcode{assume} may be applied to a null statement; 
 The expression is contextually converted to \tcode{bool} [conv.general]. The expression is not evaluated. If the converted expression would evaluate to \tcode{true} at the point where the assumption appears, the assumption has no effect. Otherwise, the behavior is undefined.
 
 \begin{note}
-The expression is potentially evaluated [basic.ref.odr]. The use of assumptions is intended to allow, but not require, implementations to analyze the form of the expression and deduce information used to optimize the program. Implementations are allowed to deduce no information from any particular assumption.
+The expression is potentially evaluated [basic.def.odr]. The use of assumptions is intended to allow implementations to analyze the form of the expression and deduce information used to optimize the program. Implementations are not required to deduce any information from any particular assumption.
 \end{note}
 
 \begin{example}
@@ -756,7 +756,15 @@ An expression $E$ is a \emph{core constant expression} unless the evaluation of 
 \item an operation that would have undefined behavior as specified in [intro] through [cpp]\added{, excluding [dcl.attr.assume]};
 \end{itemize}
 
-If $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression} is a core constant expression that would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
+If $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate
+
+\begin{itemize}
+\item an operation that has undefined behavior as specified in [library] through [thread] of this document, 
+\item \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression}, if evaluated where the assumption appears, would not disqualify $E$ from being a core constant expression and would not evaluate to \tcode{true}, }or
+\item an invocation of the \tcode{va_­start} macro ([cstdarg.syn]),
+\end{itemize}
+
+it is unspecified whether \tcode{e} is a core constant expression.
 
 For the purposes of determining
 whether an expression $E$ is a core constant expression,
@@ -777,7 +785,7 @@ disqualifies $E$ from being a core constant expression.
 
 \begin{addedblock}
 \begin{note}
-A statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression} is itself not a core constant expression does not disqualify $E$ from being a core constant expression.
+The evaluation of a statement with an assumption ([dcl.attr.assume]) does not disqualify $E$ from being a core constant expression merely because a hypothetical evaluation of the converted \emph{conditional-expression} at the point where the statement is evaluated would fail the requirements for a core constant expression.
 \end{note}
 \end{addedblock}
 

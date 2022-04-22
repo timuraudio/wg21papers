@@ -452,6 +452,21 @@ int main() {
 
 We propose that this code should be well-formed. If an assumption cannot be checked at compile time, the assumption should simply be ignored, rather than making the whole program ill-formed. Otherwise, in order to be able to make the function \tcode{constexpr}, the user would have to branch on \tcode{std::is_constant_evaluated()} just for the purpose of using such an assumption, which does not seem reasonable.
 
+In order to fully specify the behaviour of assumptions during constant evaluation, we need to distinguish the following cases:
+
+\begin{enumerate}
+\item Would evaluate to \tcode{true} following the constant evaluation rules
+\item Would evaluate to \tcode{false} following the constant evaluation rules
+\item Would not evaluate to either \tcode{true} or \tcode{false} following the constant evaluation rules because of undefined behaviour, non-termination, etc.
+\item Doesn't satisfy the constant evaluation rules but is still somehow known to evaluate to \tcode{true}.
+\item Doesn't satisfy the constant evaluation rules but is still somehow known to evaluate to \tcode{false}.
+\item Undecidable during constant evaluation what it would evaluate to or whether evaluation would succeed due to incomplete information (eg, using runtime state or calling a function from a different translation unit).
+\end{enumerate}
+
+To be consistent with the design described above, we propose that cases 1, 4, 5, and 6 should be well-formed, while for cases 2 and 3, the behaviour should be implementation-defined.
+
+It seems desirable to make case 4 well-formed, but case 5 ill-formed or implementation-defined. However, it is not clear how we could even specify when something is ``still somehow known to evaluate to'' \tcode{true} or \tcode{false} and normatively distinguish these cases. It is much clearer (and also consistent) to specify that an assumption should simply be ignored whenever it cannot be evaluated following the constant evaluation rules.
+
 \subsection{Ill-formed expressions need to be diagnosed}
 \label{subsec:well_formed}
 
@@ -742,7 +757,7 @@ An expression $E$ is a \emph{core constant expression} unless the evaluation of 
 \item an operation that would have undefined behavior as specified in [intro] through [cpp]\added{, excluding [dcl.attr.assume]};
 \end{itemize}
 
-If $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression} would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
+If $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate an operation that has undefined behavior as specified in [library] through [thread] of this document, \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression} is a core constant expression that would not evaluate to \tcode{true}, }or an invocation of the \tcode{va_­start} macro ([cstdarg.syn]), it is unspecified whether \tcode{e} is a core constant expression.
 
 For the purposes of determining
 whether an expression $E$ is a core constant expression,
@@ -779,7 +794,7 @@ A statement with an assumption ([dcl.attr.assume]) whose converted \textit{condi
 \item \textbf{R4}, 2021-11-15:  Added wording. Added polls. Added code size measurement results. Updated and restructured text, adding discussion of proposed semantics and recent related work.
 \item \textbf{R5}, 2021-12-09: Updated wording (removed feature-test macro, allowed duplicate attributes, added clarifications). Updated and restructured text, expanding semantics section to reflect discussion in EWG and on the WG21 reflectors. Added Peter Dimov's refcounted smart pointer code example.
 \item \textbf{R6}, 2022-02-15: Updated polls; minor fixes.
-\item \textbf{R7}, 2022-04-21: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review.
+\item \textbf{R7}, 2022-04-21: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review; expanded discussion of different cases during constant evaluation.
 \end{itemize}
 
 \section*{Acknowledgements}

@@ -710,7 +710,7 @@ The \textit{attribute-token} \tcode{assume} may be applied to a null statement; 
 
 \hspace{5mm}\tcode{( }\textit{conditional-expression}\tcode{ )}
 
-The expression shall be contextually convertible to \tcode{bool} [conv.general]. The expression is not evaluated. If the converted expression would evaluate to \tcode{true} at the point where the assumption appears, the assumption has no effect. Otherwise, the behavior is undefined.
+The expression is contextually converted to \tcode{bool} [conv.general]. The expression is not evaluated. If the converted expression would evaluate to \tcode{true} at the point where the assumption appears, the assumption has no effect. Otherwise, the behavior is undefined.
 
 \begin{note}
 The expression is potentially evaluated [basic.ref.odr]. The use of assumptions is intended to allow, but not require, implementations to analyze the form of the expression and deduce information used to optimize the program. Implementations are allowed to deduce no information from any particular assumption.
@@ -781,8 +781,6 @@ A statement with an assumption ([dcl.attr.assume]) whose converted \textit{condi
 \item \textbf{R6}, 2022-02-15: Updated polls; minor fixes.
 \item \textbf{R7}, 2022-04-21: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review.
 \end{itemize}
-
-\pagebreak %%% COSMETIC
 
 \section*{Acknowledgements}
 

@@ -765,38 +765,21 @@ An expression $E$ is a \emph{core constant expression} unless the evaluation of 
 \item an operation that would have undefined behavior as specified in [intro] through [cpp]\added{, excluding [dcl.attr.assume]};
 \end{itemize}
 
-If $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate
+If $E$ satisfies the constraints of a core constant expression,\added{ whether \tcode{E} is a core constant expression is unspecified if}\removed{ but} evaluation of $E$ would evaluate
 
 \begin{itemize}
-\item an operation that has undefined behavior as specified in [library] through [thread] of this document, 
-\item \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression}, if evaluated where the assumption appears, would not disqualify $E$ from being a core constant expression and would not evaluate to \tcode{true}, }or
-\item an invocation of the \tcode{va_­start} macro ([cstdarg.syn]),
+\item an operation that has undefined behavior as specified in [library] through [thread] of this document,\removed{ or}
+\item an invocation of the \tcode{va_­start} macro ([cstdarg.syn]),\added{ or}
+\item \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression}, if evaluated where the assumption appears, would not disqualify $E$ from being a core constant expression and would not evaluate to \tcode{true}.}
 \end{itemize}
-
-it is unspecified whether \tcode{e} is a core constant expression.
-
-For the purposes of determining
-whether an expression $E$ is a core constant expression,
-the evaluation of a call to a member function of \tcode{std::allocator<T>}
-as defined in [allocator.members], where \tcode{T} is a literal type,
-does not disqualify $E$ from being a core constant expression,
-even if the actual evaluation of such a call
-would otherwise fail the requirements for a core constant expression.
-Similarly, the evaluation of a call to
-\tcode{std::construct_at} or \tcode{std::ranges::construct_at}
-does not disqualify $E$
-from being a core constant expression unless
-the first argument, of type \tcode{T*}, does not point
-to storage allocated with \tcode{std::allocator<T>} or
-to an object whose lifetime began within the evaluation of $E$, or
-the evaluation of the underlying constructor call
-disqualifies $E$ from being a core constant expression.
 
 \begin{addedblock}
 \begin{note}
-The evaluation of a statement with an assumption ([dcl.attr.assume]) does not disqualify $E$ from being a core constant expression merely because a hypothetical evaluation of the converted \emph{conditional-expression} at the point where the statement is evaluated would fail the requirements for a core constant expression.
+$E$ is not disqualified from being a core constant expression if this hypothetical evaluation would disqualify $E$ from being a core constant expression.
 \end{note}
 \end{addedblock}
+
+\removed{it is unspecified whether \tcode{e} is a core constant expression.}
 
 \end{adjustwidth}
 
@@ -809,8 +792,8 @@ The evaluation of a statement with an assumption ([dcl.attr.assume]) does not di
 \item \textbf {R3}, 2020-01-13: Updated text to clarify the discussion of the proposed semantics and syntax.
 \item \textbf{R4}, 2021-11-15:  Added wording. Added polls. Added code size measurement results. Updated and restructured text, adding discussion of proposed semantics and recent related work.
 \item \textbf{R5}, 2021-12-09: Updated wording (removed feature-test macro, allowed duplicate attributes, added clarifications). Updated and restructured text, expanding semantics section to reflect discussion in EWG and on the WG21 reflectors. Added Peter Dimov's refcounted smart pointer code example.
-\item \textbf{R6}, 2022-02-15: Updated polls; minor fixes.
-\item \textbf{R7}, 2022-04-21: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review; expanded discussion of different cases during constant evaluation; updated discussion of whether ill-formed expressions inside assumptions need to be diagnosed; added example of \tcode{[[assume]]} triggering a lambda capture.
+\item \textbf{R6}, 2022-02-15: Updated polls section; minor fixes.
+\item \textbf{R7}, 2022-04-21: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review; expanded discussion of different cases during constant evaluation; updated discussion of whether ill-formed expressions inside assumptions need to be diagnosed; added example of \tcode{[[assume]]} triggering a lambda capture; updated polls section.
 \end{itemize}
 
 \section*{Acknowledgements}

@@ -302,13 +302,23 @@ There is a subtle difference between behaviour being undefined if the expression
 
 \subsection{Assumptions ODR-use their argument}
 
-At first glance, this requirement seems unnecessary. If the argument of an assumption is not evaluated, only analysed, why would we want to specify that it is ODR-used? ODR-use means that, even if the assumption is otherwise ignored, the assumed expression will trigger template instantiations.
+At first glance, this requirement seems unnecessary. If the argument of an assumption is not evaluated, only analysed, why would we want to specify that it is ODR-used? ODR-use means that, even if the assumption is otherwise ignored, the assumed expression can trigger template instantiations and lambda captures, which can be observable. For example, the following two functions will return two different values:
 
-The reason is that all existing implementations of assumptions require ODR-use, Implementing assumptions without ODR-use of the argument would be extremely difficult, and to our knowledge, such an implementation does not exist.
+\begin{codeblock}
+auto f1(int i) { 
+  return sizeof( [=] { [[assume(i == 0)]]; } );
+}
 
-MSVC, ICC, and Clang all follow the same basic principle to implement assumptions. The compiler actually generates intermediate representation for the expression inside the assumption (which requires ODR-use). This code is then used during optimisation of the program. At a later stage of the optimiser, the assumption-related code is then stripped out again (the exact mechanics of this vary from compiler to compiler).
+auto f2(int i) {
+  return sizeof( [=] {} );
+}
+\end{codeblock}
 
-In practice, this should not have any negative impact. ``Stateful metaprogramming'' that depends on template instantiations is discouraged, and CWG has plans to make it ill-formed in the future.
+This is due to the fact that all existing implementations of assumptions require ODR-use. Implementing a useful assumptions facility without ODR-use of the argument would be extremely difficult, if not impossible. MSVC, ICC, and Clang all follow the same basic principle to implement assumptions. The compiler generates intermediate representation for the expression inside the assumption (which requires ODR-use). This code is then used during optimisation of the program. At a later stage of the optimiser, the assumption-related code is then stripped out again (the exact mechanics of this vary from compiler to compiler).
+
+The observability of ODR-using assumed expressions can easily be demonstrated with today's compilers. If we replace \tcode{[[assume]]} in the code example above with the \tcode{ASSUME} macro from section \ref{sec:motivation} and compile this program, then on all of MSVC, ICC, GCC, and Clang, \tcode{f1} will return \tcode{4}, while \tcode{f2} will return \tcode{1}.
+
+In practice, this should not have any negative impact. This observability of the \tcode{[[assume]]} attribute is not categorically different from the observability of the existing standard attribute \tcode{[[no_unique_address]]}. In both cases, the effect can be observable, but the semantics of the program do not actually change, as the standard does not mandate any particular value for \tcode{sizeof}. However, in the \tcode{[[no_unique_address]]} case, this observability will be much more frequent, as it's literally designed to modify the memory layout of a class, while for \tcode{[[assume]]}, code that would trigger template instantiations or lambda captures would be a very odd usage of assumptions for which no known use cases exist. Moreover, ``stateful metaprogramming'' that depends on template instantiations or the size of a lambda type is discouraged in general.
 
 Note also that ODR-using the expression means you cannot use functions in an assumption that have a declaration but no definition.
 
@@ -452,7 +462,7 @@ int main() {
 
 We propose that this code should be well-formed. If an assumption cannot be checked at compile time, the assumption should simply be ignored, rather than making the whole program ill-formed. Otherwise, in order to be able to make the function \tcode{constexpr}, the user would have to branch on \tcode{std::is_constant_evaluated()} just for the purpose of using such an assumption, which does not seem reasonable.
 
-In order to fully specify the behaviour of assumptions during constant evaluation, we need to distinguish the following cases:
+In order to fully specify the behaviour of assumptions during constant evaluation, we need to distinguish the following cases\footnote{Thanks to Richard Smith for enumerating these cases.}:
 
 \begin{enumerate}
 \item Would evaluate to \tcode{true} following the constant evaluation rules
@@ -709,7 +719,6 @@ SF & F & N & A & SA \\
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\pagebreak
 
 \section{Proposed wording}
 \label{sec:wording}
@@ -801,7 +810,7 @@ The evaluation of a statement with an assumption ([dcl.attr.assume]) does not di
 \item \textbf{R4}, 2021-11-15:  Added wording. Added polls. Added code size measurement results. Updated and restructured text, adding discussion of proposed semantics and recent related work.
 \item \textbf{R5}, 2021-12-09: Updated wording (removed feature-test macro, allowed duplicate attributes, added clarifications). Updated and restructured text, expanding semantics section to reflect discussion in EWG and on the WG21 reflectors. Added Peter Dimov's refcounted smart pointer code example.
 \item \textbf{R6}, 2022-02-15: Updated polls; minor fixes.
-\item \textbf{R7}, 2022-04-21: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review; expanded discussion of different cases during constant evaluation; updated discussion of whether ill-formed expressions inside assumptions need to be diagnosed.
+\item \textbf{R7}, 2022-04-21: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review; expanded discussion of different cases during constant evaluation; updated discussion of whether ill-formed expressions inside assumptions need to be diagnosed; added example of \tcode{[[assume]]} triggering a lambda capture.
 \end{itemize}
 
 \section*{Acknowledgements}

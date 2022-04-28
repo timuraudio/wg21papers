@@ -124,7 +124,7 @@ void limiter(float* data, size_t size) {
 
 On all compilers except ICC, using \tcode{ASSUME} leads to significantly less code being emitted (see Figure \ref{fig:codesize}, left panel). With the injected assumptions about the array size, we get a better optimised vectorised loop with the prologue and epilogue eliminated. Additionally, both MSVC and GCC manage to eliminate unnecessary code inside \tcode{std::clamp}.
 
-However, interestingly, on GCC (the only surveyed compiler that lacks an assumption built-in), for some reason the assumption containing \tcode{std::isfinite} interferes with the auto-vectoriser, and as a result SIMD is no longer used inside the loop if this assumption is present. This is actually a good argument \emph{for} standardising assumptions, because evidently, the emulation we can achieve on GCC today with \tcode{__builtin_unreachable()} is suboptimal\footnote{Thanks to Peter Dimov for pointing this out.}.
+However, interestingly, on GCC (the only surveyed compiler that lacks an assumption built-in), for some reason the assumption containing \tcode{std::isfinite} interferes with the auto-vectoriser, and as a result SIMD is no longer used inside the loop if this assumption is present. This is actually a good argument \emph{for} standardising assumptions, because evidently, the emulation we can achieve on GCC today with \tcode{__builtin_unreachable()} is suboptimal.
 
 \begin{figure}[!htbp]
   \includegraphics[width=\linewidth]{p1774data/data.png}
@@ -298,25 +298,25 @@ The proposed semantics allow the optimiser to assume that \tcode{j != 0} was alr
 
 Because the expression is never evaluated, it is never checked. This is a common misconception about the semantics of assumptions. The implementation will not try to determine whether or not the expression would evaluate to \tcode{true}; there is no ``hypothetical evaluation'' of the unevaluated expression or anything along those lines. Instead, it will \emph{assume} that the expression would evaluate to \tcode{true} at the point where the assumption appears, and optimise based on that assumption.
 
-There is a subtle difference between behaviour being undefined if the expression would evaluate to \tcode{false}, or if the expression would \emph{not} evaluate to \tcode{true}. The latter (proposed here) also includes the assumption that the expression would actually return a value, not throw an exception, and not exhibit undefined behaviour if it were evaluated. This enlarges the space of assumptions that can be stated by the programmer\footnote{Thanks to Joshua Berne for pointing this out.}. Undefined behaviour inside the assumed expression is therefore effectively allowed to escape the assumption, despite the fact that the expression is not evaluated.
+There is a subtle difference between behaviour being undefined if the expression would evaluate to \tcode{false}, or if the expression would \emph{not} evaluate to \tcode{true}. The latter (proposed here) also includes the assumption that the expression would actually return a value, not throw an exception, and not exhibit undefined behaviour if it were evaluated. This enlarges the space of assumptions that can be stated by the programmer. Undefined behaviour inside the assumed expression is therefore effectively allowed to escape the assumption, despite the fact that the expression is not evaluated.
 
 \subsection{Assumptions ODR-use their argument}
 
-At first glance, this requirement seems unnecessary. If the argument of an assumption is not evaluated, only analysed, why would we want to specify that it is ODR-used? ODR-use means that, even if the assumption is otherwise ignored, the assumed expression can trigger template instantiations and lambda captures, which can be observable. For example, the following two functions will return two different values:
+At first glance, this requirement seems unnecessary. If the argument of an assumption is not evaluated, only analysed, why would we want to specify that it is ODR-used? ODR-use means that, even if the assumption is otherwise ignored, the assumed expression can trigger template instantiations and lambda captures, which is observable both at compile time and at runtime. For example, the following two functions will return two different values:
 
 \begin{codeblock}
-auto f1(int i) { 
+constexpr auto f1(int i) { 
   return sizeof( [=] { [[assume(i == 0)]]; } );
 }
 
-auto f2(int i) {
+constexpr auto f2(int i) {
   return sizeof( [=] {} );
 }
 \end{codeblock}
 
 This is due to the fact that all existing implementations of assumptions require ODR-use. Implementing a useful assumptions facility without ODR-use of the argument would be extremely difficult, if not impossible. MSVC, ICC, and Clang all follow the same basic principle to implement assumptions. The compiler generates intermediate representation for the expression inside the assumption (which requires ODR-use). This code is then used during optimisation of the program. At a later stage of the optimiser, the assumption-related code is then stripped out again (the exact mechanics of this vary from compiler to compiler).
 
-The observability of ODR-using assumed expressions can easily be demonstrated with today's compilers. If we replace \tcode{[[assume]]} in the code example above with the \tcode{ASSUME} macro from section \ref{sec:motivation} and compile this program, then on all of MSVC, ICC, GCC, and Clang, \tcode{f1} will return \tcode{4}, while \tcode{f2} will return \tcode{1}.
+The observability of ODR-using assumed expressions can easily be demonstrated with today's compilers. If we replace \tcode{[[assume]]} in the code example above with the \tcode{ASSUME} macro from section \ref{sec:motivation} and compile this program, then on all of MSVC, ICC, GCC, and Clang, \tcode{f1} will return \tcode{4}, while \tcode{f2} will return \tcode{1}, both during constant evaluation and at runtime.
 
 In practice, this should not have any negative impact. This observability of the \tcode{[[assume]]} attribute is not categorically different from the observability of the existing standard attribute \tcode{[[no_unique_address]]}. In both cases, the effect can be observable, but the semantics of the program do not actually change, as the standard does not mandate any particular value for \tcode{sizeof}. However, in the \tcode{[[no_unique_address]]} case, this observability will be much more frequent, as it's literally designed to modify the memory layout of a class, while for \tcode{[[assume]]}, code that would trigger template instantiations or lambda captures would be a very odd usage of assumptions for which no known use cases exist. Moreover, ``stateful metaprogramming'' that depends on template instantiations or the size of a lambda type is discouraged in general.
 
@@ -462,7 +462,7 @@ int main() {
 
 We propose that this code should be well-formed. If an assumption cannot be checked at compile time, the assumption should simply be ignored, rather than making the whole program ill-formed. Otherwise, in order to be able to make the function \tcode{constexpr}, the user would have to branch on \tcode{std::is_constant_evaluated()} just for the purpose of using such an assumption, which does not seem reasonable.
 
-In order to fully specify the behaviour of assumptions during constant evaluation, we need to distinguish the following cases\footnote{Thanks to Richard Smith for enumerating these cases.}:
+In order to fully specify the behaviour of assumptions during constant evaluation, we need to distinguish the following cases:
 
 \begin{enumerate}
 \item Would evaluate to \tcode{true} following the constant evaluation rules
@@ -803,7 +803,7 @@ $E$ is not disqualified from being a core constant expression if this hypothetic
 
 \section*{Acknowledgements}
 
-Many thanks to Herb Sutter, Chandler Carruth, Joshua Berne, Michael Spencer, Jonathan Caves, Hal Finkel, Erich Keane, Judy Ward, Inbal Levi, Eric Brumer, Nathan Sidwell, Daveed Vandevoorde, Jens Maurer, Ga\v sper A\v zman, Peter Dimov, Gabriel Dos Reis, Arthur O'Dwyer, Aaron Ballman, Martin Uecker, and Peter Brett for their help with this proposal.
+Many thanks to Herb Sutter, Chandler Carruth, Joshua Berne, Michael Spencer, Jonathan Caves, Hal Finkel, Erich Keane, Judy Ward, Inbal Levi, Eric Brumer, Nathan Sidwell, Daveed Vandevoorde, Jens Maurer, Ga\v sper A\v zman, Peter Dimov, Gabriel Dos Reis, Arthur O'Dwyer, Aaron Ballman, Martin Uecker, Peter Brett, and Richard Smith for their help with this proposal.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

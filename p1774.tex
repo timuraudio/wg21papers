@@ -770,10 +770,10 @@ An expression $E$ is a \emph{core constant expression} unless the evaluation of 
 \item an operation that would have undefined behavior as specified in [intro] through [cpp]\added{, excluding [dcl.attr.assume]};
 \end{itemize}
 
-If $E$ satisfies the constraints of a core constant expression,\added{ whether \tcode{E} is a core constant expression is unspecified if}\removed{ but} evaluation of $E$ would evaluate
+\added{It is unspecified whether $E$ is a core constant expression i}\removed{I}f $E$ satisfies the constraints of a core constant expression, but evaluation of $E$ would evaluate
 
 \begin{itemize}
-\item an operation that has undefined behavior as specified in [library] through [thread] of this document,\removed{ or}
+\item an operation that has undefined behavior as specified in [library] through [thread],\removed{ or}
 \item an invocation of the \tcode{va_­start} macro ([cstdarg.syn]),\added{ or}
 \item \added{a statement with an assumption ([dcl.attr.assume]) whose converted \textit{conditional-expression}, if evaluated where the assumption appears, would not disqualify $E$ from being a core constant expression and would not evaluate to \tcode{true}.}
 \end{itemize}

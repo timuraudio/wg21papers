@@ -36,6 +36,26 @@ In addition, if \tcode{C} inherits constructors (namespace.udecl) from a base cl
 \end{addedblock}
 \end{adjustwidth}
 
+In [over.match.class.deduct], add the following example to the existing block of examples:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\begin{addedblock}
+\begin{example}
+\begin{codeblock}
+template <typename T> struct Base {
+  Base(T&&);
+};
+
+template <typename T> struct Derived : public Base<T> {
+  using Base<T>::Base;
+}
+
+Derived d(42);  // OK, deduces \tcode{Derived<int>}
+\end{codeblock}
+\end{example}
+\end{addedblock}
+\end{adjustwidth}
+
 Insert a bullet after [over.match.best] 1.9 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}

@@ -1,0 +1,67 @@
+\input{wg21common}
+
+\newcommand{\forceindent}{\parindent=1em\indent\parindent=0pt\relax} % For indenting a paragraph containing code that can't be laid out as a {codeblock} because it also contains \emph
+
+\begin{document}
+\title{Direct object creation with \texttt{std::start_lifetime_as}}
+\author{
+  Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+  Richard Smith \small(\href{mailto:richardsmith@google.com}{richardsmith@google.com})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P2590R0 \\
+Date: & 2022-05-15\\
+Project: & Programming Language C++ \\
+Audience: & Library Working Group, Core Working Group
+\end{tabular}
+
+
+\begin{abstract}
+This paper proposes a new standard library facility \tcode{std::start_lifetime_as}. For objects of sufficiently trivial types, this facility can be used to directly create objects and start their lifetime on-demand to give programs defined behaviour. This proposal completes the functionality originally proposed in \cite{P0593R6} by providing the standard library portion of that paper (only the core language portion of that paper made it into C++20).
+\end{abstract}
+
+\vspace{5mm}
+
+\section{Motivation}
+\label{sec:motivation}
+
+TODO
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{History}
+\label{sec:history}
+
+TODO
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Proposed wording}
+\label{sec:wording}
+
+TODO
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Document history}
+
+%\begin{itemize}
+%\item \textbf{R0}, 2022-05-15: Initial version.
+%\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Acknowledgements}
+
+%Nothing yet
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

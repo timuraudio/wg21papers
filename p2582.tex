@@ -31,9 +31,14 @@ The proposed changes are relative to the C++ working draft \cite{N4910}.
 In [over.match.class.deduct], append to paragraph 1 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-\begin{addedblock}
-In addition, if \tcode{C} inherits constructors (namespace.udecl) from a base class denoted in the \emph{base-specifier-list} by a \emph{simple-template-id} \tcode{B}, the set contains the functions and function templates formed from an alias template (over.match.alias.deduct) whose template parameters are those of \tcode{C} and whose \emph{simple-template-id} is \tcode{B}.
-\end{addedblock}
+except that additional parameter packs of the form $\tcode{P}_j \tcode{...}$
+are inserted into the parameter list in their original aggregate element position corresponding to each non-trailing aggregate element of type $\tcode{P}_j$
+that was skipped because it was a parameter pack, and
+the trailing sequence of parameters corresponding
+to a trailing aggregate element that is a pack expansion (if any)
+is replaced by a single parameter of the form $\tcode{T}_n \tcode{...}$.
+
+\added{In addition, if \tcode{C} inherits constructors (namespace.udecl) from a base class denoted in the \emph{base-specifier-list} by a \emph{simple-template-id} \tcode{B}, the set contains the functions and function templates formed from an alias template whose template parameters are those of \tcode{C} and whose \emph{simple-template-id} is \tcode{B}.}
 \end{adjustwidth}
 
 In [over.match.class.deduct], add the following example to the existing block of examples:
@@ -56,14 +61,34 @@ Derived d(42);  // OK, deduces \tcode{Derived<int>}
 \end{addedblock}
 \end{adjustwidth}
 
-Insert a bullet after [over.match.best] 1.9 as follows:
+In [over.match.best.general], insert as follows:
 
-\begin{adjustwidth}{0.5cm}{0.5cm}
-\begin{addedblock}
+\begin{adjustwidth}{0cm}{0.5cm}
 \begin{itemize}
-\item \tcode{F1} is generated from class template argument deduction (over.match.class.deduct 11.3.1.8) for a class \tcode{D}, \tcode{F2} is generated from inheriting constructors from a base class of \tcode{D}, and for all arguments the corresponding parameters of \tcode{F1} and \tcode{F2} have the same type, or if not that,
+\item
+\tcode{F1} and \tcode{F2} are rewritten candidates, and
+\tcode{F2} is a synthesized candidate
+with reversed order of parameters
+and \tcode{F1} is not
+\begin{example}
+\begin{codeblock}
+struct S {
+  friend std::weak_ordering operator<=>(const S&, int);         // \#1
+  friend std::weak_ordering operator<=>(int, const S&);         // \#2
+};
+bool b = 1 < S();                                               // calls \#2
+\end{codeblock}
+\end{example}
+or, if not that,
+
+
+\item \added{\tcode{F1} is generated from class template argument deduction ([over.match.class.deduct]) for a class \tcode{D}, \tcode{F2} is generated from inheriting constructors from a base class of \tcode{D}, and for all arguments the corresponding parameters of \tcode{F1} and \tcode{F2} have the same type, or, if not that,}
+
+\item
+\tcode{F1} is generated from a
+\emph{deduction-guide} ([over.match.class.deduct])
+and \tcode{F2} is not, or, if not that,
 \end{itemize}
-\end{addedblock}
 \end{adjustwidth}
 
 

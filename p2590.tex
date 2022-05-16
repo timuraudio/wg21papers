@@ -3,7 +3,7 @@
 \newcommand{\forceindent}{\parindent=1em\indent\parindent=0pt\relax} % For indenting a paragraph containing code that can't be laid out as a {codeblock} because it also contains \emph
 
 \begin{document}
-\title{Direct object creation with \texttt{std::start_lifetime_as}}
+\title{Explicit lifetime management}
 \author{
   Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
   Richard Smith \small(\href{mailto:richardsmith@google.com}{richardsmith@google.com})
@@ -13,7 +13,7 @@
 
 \begin{tabular}{ll}
 Document \#: & P2590R0 \\
-Date: & 2022-05-15\\
+Date: & 2022-05-16\\
 Project: & Programming Language C++ \\
 Audience: & Library Working Group, Core Working Group
 \end{tabular}
@@ -28,21 +28,144 @@ This paper proposes a new standard library facility \tcode{std::start_lifetime_a
 \section{Motivation}
 \label{sec:motivation}
 
-TODO
+Since C++20, certain functions in the C++ standard library such as \tcode{malloc}, \tcode{bit_cast}, and \tcode{memcpy} implicitly create objects and start their lifetime \cite{P0593R6}. As a result, the following code is no longer undefined behaviour:
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{codeblock}
+struct X { int a, b; };
+X* make_x() {
+  X* p = (X*)malloc(sizeof(struct X));
+  p->a = 1;
+  p->b = 2;
+  return p;
+}
+\end{codeblock}
 
-\section{History}
-\label{sec:history}
+However, if the memory allocation or memory mapping function is not on this list of ``blessed'' standard library functions, code like the above still has undefined behaviour in C++20. We are accessing an object through a pointer to \tcode{X}, however there is no object of type \tcode{X} within its lifetime at that memory location.
 
-TODO
+For non-standard functions such as \tcode{mmap} on POSIX systems and \tcode{VirtualAlloc} on Windows systems, the implementation can ensure that those functions implicitly create objects, and document that. In the absence of such documentation, we probably still won't hit undefined behaviour in practice, because the compiler typically cannot introspect the implementation of \tcode{mmap} and prove that it doesn't perform \tcode{new (p) std::byte[n]} on its returned pointer.
+
+But what about non-standard memory allocation or memory mapping functions that are provided by the user? Consider, for example, a library providing a memory pool, where the storage reuse is expressed in C++ code rather than in a syscall and is visible to the compiler. The current C++20 wording does not provide a solution for this use case, and code using such storage will be undefined behaviour.
+
+\cite{P0593R6} addressed this use case by providing a library facility \tcode{std::start_lifetime_as}, in addition to the proposed core language changes, to tell the compiler explicitly that an object should be created at the given memory location:
+
+\begin{codeblock}
+struct X { int a, b; };
+X* make_x() {
+  X* p = std::start_lifetime_as<X>(user_malloc(sizeof(struct X));
+  p->a = 1;
+  p->b = 2;
+  return p;
+}
+\end{codeblock}
+
+This direction has already been approved by EWG and LEWG. The core language part of \cite{P0593R6} made it into C++20, however the library part did not, because LWG did not have enough time to review the wording before the C++20 cutoff date. In this paper, we have extracted this still-missing library part and are proposing it again.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Proposed wording}
 \label{sec:wording}
 
-TODO
+The proposed changes are relative to the C++ working draft \cite{N4910}. 
+
+Modify [intro.object] paragraph 13 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Any implicit or explicit invocation of a function
+named \tcode{operator new} or \tcode{operator new[]}
+implicitly creates objects in the returned region of storage and
+returns a pointer to a suitable created object.
+\begin{note}
+Some functions in the C++ standard library implicitly create objects (\added{[obj.lifetime], }[allocator.traits.members] ,[c.malloc], [cstring.syn], [bit.cast]).
+\end{note}
+
+\end{adjustwidth}
+
+Modify [allocator.requirements.general] as follows:
+
+\tcode{a.allocate(n)}
+\begin{adjustwidth}{0.5cm}{0.5cm}
+
+\emph{Result: }\tcode{X::pointer}
+
+\emph{Effects: }
+Memory is allocated for an array of \tcode{n} \tcode{T}
+and such an object is created
+but array elements are not constructed.
+\begin{example}
+When reusing storage denoted by some pointer value \tcode{p},
+\tcode{\added{start_lifetime_as_array<T>(p, n)}}
+\tcode{\removed{launder(reinterpret_cast<T*>(new (p) byte[n * sizeof(T)]))}} 
+can be used to implicitly create a suitable array object
+and obtain a pointer to it.
+\end{example}
+
+\emph{Throws:}
+\tcode{allocate} may throw an appropriate exception.
+
+\begin{note}
+It is intended that \tcode{a.allocate} be an efficient means
+of allocating a single object of type \tcode{T}, even when \tcode{sizeof(T)}
+is small. That is, there is no need for a container to maintain its own
+free list.
+\end{note}
+
+\emph{Remarks:}
+If \tcode{n == 0}, the return value is unspecified.
+\end{adjustwidth}
+
+In header \tcode{<memory>} synopsis [memory.syn], add the following after the declarations of \tcode{std::align} and \tcode{std::assume_aligned}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+
+\begin{addedblock}
+\begin{codeblock}
+// [obj.lifetime] Explicit lifetime management
+template<typename T> T* start_lifetime_as(void *p);
+template<typename T> volatile T* start_lifetime_as(volatile void *p);
+template<typename T> T* start_lifetime_as_array(void *p, size_t n);
+template<typename T> volatile T* start_lifetime_as_array(volatile void *p, size_t n);
+\end{codeblock}
+\end{addedblock}
+\end{adjustwidth}
+
+Add the following subclause immediately after [ptr.align]:
+
+\begin{addedblock}
+\textbf{Explicit lifetime management \hspace{83mm}[obj.lifetime]}
+
+\begin{codeblock}
+template<typename T> T* start_lifetime_as(void *p);
+template<typename T> volatile T* start_lifetime_as(volatile void *p);
+\end{codeblock}
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{Mandates:} \tcode{T} is an implicit-lifetime type.
+
+\emph{Requires:} [\tcode{p}, \tcode{(char*)p + sizeof(T)}) denotes a region of allocated storage that is a subset of the region of storage reachable through \tcode{p}.
+
+\emph{Effects:} Implicitly creates objects within the denoted region,
+including an object \tcode{A} of type \tcode{T} whose address is \tcode{p}. The object
+representation of \tcode{A} is the contents of the storage prior to the
+call to \tcode{start_lifetime_as} as if by calling \tcode{memcpy} from a copy of the
+original storage, except that the storage is not accessed.
+
+\emph{Returns:} A pointer to \tcode{A}.
+\end{adjustwidth}
+
+\begin{codeblock}
+template<typename T> T* start_lifetime_as_array(void *p, size_t n);
+template<typename T> volatile T* start_lifetime_as_array(volatile void *p, size_t n);
+\end{codeblock}
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{Effects:} Equivalent to: \tcode{return *start_lifetime_as<U>(p);} where \tcode{U} is the type ``array of \tcode{n} \tcode{T}''.
+\end{adjustwidth}
+
+\end{addedblock}
+
+Add feature test macro
+\tcode{__cpp_lib_start_lifetime_at} for header \tcode{<memory>} with a suitable value to
+Table 36 in [support.limits.general].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

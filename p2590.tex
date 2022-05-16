@@ -42,11 +42,11 @@ X* make_x() {
 
 However, if the memory allocation or memory mapping function is not on this list of ``blessed'' standard library functions, code like the above still has undefined behaviour in C++20. We are accessing an object through a pointer to \tcode{X}, however there is no object of type \tcode{X} within its lifetime at that memory location.
 
-For non-standard functions such as \tcode{mmap} on POSIX systems and \tcode{VirtualAlloc} on Windows systems, the implementation can ensure that those functions implicitly create objects, and document that. In the absence of such documentation, we probably still won't hit undefined behaviour in practice, because the compiler typically cannot introspect the implementation of \tcode{mmap} and prove that it doesn't perform \tcode{new (p) std::byte[n]} on its returned pointer.
+For non-standard functions such as \tcode{mmap} on POSIX systems and \tcode{VirtualAlloc} on Windows systems, the implementation can ensure that those functions implicitly create objects, and document that. In the absence of such documentation, we probably still won't hit undefined behaviour in practice, because the compiler typically cannot introspect the implementation of the syscall and prove that it doesn't perform \tcode{new (p) std::byte[n]} on its returned pointer.
 
 But what about non-standard memory allocation or memory mapping functions that are provided by the user? Consider, for example, a library providing a memory pool, where the storage reuse is expressed in C++ code rather than in a syscall and is visible to the compiler. The current C++20 wording does not provide a solution for this use case, and code using such storage will be undefined behaviour.
 
-\cite{P0593R6} addressed this use case by providing a library facility \tcode{std::start_lifetime_as}, in addition to the proposed core language changes, to tell the compiler explicitly that an object should be created at the given memory location:
+\cite{P0593R6} addressed this use case by proposing a standard library facility \mbox{\tcode{std::start_lifetime_as}}, in addition to the proposed core language changes, to tell the compiler explicitly that an object should be created at the given memory location:
 
 \begin{codeblock}
 struct X { int a, b; };
@@ -58,7 +58,9 @@ X* make_x() {
 }
 \end{codeblock}
 
-This direction has already been approved by EWG and LEWG. The core language part of \cite{P0593R6} made it into C++20, however the library part did not, because LWG did not have enough time to review the wording before the C++20 cutoff date. In this paper, we have extracted this still-missing library part and are proposing it again.
+Note that the lifetime of the object is being started, however no constructor is actually being called and no code runs to achieve this. Just like implicit object creation, \tcode{start_lifetime_as} only works for \emph{implicit-lifetime types}, i.e. types that are either aggregates or have at least one trivial eligible constructor and a trivial, non-deleted destructor.
+
+This direction has already been approved by EWG and LEWG. The core language portion of \cite{P0593R6} made it into C++20, however the standard library portion did not, because LWG did not have enough time to review the wording before the C++20 cutoff date. In this paper, we have extracted this still-missing library part and are hereby proposing it again.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

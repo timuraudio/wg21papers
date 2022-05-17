@@ -13,8 +13,8 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P2582R0 \\
-Date: & 2022-05-15\\
+Document \#: & D2582R1 \\
+Date: & 2022-05-17\\
 Project: & Programming Language C++ \\
 Audience: & Core Working Group
 \end{tabular}
@@ -38,24 +38,30 @@ the trailing sequence of parameters corresponding
 to a trailing aggregate element that is a pack expansion (if any)
 is replaced by a single parameter of the form $\tcode{T}_n \tcode{...}$.
 
-\added{In addition, if \tcode{C} inherits constructors (namespace.udecl) from a base class denoted in the \emph{base-specifier-list} by a \emph{simple-template-id} \tcode{B}, the set contains the functions and function templates formed from an alias template whose template parameters are those of \tcode{C} and whose \emph{simple-template-id} is \tcode{B}.}
+\added{In addition, if \tcode{C} inherits constructors ([namespace.udecl]) from a direct base class denoted in the \emph{base-specifier-list} by a \emph{simple-template-id} \tcode{B}, the set contains the functions and function templates formed from an alias template whose template parameters are those of \tcode{C} and whose \emph{simple-template-id} is \tcode{B}.}
 \end{adjustwidth}
 
-In [over.match.class.deduct], add the following example to the existing block of examples:
+In [over.match.class.deduct], add the following example:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \begin{addedblock}
 \begin{example}
 \begin{codeblock}
-template <typename T> struct Base {
-  Base(T&&);
+template <typename T> struct X {
+  X(T);
 };
 
-template <typename T> struct Derived : public Base<T> {
-  using Base<T>::Base;
-}
+template <typename T> struct Y : public X<T> {};
 
-Derived d(42);  // OK, deduces \tcode{Derived<int>}
+template <typename T> struct Z : public X<T> {
+  using X<T>::X;
+};
+
+Y y(42);  // Error: no matching constructor
+Z z(42);  // OK, deduces \tcode{Z<int>}
+
+X(int) -> X<char>;
+Z z2(42); // OK, deduces \tcode{Z<char>}
 \end{codeblock}
 \end{example}
 \end{addedblock}
@@ -82,7 +88,7 @@ bool b = 1 < S();                                               // calls \#2
 or, if not that,
 
 
-\item \added{\tcode{F1} is generated from class template argument deduction ([over.match.class.deduct]) for a class \tcode{D}, \tcode{F2} is generated from inheriting constructors from a base class of \tcode{D}, and for all arguments the corresponding parameters of \tcode{F1} and \tcode{F2} have the same type, or, if not that,}
+\item \added{\tcode{F1} and \tcode{F2} are generated from class template argument deduction ([over.match.class.deduct]) for a class \tcode{D}, and \tcode{F2} is generated from inheriting constructors from a base class of \tcode{D} while \tcode{F1} is not, and for each explicit function argument, the corresponding parameters of \tcode{F1} and \tcode{F2} are either both ellipses or have the same type, or, if not that,}
 
 \item
 \tcode{F1} is generated from a
@@ -90,6 +96,21 @@ or, if not that,
 and \tcode{F2} is not, or, if not that,
 \end{itemize}
 \end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Document history}
+
+\begin{itemize}
+\item \textbf{R0}, 2022-05-15: Initial version.
+\item \textbf{R1}, 2022-05-17: Various wording fixes.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgements}
+
+Many thanks to Hubert Tong for his help with fixing the wording.
 
 
 \renewcommand{\bibname}{References}

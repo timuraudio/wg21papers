@@ -38,7 +38,7 @@ the trailing sequence of parameters corresponding
 to a trailing aggregate element that is a pack expansion (if any)
 is replaced by a single parameter of the form $\tcode{T}_n \tcode{...}$.
 
-\added{In addition, if \tcode{C} inherits constructors ([namespace.udecl]) from a direct base class denoted in the \emph{base-specifier-list} by a \emph{simple-template-id} \tcode{B}, the set contains the functions and function templates formed from an alias template whose template parameters are those of \tcode{C} and whose \emph{simple-template-id} is \tcode{B} as described above, except that the return type is the class template specialization designated by \tcode{C} and template arguments corresponding to the template parameters of \tcode{B}.}
+\added{In addition, if \tcode{C} is defined and inherits constructors ([namespace.udecl]) from a direct base class denoted in the \emph{base-specifier-list} by a \emph{simple-template-id} \tcode{B}, the set contains the functions and function templates formed from an alias template whose template parameters are those of \tcode{C} and whose \emph{simple-template-id} is \tcode{B} as described above, except that the return type is the class template specialization designated by \tcode{C} and template arguments corresponding to the template parameters of \tcode{B}.}
 \end{adjustwidth}
 
 In [over.match.class.deduct], add the following example:

@@ -21,9 +21,9 @@ Audience: & Core Working Group
 
 
 \begin{abstract}
-This paper provides wording for class template argument deduction from inherited constructors \cite{P1021R6}.
+This paper provides wording for class template argument deduction from inherited constructors. See \cite{P1021R6} for rationale.
 \end{abstract}
-
+\vspace{5mm}
 \section{Proposed wording}
 
 The proposed changes are relative to the C++ working draft \cite{N4910}. 
@@ -51,6 +51,7 @@ is replaced by a single parameter of the form $\tcode{T}_n \tcode{...}$.
 \end{addedblock}
 \end{adjustwidth}
 
+\pagebreak
 In [over.match.class.deduct], add the following example:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
@@ -123,6 +124,12 @@ or, if not that,
 and \tcode{F2} is not, or, if not that,
 \end{itemize}
 \end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Known issues}
+
+The mechanism for class template argument deduction from inherited constructors proposed here relies on the existing mechanism for class template argument deduction from alias templates. Core issue \cite{CWG2467} should be expanded to include additional instances of the problem introduced by this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

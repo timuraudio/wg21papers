@@ -47,21 +47,38 @@ In [over.match.class.deduct], add the following example:
 \begin{addedblock}
 \begin{example}
 \begin{codeblock}
-template <typename T> struct X {
-  X(T);
+template <typename T> struct B {
+  B(T);
 };
 
-template <typename T> struct Y : public X<T> {};
-
-template <typename T> struct Z : public X<T> {
-  using X<T>::X;
+template <typename T> struct C : public B<T> {
+  using B<T>::B;
 };
 
-Y y(42);  // Error: no matching constructor
-Z z(42);  // OK, deduces \tcode{Z<int>}
+template <typename T> struct D : public B<T> {};
 
-X(int) -> X<char>;
-Z z2(42); // OK, deduces \tcode{Z<char>}
+C c(42);  // OK, deduces \tcode{C<int>}
+D d(42);  // Error: deduction failed, no inherited deduction guides
+
+B(int) -> B<char>;
+C c2(42); // OK, deduces \tcode{C<char>}
+
+template <typename T> struct E : public B<int> {
+  using B<int>::B;
+};
+
+E e(42);  // Error: deduction failed, base class is not a deducible template
+
+template <typename T, typename U, typename V> struct F {
+  F(T, U, V);
+};
+
+template <typename T, typename U> struct G : F<U, T, int> {
+  using F<U, T, int>::F;
+}
+
+G g(true, 'a', 1); // OK, deduces \tcode{G<char, bool>}
+
 \end{codeblock}
 \end{example}
 \end{addedblock}

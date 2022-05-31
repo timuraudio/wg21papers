@@ -309,11 +309,11 @@ At first glance, this requirement seems unnecessary. If the argument of an assum
 
 \begin{codeblock}
 constexpr auto f(int i) {
-    return sizeof( [=] { [[assume(i == 0)]]; } );
+  return sizeof( [=] { [[assume(i == 0)]]; } );
 }
 
 struct X {
-    char data[f(0)];
+  char data[f(0)];
 };
 \end{codeblock}
 

@@ -12,18 +12,16 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P2590R0 \\
-Date: & 2022-05-16\\
+Document \#: & D2590R1 \\
+Date: & 2022-05-31\\
 Project: & Programming Language C++ \\
 Audience: & Library Working Group, Core Working Group
 \end{tabular}
 
 
 \begin{abstract}
-This paper proposes a new standard library facility \tcode{std::start_lifetime_as}. For objects of sufficiently trivial types, this facility can be used to directly create objects and start their lifetime on-demand to give programs defined behaviour. This proposal completes the functionality originally proposed in \cite{P0593R6} by providing the standard library portion of that paper (only the core language portion of that paper made it into C++20).
+This paper proposes a new standard library facility \tcode{std::start_lifetime_as}. For objects of sufficiently trivial types, this facility can be used to directly create objects and start their lifetime on-demand to give programs defined behaviour. This proposal completes the functionality  proposed in \cite{P0593R6} and adopted for C++20 by providing the standard library portion of that paper (only the core language portion of that paper made it into C++20).
 \end{abstract}
-
-\vspace{5mm}
 
 \section{Motivation}
 \label{sec:motivation}
@@ -46,21 +44,47 @@ For non-standard functions such as \tcode{mmap} on POSIX systems and \tcode{Virt
 
 But what about non-standard memory allocation or memory mapping functions that are provided by the user? Consider, for example, a library providing a memory pool, where the storage reuse is expressed in C++ code rather than in a syscall and is visible to the compiler. The current C++20 wording does not provide a solution for this use case, and code using such storage will be undefined behaviour.
 
-\cite{P0593R6} addressed this use case by proposing a standard library facility \mbox{\tcode{std::start_lifetime_as}}, in addition to the proposed core language changes, to tell the compiler explicitly that an object should be created at the given memory location:
+We propose a standard library facility \mbox{\tcode{std::start_lifetime_as}} to tell the compiler explicitly that an object should be created at the given memory location without running any initialisation code:
 
 \begin{codeblock}
 struct X { int a, b; };
 X* make_x() {
-  X* p = std::start_lifetime_as<X>(user_malloc(sizeof(struct X));
+  X* p = std::start_lifetime_as<X>(myMalloc(sizeof(struct X));
   p->a = 1;
   p->b = 2;
   return p;
 }
 \end{codeblock}
 
-Note that the lifetime of the object is being started, however no constructor is actually being called and no code runs to achieve this. Just like implicit object creation, \tcode{start_lifetime_as} only works for \emph{implicit-lifetime types}, i.e. types that are either aggregates or have at least one trivial eligible constructor and a trivial, non-deleted destructor.
+An even more interesting use case arises when a C++ program is given a sequence of bytes (perhaps from a disk or network), and it knows those bytes are a valid representation of type \tcode{X}. How can it efficiently obtain a \tcode{X*} that can be legitimately used to access the object? Any attempt involving \tcode{reinterpret_cast} will result in undefined behaviour:
 
-This direction has already been approved by EWG and LEWG. The core language portion of \cite{P0593R6} made it into C++20, however the standard library portion did not, because LWG did not have enough time to review the wording before the C++20 cutoff date. In this paper, we have extracted this still-missing library part and are hereby proposing it again.
+\begin{lstlisting}
+void process(Stream* stream) {
+  std::unique_ptr<char[]> buffer = stream->read();
+  if (buffer[0] == FOO)
+    processFoo(reinterpret_cast<Foo*>(buffer.get())); // undefined behaviour
+  else
+    processBar(reinterpret_cast<Bar*>(buffer.get())); // undefined behaviour
+}
+\end{lstlisting}
+
+How can we make this program well-defined without sacrificing efficiency? If the destination type is a trivially-copyable implicit-lifetime type, this can be accomplished by copying the storage elsewhere, using placement new of an array of byte-like type, and copying the storage back to its original location, then using \tcode{std::launder} to acquire a pointer to the newly-created object. However, this would be very verbose and hard to get right. For expressivity and optimisability, a combined operation to create an object of implicit-lifetime type in-place while preserving the object representation may be useful. This is exactly what \tcode{std::start_lifetime_as} is designed to do:
+
+\begin{codeblock}
+void process(Stream* stream) {
+  std::unique_ptr<char[]> buffer = stream->read();
+  if (buffer[0] == FOO)
+    processFoo(std::start_lifetime_as<Foo>(buffer.get())); // OK
+  else
+    processBar(std::start_lifetime_as<Bar>(buffer.get())); // OK
+}
+\end{codeblock}
+
+Note that in both of these use cases, the lifetime of the object is being started, however no constructor is actually being called and no code runs to achieve this. Just like implicit object creation, \tcode{std::start_lifetime_as} only works for \emph{implicit-lifetime types}, i.e. types that are either aggregates or have at least one trivial eligible constructor and a trivial, non-deleted destructor.
+
+Note also how \tcode{std::start_lifetime_as} differs from \tcode{std::launder}. As far as the C++ abstract machine is concerned, \tcode{std::start_lifetime_as} actually creates a new object and starts its lifetime (even if no code runs). On the other hand, \tcode{std::launder} never creates a new object, but can only be used to obtain a pointer to an object that already exists at the given memory location, with its lifetime already started through other means. This is actually a common misconception about \tcode{std::launder}. Creating a library facility that actually does the thing that \tcode{std::launder} does not do, but is sometimes mistakenly assumed to do, would help remove this pitfall.
+
+\cite{P0593R5} had wording for both a core language portion and a standard library portion, and this paper in its entirety has already been approved by EWG and LEWG for C++20. The core language portion was then carried over into revision \cite{P0593R6} and actually made it into C++20. However, the standard library portion did not, because LWG did not have enough time to review the wording before the C++20 cutoff date. In this paper, we have extracted this still-missing library part from \cite{P0593R5} and are hereby proposing it again.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -171,11 +195,12 @@ Table 36 in [support.limits.general].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%\section*{Document history}
+\section*{Document history}
 
-%\begin{itemize}
-%\item \textbf{R0}, 2022-05-15: Initial version.
-%\end{itemize}
+\begin{itemize}
+\item \textbf{R0}, 2022-05-15: Initial version.
+\item \textbf{R1}, 2022-05-31: Expanded motivation.
+\end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

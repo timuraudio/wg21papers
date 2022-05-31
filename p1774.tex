@@ -186,7 +186,7 @@ First of all, we propose that the word ``assume'' is used in the spelling this f
 
 Using standard attribute syntax means that assumptions are backwards-compatible with a compiler that does not support this feature. 
 
-Making assumptions an attribute makes it clear that assumptions share an important property with the other C++ attributes: given a valid C++ program that contains the attribute, ignoring it does not change the observable semantics of such a program (see \cite{P2552R0} for a thorough discussion of the ignorability of standard attributes).
+Making assumptions an attribute makes it clear that assumptions share an important property with the other C++ attributes: given a valid C++ program that contains the attribute, ignoring it does not change the semantics of such a program (however, see section \ref{subsec:odruse} for a discussion of how ODR-use can be observable; see also \cite{P2552R0} for a thorough discussion of the ignorability of standard attributes).
 
 It is further consistent with existing optimisation-related attributes (\tcode{[[likely]]}, \tcode{[[unlikely]]}, \tcode{[[carries_dependency]]}) as well as existing attributes that increase the space of undefined behaviour in a C++ program (\tcode{[[noreturn]]}). More generally, attributes tend to target the back-end of the compiler and/or other tools in the C++ ecosystem, rather than the front-end. This is true for assumptions as well, which are targeting the optimiser. Therefore, assumptions should be an attribute.
 
@@ -277,7 +277,7 @@ if (expr) {} else { __builtin_unreachable(); }
 
 which evaluates \tcode{expr}. However, there is an easy path for GCC to implement conforming assumption semantics using their existing facilities. The strategy is as follows. First, it can check whether \tcode{expr} can have side effects if evaluated (GCC has a facility for this). If it can prove that it cannot, it means that evaluation of the expression won't affect the observable behaviour of the program. Under the as-if rule, it can then express the assumption in terms of its existing \tcode{__builtin_unreachable()}. Instructions emitted for evaluating the expression will typically be optimised out again. If it cannot prove that \tcode{expr} is free of side effects, it can simply ignore the assumption.
 
-Ignoring assumptions altogether is also a conforming implementation. A trivial implementation of assumptions is therefore possible on any C++ compiler. The only requirement is that the assumed expression is checked for well-formedness (see section \ref{subsec:well_formed}).
+Ignoring assumptions altogether is also a conforming implementation. C++ compilers are therefore not required to implement an assumption facility in order to be conformant. The only requirement is that the assumed expression is parsed and checked for well-formedness (see section \ref{subsec:well_formed}), which implies ODR-use of the expression (see section \ref{subsec:odruse}).
 
 \subsection{Assumptions that would not evaluate to \tcode{true} cause undefined behaviour}
 
@@ -301,24 +301,27 @@ Because the expression is never evaluated, it is never checked. This is a common
 There is a subtle difference between behaviour being undefined if the expression would evaluate to \tcode{false}, or if the expression would \emph{not} evaluate to \tcode{true}. The latter (proposed here) also includes the assumption that the expression would actually return a value, not throw an exception, and not exhibit undefined behaviour if it were evaluated. This enlarges the space of assumptions that can be stated by the programmer. Undefined behaviour inside the assumed expression is therefore effectively allowed to escape the assumption, despite the fact that the expression is not evaluated.
 
 \subsection{Assumptions ODR-use their argument}
+\label{subsec:odruse}
 
-At first glance, this requirement seems unnecessary. If the argument of an assumption is not evaluated, only analysed, why would we want to specify that it is ODR-used? ODR-use means that, even if the assumption is otherwise ignored, the assumed expression can trigger template instantiations and lambda captures, which is observable both at compile time and at runtime. For example, the following two functions will return two different values:
+At first glance, this requirement seems unnecessary. If the argument of an assumption is not evaluated, only analysed, why would we want to specify that it is ODR-used? However, it is necessary because all existing implementations of assumptions require ODR-use. Implementing a useful assumptions facility without ODR-use of the argument would be extremely difficult, if not impossible. MSVC, ICC, and Clang all follow the same basic principle to implement assumptions. The compiler generates intermediate representation for the expression inside the assumption (which requires ODR-use). This code is then used during optimisation of the program. At a later stage of the optimiser, the assumption-related code is then stripped out again (the exact mechanics of this vary from compiler to compiler).
+
+ ODR-use means that, even if the assumption is otherwise ignored, the assumed expression can trigger template instantiations and lambda captures, which is observable both at compile time and at runtime. This can even have an effect on the ABI of a class type. Consider:
 
 \begin{codeblock}
-constexpr auto f1(int i) { 
-  return sizeof( [=] { [[assume(i == 0)]]; } );
+constexpr auto f(int i) {
+    return sizeof( [=] { [[assume(i == 0)]]; } );
 }
 
-constexpr auto f2(int i) {
-  return sizeof( [=] {} );
-}
+struct X {
+    char data[f(0)];
+};
 \end{codeblock}
 
-This is due to the fact that all existing implementations of assumptions require ODR-use. Implementing a useful assumptions facility without ODR-use of the argument would be extremely difficult, if not impossible. MSVC, ICC, and Clang all follow the same basic principle to implement assumptions. The compiler generates intermediate representation for the expression inside the assumption (which requires ODR-use). This code is then used during optimisation of the program. At a later stage of the optimiser, the assumption-related code is then stripped out again (the exact mechanics of this vary from compiler to compiler).
+If we replace \tcode{[[assume]]} in the code example above with the \tcode{ASSUME} macro from section \ref{sec:motivation} and compile this program, then on all of MSVC, ICC, GCC, and Clang, \tcode{sizeof(X) == 4} with the assumption as written, but \tcode{sizeof(X) == 1} if the assumption is removed (and the code is unchanged otherwise).
 
-The observability of ODR-using assumed expressions can easily be demonstrated with today's compilers. If we replace \tcode{[[assume]]} in the code example above with the \tcode{ASSUME} macro from section \ref{sec:motivation} and compile this program, then on all of MSVC, ICC, GCC, and Clang, \tcode{f1} will return \tcode{4}, while \tcode{f2} will return \tcode{1}, both during constant evaluation and at runtime.
+This ability of assumptions to trigger ABI changes via lambda captures was discovered by CWG, and the paper was sent back to EWG to clarify whether this design is intentional. EWG discussed various options to make the ODR-use optional, in other words, to make \tcode{[[assume]]} completely ignorable at compile time, but in the end there was no consensus to modify the current design (see section \ref{sec:polls}). Therefore, the ODR-use of an assumed expression (including template instantiations and lambda captures) remains mandatory.
 
-In practice, this should not have any negative impact. This observability of the \tcode{[[assume]]} attribute is not categorically different from the observability of the existing standard attribute \tcode{[[no_unique_address]]}. In both cases, the effect can be observable, but the semantics of the program do not actually change, as the standard does not mandate any particular value for \tcode{sizeof}. However, in the \tcode{[[no_unique_address]]} case, this observability will be much more frequent, as it's literally designed to modify the memory layout of a class, while for \tcode{[[assume]]}, code that would trigger template instantiations or lambda captures would be a very odd usage of assumptions for which no known use cases exist. Moreover, ``stateful metaprogramming'' that depends on template instantiations or the size of a lambda type is discouraged in general.
+In practice, this should not have any negative impact. This compile-time observability of the \tcode{[[assume]]} attribute is not categorically different from the observability of the existing standard attribute \tcode{[[no_unique_address]]} or the \tcode{assert} macro. In both cases, the ABI change can be observable, but the semantics of the program do not actually change, as the standard does not mandate any particular value for \tcode{sizeof}. In fact, in the \tcode{[[no_unique_address]]} case, this observability will be much more frequent, as it's literally designed to modify the memory layout of a class, while for \tcode{[[assume]]}, code where template instantiations or lambda captures would be triggered through an assumption (but not otherwise) would be a very odd usage of assumptions. No user should rely on something like this being portable.
 
 Note also that ODR-using the expression means you cannot use functions in an assumption that have a declaration but no definition.
 
@@ -484,18 +487,17 @@ The C++ standard specifies that attributes not recognised by an implementation c
 
 There is currently some debate about what the standard says should happen if these constraints are violated. One possible interpretation is that in this case, the program is ill-formed and the compiler must issue a diagnostic, since the constraints are imposed normatively in wording, for example for \tcode{[[deprecated]]}: ``an \emph{attribute-argument-clause} may be present and, if present, it shall have the form...''.
 
-Another possible interpretation is that the compiler is permitted to completely ignore an attribute even if the constraints are violated, since the wording says ``For an \emph{attribute-token} [...] not specified in this document, the behavior is implementation-defined. Any \emph{attribute-token} that is not recognized by the implementation is ignored''. It is ambiguous whether the second sentence refers to all \emph{attribute-token}s, or only the non-standard ones. Different WG21 members and compiler implementers have voiced diverging opinions on this matter. A currently open Core issue \cite{CWG2538} tries to address this ambiguity.
+Another possible interpretation is that the compiler is permitted to completely ignore an attribute even if the constraints are violated, since the wording says ``For an \emph{attribute-token} [...] not specified in this document, the behavior is implementation-defined. Any \emph{attribute-token} that is not recognized by the implementation is ignored''. It is ambiguous whether the second sentence refers to all \emph{attribute-token}s, or only the non-standard ones. Different WG21 members and compiler implementers have voiced diverging opinions on this matter. A currently open Core issue \cite{CWG2538} tries to address this ambiguity by changing the wording to express that only non-standard attributes can be ignored. More recently, EWG has polled this question (see section \ref{sec:polls}), with the outcome that there was consensus in the room that the implementation should only be allowed to ignore a standard attribute's effect, but \emph{not} normative requirements on a standard attribute's appertainment and argument parsing. In other words, EWG has confirmed that the design intent matches the proposed resolution in \cite{CWG2538}. At the time of writing, this poll remains to be confirmed by electronic polling.
 
-Since assumptions are attributes, the same ambiguity applies here. However, since the arguments of assumptions can be arbitrary C++ expressions (and not just string literals like for existing standard attributes), the implications are more severe. A conforming compiler doesn't have to implement an assumption facility, and is free to ignore a well-formed assumption. However, if the \tcode{assume} attribute is written in the wrong place, or doesn't have an expression as its argument, or the expression is not contextually convertible to \tcode{bool} or ill-formed, the compiler might still have to detect this and issue a diagnostic, which involves fully parsing the expression. Further, an assumed expression is ODR-used, which can trigger template instantiations. If any of these instantiations makes the program ill-formed, for example by containing a \tcode{static_assert} that does not evaluate to \tcode{true}, this might have to be diagnosed as well.
+Since assumptions are attributes, the same ambiguity applies here. However, since the arguments of assumptions can be arbitrary C++ expressions (and not just string literals like for existing standard attributes), the implications are more severe. A conforming compiler doesn't have to implement an assumption facility, and is free to ignore a well-formed assumption. However, if the \tcode{assume} attribute is written in the wrong place, or doesn't have an expression as its argument, or the expression is not contextually convertible to \tcode{bool} or ill-formed, if we follow the interpretation in \cite{CWG2538}, the compiler must still detect this and issue a diagnostic, which involves fully parsing the expression. Further, as discussed in more detail in section \ref{subsec:odruse}, an assumed expression is ODR-used, which can trigger template instantiations. If any of these instantiations makes the program ill-formed, for example by containing a \tcode{static_assert} that does not evaluate to \tcode{true}, then if we follow the interpretation in \cite{CWG2538}, this needs to be diagnosed as well.
 
-It's however important to point out that the question of whether or not ill-formed standard attributes need to be diagnosed has nothing to do specifically with this proposal, but concerns the design space of C++ standard attributes in general. There are other proposals for standard C++ currently in flight that use expressions inside attributes, such as \tcode{[[trivially_relocatable(expr)]]} \cite{P1144R5}, which are affected to the same degree by this question. The ignorability question also came up in SG22 when discussing an attribute-like syntax with double square brackets for contracts.
-
-We therefore decided to separate out the discussion about this ambiguity into a separate paper \cite{P2552R0}. That paper deals specifically with specifying more precisely to what degree and under what circumstances C++ standard attributes should be ``ignorable'' and what this means exactly. This is independent from the question of how to specify assumptions.
+It's however important to point out that the question of whether or not ill-formed standard attributes need to be diagnosed has nothing to do specifically with this proposal, but concerns the design space of C++ standard attributes in general. There are other proposals for standard C++ currently in flight that use expressions inside attributes, such as \tcode{[[trivially_relocatable(expr)]]} \cite{P1144R5}, which are affected to the same degree by this question. The ignorability question also came up in SG22 when discussing an attribute-like syntax with double square brackets for contracts. We therefore do not attempt to address this ambiguity in the present paper. For more discussion on the ignorability of attributes, see \cite{P2552R0}.
 
 \subsection{Pack expansion}
 
 The grammar for C++ attributes allows an attribute to be followed by an ellipsis. [dcl.attr.grammar] specifies: ``In an attribute-list, an ellipsis may appear only if that attribute's specification permits it. An attribute followed by an ellipsis is a pack expansion.''
 
+\pagebreak % COSMETIC
  We could therefore hypothetically permit the \tcode{assume} attribute to directly support pack expansion:
 
 \begin{codeblock}
@@ -806,9 +808,6 @@ int f(int y) {
 \end{addedblock}
 \end{adjustwidth}
 
-%%%%% cosmetic:
-\pagebreak
-
 Modify [expr.const] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
@@ -847,6 +846,7 @@ $E$ is not disqualified from being a core constant expression if the hypothetica
 \item \textbf{R5}, 2021-12-09: Updated wording (removed feature-test macro, allowed duplicate attributes, added clarifications). Updated and restructured text, expanding semantics section to reflect discussion in EWG and on the WG21 reflectors. Added Peter Dimov's refcounted smart pointer code example.
 \item \textbf{R6}, 2022-02-15: Updated polls section; minor fixes.
 \item \textbf{R7}, 2022-05-15: Changed \emph{assignment-expression} to \emph{conditional-expression} following EWG guidance; updated wording following CWG review; expanded discussion of different cases during constant evaluation; updated discussion of whether ill-formed expressions inside assumptions need to be diagnosed; added example of \tcode{[[assume]]} triggering a lambda capture; updated polls section.
+\item \textbf{R8}, 2022-05-31: Updated discussion and polls following CWG and EWG telecons about the lambda capture issue.
 \end{itemize}
 
 \section*{Acknowledgements}

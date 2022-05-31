@@ -717,6 +717,54 @@ SF & F & N & A & SA \\
 \end{tabular}
 \hspace{5mm}Consensus
 
+\subsection*{EWG, online telecon (2022-05-26)}
+
+It is EWG's intent that [dcl.attr]/6 permits an implementation to completely ignore a standard attribute.
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+3	& 4 &	0 &	1 &	4
+\end{tabular}
+\hspace{5mm}Not Consensus
+
+It is EWG's intent that [dcl.attr]/6 ONLY permits an implementation to ignore a standard attribute's effect, but not appertainment and argument parsing. See: CWG2538
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+2&	6&	3&	0&	2
+\end{tabular}
+\hspace{5mm}Consensus
+
+For P1774 in particular, permit an implementation to completely ignore \tcode{[[assume]]}.
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+4 & 2 & 2 & 4 & 0
+\end{tabular}
+\hspace{5mm}Not Consensus
+
+For P1774 in particular, permit treating attribute \tcode{[[assume]]}'s expression as a 'balanced token sequence' as a conforming implementation.
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+4 & 2 & 3 & 2 & 1
+\end{tabular}
+\hspace{5mm}Not Consensus
+
+Given the additional information regarding ABI issues, withdraw P1774 and encourage the author to come back with a revision that explores alternative syntaxes.
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+3 &	3 &	3 &	2 & 1
+\end{tabular}
+\hspace{5mm}Not Consensus
+
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

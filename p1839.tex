@@ -1,0 +1,184 @@
+\input{wg21common}
+
+\newcommand{\forceindent}{\parindent=1em\indent\parindent=0pt\relax} % For indenting a paragraph containing code that can't be laid out as a {codeblock} because it also contains \emph
+
+\begin{document}
+\title{Reading object representations}
+\author{
+  Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+  Krystian Stasiowski \small(\href{mailto:sdkrystian@gmail.com}{sdkrystian@gmail.com})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D1839R5 \\
+Date: & 2022-06-15\\
+Project: & Programming Language C++ \\
+Audience: & Core Working Group
+\end{tabular}
+
+
+\begin{abstract}
+TODO write abstract
+\end{abstract}
+
+\section{Motivation}
+\label{sec:motivation}
+
+TODO write motivation
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Design}
+\label{sec:design}
+
+TODO describe design
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Known issues}
+\label{sec:issues}
+
+TODO write about known issue with \tcode{reinterpret_cast}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section {Polls}
+\label{sec:polls}
+
+\subsection*{EWGI}
+
+Should accessing the object representation be defined behaviour?
+
+\hspace{6mm}Unanimous consent
+
+Forward P1839R1 as presented to EWG, recommending that this be a core issue?
+
+\hspace{6mm}Unanimous consent
+
+\subsection*{EWG}
+
+It should be possible to access the entire object representation through a pointer to a char-like type as a DR.
+
+\hspace{6mm}
+\begin{tabular}{lllll}
+  SF & F & N & A & SA \\
+  10 & 8 & 2 & 0 & 0
+\end{tabular}
+\hspace{5mm}Consensus
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Proposed wording}
+\label{sec:wording}
+
+The proposed changes are relative to the C++ working draft \cite{N4910}. 
+
+%The type of the elements of the object representation should have the same cv-qualification as that of the object they represent to prevent accidental modification of the object indirectly. Additionally, if the object occupies contiguous bytes of storage, then we could consider the object representation to be an array, and thereby make pointer arithmetic well-defined. Certain objects are said to represent themselves so that the object representation does not have an object representation of its own. The value of the elements that do not represent themselves is left unspecified, as specifying it would be effectively impossible. Lastly, it is specified that an object representation appears in an enclosing object representation to make it useful for introspection.
+
+Modify [basic.types] paragraph 4 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The \emph{object representation} of an object\added{ \tcode{a}} of type\added{ \emph{cv}} \tcode{T} is \removed{the}\added{a} sequence of $N$\added{ \emph{cv}} \tcode{unsigned char} objects \removed{taken up by the object of type \tcode{T}}\added{that occupy the same storage as \tcode{a}}, where $N$ equals \tcode{sizeof(T)}. \added{The sequence is considered to be an array of $N$ \emph{cv} \tcode{unsigned char} if the object of type \tcode{T} occupies contiguous bytes of storage ([intro.object]).}
+
+\added{For an object of type \tcode{unsigned char} or an array of \tcode{unsigned char} (ignoring \emph{cv}-qualification), the object representation is the object itself. For an object of type \tcode{char}, \tcode{std::byte}, or an array of such types (ignoring \emph{cv}-qualification), the value of the elements of the object representation is the value of the object itself. For all other types, the value of the elements of the object representation is unspecified.}
+%NOTE: static_cast ?
+
+\added{The sequence of bytes in the object representation of an object nested within an object \tcode{o} is a sub-sequence of the sequence of bytes in the object representation of \tcode{o}.}
+\end{adjustwidth}
+
+%This ensures that an object representation and its elements may exist concurrently with the object they represent, as they occupy the same storage.
+
+Modify [intro.object] paragraph 9 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Two objects with overlapping lifetimes that are not bit-fields may have the same address if one is nested within the other, or if at least one is a subobject of zero size and they are of different types\added{, or if at least one is an element of an object representation}; otherwise, they have distinct addresses and occupy disjoint bytes of storage.
+\end{adjustwidth}
+
+%Specifying the lifetime of an object representation explicitly ensures that its lifetime will begin and end with that of its corresponding object meaning it need not be preserved after the object it represents is destroyed. The lifetime does not begin during construction to match the wording of [class.cdtor] p2.
+
+Insert a new paragraph below [basic.life] paragraph 2 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The lifetime of a reference begins when its initialization is complete. The lifetime of a reference ends as if it were a scalar object requiring storage.
+
+\begin{note}[Note 1][class.base.init] describes the lifetime of base and member subobjects.
+\end{note}
+
+\added{The lifetime of the elements of the object representation of an object begins when the lifetime of the object begins. For class types, the lifetime of the elements of the object representation ends when the destruction of the object is completed, otherwise, the lifetime ends when the object is destroyed.}
+\end{adjustwidth}
+
+%This prevents implicit object creation within object representations.
+
+Modify [intro.object] paragraph 13 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+An operation that begins the lifetime of an array of \tcode{char}, \tcode{unsigned char}, or \tcode{std::byte}\added{ other than the lifetime of an object representation} implicitly creates objects within the region of storage occupied by the array.
+\end{adjustwidth}
+
+%Currently, no wording exists allowing one to obtaining a pointer to an element of the object representation of an object. Adding a rule making an object pointer-interconvertible with its object representation (or first element thereof) resolves this, and preserves reinterpret_casts equivalence with static_cast with respect to converting object pointers. If multiple pointer-interconvertible objects exist, the one that will give the program defined behavior is chosen.
+
+Modify [expr.static.cast] paragraph 13 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Otherwise, if the original pointer value points to an object a, and there is an object b of type T (ignoring cv-qualification) that is pointer-interconvertible with a, the result is a pointer to b \added{if doing so would give the program defined behavior}. Otherwise, the pointer value is unchanged by the conversion.
+\end{adjustwidth}
+
+Modify [basic.compound] paragraph 4.3 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Two objects \tcode{a} and \tcode{b} are \emph{pointer-interconvertible} if:
+
+\begin{itemize}
+  \item they are the same object, or
+  \item one is a union object and the other is a non-static data member of that object ([class.union]), or
+  \item one is a standard-layout class object and the other is the first non-static data member of that object or any base class subobject of that object ([class.mem]), or
+  \item \added{$b$ is the object representation of $a$, or the first element thereof, or}
+  \item there exists an object $c$ such that $a$ and $c$ are pointer-interconvertible, and $c$ and $b$ are pointer-interconvertible.
+\end{itemize}
+\end{adjustwidth}
+
+%In order to make reading an object representation using a type other than unsigned char well-defined, it must be allowed for the type of the expression to differ from that of the object pointed to in cases where the type of the pointer is char* or std::byte*, as the pointer points to an object of type unsigned char.
+
+Modify [expr.add] paragraph 6 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+For addition or subtraction, if the expressions \tcode{P} or \tcode{Q} have type ``pointer to \emph{cv} \tcode{T}''\removed{, where \tcode{T} and the array element type are not similar, the behavior is undefined.}\added{ and point to an object $a$, one of the following shall hold:}
+\begin{itemize}
+  \item \added{\tcode{T} is similar to the type of $a$, or}
+  \item \added{\tcode{T} is similar to \tcode{unsigned char}, \tcode{char} or \tcode{std::byte} and $a$ is an element of an object representation.}
+\end{itemize}
+\added{Otherwise, the behavior is undefined.}
+\end{adjustwidth}
+
+%Since multiple elements of an object representation may exist in the same storage, it must be defined which one std::launder would return if such a situation were to arise.
+
+Modify [ptr.launder] paragraph 3 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{Returns: } A value of type \tcode{T*} that points to \added{the object} $X$ \added{that would give the program defined behavior. If no such object exists, the behavior is undefined.}
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Document history}
+
+\begin{itemize}
+  \item \textbf{R0}, 2019-07-30: Initial version.
+  \item \textbf{R1}, 2019-09-28: Allowed pointer arithmetic on expressions of type \tcode{unsigned char*}, \tcode{char*} and \tcode{std::byte*} when pointing to objects of different type. Removed exclusion of the object representation of objects of zero size from appearing in the object representation of their containing object. Added multi-dimensional arrays of contiguous-layout types to the definition of contiguous-layout types. Slight change to the behavior of \tcode{std::launder} for when there are multiple viable objects.
+  \item \textbf{R2}, 2019-11-20: Removed contiguous-layout types from wording, this should be tackled by \cite{P1945R0}.
+  \item \textbf{R3}, 2022-02-15: Moved wording for casts to the rules of pointer-interconvertibility. Changed the wording for \tcode{std::launder} to bind to the best candidate object.
+  \item \textbf{R4}, 2022-03-16: Changed the wording to fix ambiguous usage of $N$ in object representations specification.
+  \item \textbf{R5}, 2022-06-15: Reduced scope of paper to only reading object representations, not writing. Completely rewrote rationale. Added wording to prevent implicit object creation within object representations. Added cross-reference to types with contiguous storage ([intro.object]) in the wording. Fixed inconsistency in the wording by defining that only \tcode{unsigned char} is its own object representation, not \tcode{char} or \tcode{std::byte}. Removed erroneous wording regarding memory locations.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Acknowledgements}
+
+%TODO
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

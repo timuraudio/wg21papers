@@ -106,39 +106,6 @@ Some functions in the C++ standard library implicitly create objects (\added{[ob
 
 \end{adjustwidth}
 
-Modify [allocator.requirements.general] as follows:
-
-\tcode{a.allocate(n)}
-\begin{adjustwidth}{0.5cm}{0.5cm}
-
-\emph{Result: }\tcode{X::pointer}
-
-\emph{Effects: }
-Memory is allocated for an array of \tcode{n} \tcode{T}
-and such an object is created
-but array elements are not constructed.
-\begin{example}
-When reusing storage denoted by some pointer value \tcode{p},
-\tcode{\added{start_lifetime_as_array<T>(p, n)}}
-\tcode{\removed{launder(reinterpret_cast<T*>(new (p) byte[n * sizeof(T)]))}} 
-can be used to implicitly create a suitable array object
-and obtain a pointer to it.
-\end{example}
-
-\emph{Throws:}
-\tcode{allocate} may throw an appropriate exception.
-
-\begin{note}
-It is intended that \tcode{a.allocate} be an efficient means
-of allocating a single object of type \tcode{T}, even when \tcode{sizeof(T)}
-is small. That is, there is no need for a container to maintain its own
-free list.
-\end{note}
-
-\emph{Remarks:}
-If \tcode{n == 0}, the return value is unspecified.
-\end{adjustwidth}
-
 In header \tcode{<memory>} synopsis [memory.syn], add the following after the declarations of \tcode{std::align} and \tcode{std::assume_aligned}:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}

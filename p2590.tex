@@ -12,8 +12,8 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D2590R1 \\
-Date: & 2022-06-14\\
+Document \#: & P2590R1 \\
+Date: & 2022-06-15\\
 Project: & Programming Language C++ \\
 Audience: & Library Working Group, Core Working Group
 \end{tabular}
@@ -134,9 +134,9 @@ template<typename T> volatile T* start_lifetime_as(volatile void *p);
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \emph{Mandates:} \tcode{T} is an implicit-lifetime type.
 
-\emph{Requires:} [\tcode{p}, \tcode{(char*)p + sizeof(T)}) denotes a region of allocated storage that is a subset of the region of storage reachable through \tcode{p}.
+\emph{Requires:} [\tcode{p}, \tcode{(char*)p + sizeof(T)}) denotes a region of allocated storage that is a subset of the region of storage reachable ([ptr.launder]) through \tcode{p}.
 
-\emph{Effects:} Implicitly creates an object \tcode{A} of type \tcode{T}, whose address is \tcode{p}, within the denoted region. Implicitly creates objects that \tcode{A} provides storage for and that reachable through a pointer value that points to \tcode{A} as described in [ptr.launder]. If \tcode{A} is a union, implicitly creates objects that are members of \tcode{A}. The object representation of \tcode{A} is the contents of the storage prior to the call to \tcode{start_lifetime_as}. The value of each created object \tcode{O} of trivially-copyable type \tcode{U} is determined as if for a call to \tcode{bit_cast<U>(O)} ([bit.cast]), except that the storage is not accessed. The value of any other created object is unspecified. \begin{note}The unspecified value may be indeterminate.\end{note}
+\emph{Effects:} Implicitly creates objects within the denoted region as follows: an object \tcode{A} of type \tcode{T}, whose address is \tcode{p}, and objects nested within \tcode{A}. The object representation of \tcode{A} is the contents of the storage prior to the call to \tcode{start_lifetime_as}. The value of each created object \tcode{O} of trivially-copyable type \tcode{U} is determined as if for a call to \tcode{bit_cast<U>(E)} ([bit.cast]), where \tcode{E} is an lvalue of type \tcode{U} denoting \tcode{O}, except that the storage is not accessed. The value of any other created object is unspecified. \begin{note}The unspecified value may be indeterminate.\end{note}
 
 \emph{Returns:} A pointer to \tcode{A}.
 \end{adjustwidth}
@@ -153,7 +153,7 @@ template<typename T> volatile T* start_lifetime_as_array(volatile void *p, size_
 \end{addedblock}
 
 Add feature test macro
-\tcode{__cpp_lib_start_lifetime_at} for header \tcode{<memory>} with a suitable value to
+\tcode{__cpp_lib_start_lifetime_as} for header \tcode{<memory>} with a suitable value to
 Table 36 in [support.limits.general].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -162,7 +162,7 @@ Table 36 in [support.limits.general].
 
 \begin{itemize}
 \item \textbf{R0}, 2022-05-15: Initial version.
-\item \textbf{R1}, 2022-06-14: Expanded motivation; various wording changes following CWG review.
+\item \textbf{R1}, 2022-06-15: Expanded motivation; various wording fixes following CWG review.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

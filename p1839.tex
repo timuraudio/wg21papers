@@ -3,7 +3,7 @@
 \newcommand{\forceindent}{\parindent=1em\indent\parindent=0pt\relax} % For indenting a paragraph containing code that can't be laid out as a {codeblock} because it also contains \emph
 
 \begin{document}
-\title{Reading object representations}
+\title{Accessing object representations}
 \author{
   Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
   Krystian Stasiowski \small(\href{mailto:sdkrystian@gmail.com}{sdkrystian@gmail.com})
@@ -12,33 +12,88 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D1839R5 \\
-Date: & 2022-06-15\\
+Document \#: & P1839R5 \\
+Date: & 2022-06-16\\
 Project: & Programming Language C++ \\
 Audience: & Core Working Group
 \end{tabular}
 
 
 \begin{abstract}
-TODO write abstract
+This paper proposes a wording fix to the C++ standard to allow read access to the object representation (i.e. the underlying bytes) of an object. This is valid in C, and is widely used and assumed to be valid in C++ as well. However, in C++ this is is undefined behaviour under the current specification.
 \end{abstract}
 
 \section{Motivation}
 \label{sec:motivation}
 
-TODO write motivation
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Consider the following program, which takes an \tcode{int} and prints the underlying bytes of its value in hex format:
 
-\section{Design}
+\begin{codeblock}
+void print_hex(int n) {
+  unsigned char* a = (unsigned char*)(&n);
+  for (int i = 0; i < sizeof(int); ++i)
+  printf("%02x ", a[i]);
+}
+
+int main() {
+  print_hex(123456);
+}
+\end{codeblock}
+
+In C, this is a valid program. On a little-endian machine where \tcode{sizeof(int) == 4}, this will print \tcode{40 e2 01 00 }. In C++, this is widely assumed to be valid as well, and this functionality is widely used in existing code bases (think of binary file formats, hex viewers, and many other low-level use cases).
+
+However, surprisingly, in C++ this code is undefined behaviour under the current specification. In fact, it is impossible in C++ to directly access the object representation of an object (i.e. to read its underlying bytes), even for built-in types such as \tcode{int}. Instead, we would have to use \tcode{memcpy} to copy the bytes into a separate array of \tcode{unsigned char}, and access them from there. However, this workaround only works for trivially copyable types. It also directly violates one of the fundamental principles of C++: to leave no room for a lower-level language.
+
+The goal of this paper is to provide the necessary wording fixes to make accessing object representations such as in the code above defined behaviour. Existing compilers already assume that this should be valid. The goal of the paper is therefore to \emph{not} require any changes to existing compilers or existing code, but to legalise existing code that already works in practice and was always intended to be valid.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{The problem}
+
+The cast to \tcode{unsigned char*}, which performs a \tcode{reinterpret_cast}, is fine, because \tcode{char}, \tcode{unsigned char}, and \tcode{std::byte} can alias any other type, so we do not violate the rules for type punning. However, with the current wording, this cast does \emph{not} yield a pointer to the first element of \tcode{n}'s object representation (i.e. a pointer to a byte), and in fact it is currently impossible in C++ to obtain such a pointer. This is because this particular \tcode{reinterpret_cast} is exactly equivalent to \tcode{static_cast<unsigned char*>(static_cast<void*>(&n))} as per \href{https://timsong-cpp.github.io/cppwp/n4861/expr.reinterpret.cast#7}{[expr.reinterpret.cast] p7}, and as such, \href{https://timsong-cpp.github.io/cppwp/n4861/expr.static.cast#13}{[expr.static.cast] p13} dictates that the value of the pointer is unchanged and therefore it points to the original object (the \tcode{int}). When \tcode{a} is dereferenced, the behaviour is undefined as per \href{https://timsong-cpp.github.io/cppwp/n4861/expr.pre#4}{[expr.pre] p4} because the value of the resulting expression would \emph{not} be the value of the first byte, but the value of the whole \tcode{int} object (123456), which is not a value representable by \tcode{unsigned char}.
+
+Further, even if we ignore this issue, \tcode{a} does not point to an array of \tcode{unsigned char}, because such an array has never been created, and therefore pointer arithmetics on \tcode{a} is undefined behaviour. An object representation as defined by \href{https://timsong-cpp.github.io/cppwp/n4861/basic.types#4}{[basic.types] p4} is merely a \emph{sequence} of \tcode{unsigned char} objects, not an array, and is therefore unsuitable for pointer arithmetics. No array is ever created explicitly, and no operation is being called in the above code that would implicitly create an array, since casts are not operations that implicitly create objects as per \href{https://timsong-cpp.github.io/cppwp/n4861/intro.object#10}{[intro.object] p10}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{History and context}
+
+The intent of CWG has always been that the above code should work, as exemplified by \cite{CWG1314}, in which it is stated that access to the object representation is intended to be well-defined. Further, it seems that the above code actually \emph{did} work until C++17, when \cite{P0137R1} was accepted. This proposal fixed an unrelated core issue and included a change to how pointers work, notably that they point to objects, rather than just representing an address. It seems that the proposal neglected to add any provisions to allow access to the object representation of an object, and thus inadvertently broke this functionality. Therefore, this paper is a defect report, not a proposal of a new feature.
+
+Notably, there are even standard library facilities that directly use this functionality and cannot be implemented in standard C++ without fixing it. One such facility is \tcode{std::as_bytes} (introduced in C++20), which obtains a \tcode{std::span<const std::bytes>} view to the object representation of the elements of another span. Now, we do have a few ``magic'' functions in the C++ standard library that cannot be implemented in standard C++, but reading the underlying bytes of an object is such basic functionality that it should not fall into this category.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Non-goals}
+
+This paper does not propose to make in-place modification of the object representation valid, i.e. \emph{writing} into the underlying bytes, only \emph{reading} them. The following code will still be undefined behaviour:
+
+\begin{codeblock}
+void increment_first_byte(int* n) {
+  auto* a = reinterpret_cast<char*>(n);
+  ++(*a);
+}
+\end{codeblock}
+
+It may be desirable to allow such code as well. However, unlike reading the object representation, modifying it was never allowed in C++, so fixing it would be a new feature, not be a defect report. Note that the current rules in \href{https://timsong-cpp.github.io/cppwp/n4861/basic.types.general}{[basic.types.general]} allow only to \tcode{memcpy} the value of an object into an array of \tcode{char}, \tcode{unsigned char}, or \tcode{std::byte} and then \tcode{memcpy} it back unmodified, or to \tcode{memcpy} the value of one object into another, but not to \tcode{memcpy} the value of an object into an array, then modify the elements of the array, and then \tcode{memcpy} back the modified value. Writing back a modified value would be a new invention, and modifying the value \emph{in-place} even more so. It can also only ever work for trivially copyable types. Therefore, CWG gave the guidance to reduce the scope of this paper to reading only, and propose the modifying case in a separate paper (not yet published).
+
+This paper also does not propose to subvert existing type punning rules in any way. The proposed changes will not allow type punning between two different types where it was not previously allowed, such as between \tcode{int} and \tcode{float} (this should be done using \tcode{std::bit_cast}). It only allows type punning to \tcode{char}, \tcode{unsigned char}, and \tcode{std::byte}, which are already allowed to alias any other type.
+
+We also do not propose to make accessing the object representation work for \emph{all} types in C++, only for types that are currently guaranteed to occupy contiguous bytes of storage, that is, for trivially copyable or standard-layout types as per \href{https://timsong-cpp.github.io/cppwp/n4861/intro.object#8.sentence-5}{[intro.object] p5}. On the one hand, this is unnecessarily restrictive: in practice, any sane implementation will have complete objects, array elements, and member subobjects occupying contiguous memory, as the only reason an object would need to be non-contiguous would be if it was a virtual base subobject. On the other hand, making more objects contiguous (and therefore, their object representations accessible) is not in scope for this paper, and is instead tackled in a separate proposal \cite{P1945R0}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Proposed solution}
 \label{sec:design}
 
-TODO describe design
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+For an object \tcode{a} of type \tcode{T}, we propose to change the definition of \emph{object representation} to be considered an array of \tcode{unsigned char}, and not merely a \emph{sequence} of \tcode{unsigned char} objects, if \tcode{T} is a type that occupies contiguous bytes of storage. We propose that this object representation should be an object in its own right, occupying the same storage as \tcode{a} and having the same lifetime. This will make pointer arithmetic work with a pointer to an element of the object representation.
 
-\section{Known issues}
-\label{sec:issues}
+To avoid an infinite recursion of nested object representations, we further specify that an array of \tcode{unsigned char} acts as its own object representation. We also need to prevent implicit object creation \cite{P0593R6} within object representations.
 
-TODO write about known issue with \tcode{reinterpret_cast}
+We further propose that obtaining a pointer to the object representation should be possible through the use of a cast to \tcode{char}, \tcode{unsigned char}, or \tcode{std::byte}, and allow this pointer to be cast back to a pointer to its respective object. For this, we need to make the appropriate changes to the specification of \tcode{static_cast} and to make \tcode{a} pointer-interconvertible with its own object representation as well as with the first element thereof. We need to do this in a way that preserves \tcode{reinterpret_cast}'s equivalence with \tcode{static_cast} with respect to converting object pointers. Simultaneously, if multiple pointer-interconvertible objects exist, we need to specify which one  is chosen.
+
+Additionally, we need to make reading an object representation through a pointer to \tcode{char} or \tcode{std::byte} well-defined, even though it points to an element of the object representation which is of type \tcode{unsigned char}. In these cases, we must allow for the type of the expression to differ from that of the object pointed to.
+
+We also need to say something about the values of the elements of an object representation. We propose that for objects of type \tcode{char}, \tcode{unsigned char}, and \tcode{std::byte}, the value of each  element is the value of the object it represents. For all other types, the values of the elements of the object representation are unspecified. It seems extremely difficult to specify for the general case what the value of each element would be, but it is also unnecessary, since our goal is only to make reading the elements well-defined, not to specify a particular result (which won't be the same across platforms).
+
+Finally, multiple objects may occupy the same storage, in which case the objects' respective object representations will overlap. We must therefore adjust the specification of \tcode{std::launder} to define which object it will return a pointer to.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section {Polls}
@@ -69,7 +124,9 @@ It should be possible to access the entire object representation through a point
 \section{Proposed wording}
 \label{sec:wording}
 
-The proposed changes are relative to the C++ working draft \cite{N4910}. 
+The reported issue is intended as a defect report with the proposed resolution as follows. The effect
+of the wording changes should be applied in implementations of all previous versions of C++ where
+they apply. The proposed changes are relative to the C++ working draft \cite{N4910}.
 
 %The type of the elements of the object representation should have the same cv-qualification as that of the object they represent to prevent accidental modification of the object indirectly. Additionally, if the object occupies contiguous bytes of storage, then we could consider the object representation to be an array, and thereby make pointer arithmetic well-defined. Certain objects are said to represent themselves so that the object representation does not have an object representation of its own. The value of the elements that do not represent themselves is left unspecified, as specifying it would be effectively impossible. Lastly, it is specified that an object representation appears in an enclosing object representation to make it useful for introspection.
 
@@ -81,7 +138,7 @@ The \emph{object representation} of an object\added{ \tcode{a}} of type\added{ \
 \added{For an object of type \tcode{unsigned char} or an array of \tcode{unsigned char} (ignoring \emph{cv}-qualification), the object representation is the object itself. For an object of type \tcode{char}, \tcode{std::byte}, or an array of such types (ignoring \emph{cv}-qualification), the value of the elements of the object representation is the value of the object itself. For all other types, the value of the elements of the object representation is unspecified.}
 %NOTE: static_cast ?
 
-\added{The sequence of bytes in the object representation of an object nested within an object \tcode{o} is a sub-sequence of the sequence of bytes in the object representation of \tcode{o}.}
+\added{The sequence of bytes in the object representation of an object nested within an object \tcode{a} is a sub-sequence of the sequence of bytes in the object representation of \tcode{a}.}
 \end{adjustwidth}
 
 %This ensures that an object representation and its elements may exist concurrently with the object they represent, as they occupy the same storage.
@@ -118,7 +175,7 @@ An operation that begins the lifetime of an array of \tcode{char}, \tcode{unsign
 Modify [expr.static.cast] paragraph 13 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-Otherwise, if the original pointer value points to an object a, and there is an object b of type T (ignoring cv-qualification) that is pointer-interconvertible with a, the result is a pointer to b \added{if doing so would give the program defined behavior}. Otherwise, the pointer value is unchanged by the conversion.
+Otherwise, if the original pointer value points to an object a, and there is an object b of type T (ignoring \emph{cv}-qualification) that is pointer-interconvertible with a, the result is a pointer to b \added{if doing so would give the program defined behavior}. Otherwise, the pointer value is unchanged by the conversion.
 \end{adjustwidth}
 
 Modify [basic.compound] paragraph 4.3 as follows:
@@ -130,9 +187,15 @@ Two objects \tcode{a} and \tcode{b} are \emph{pointer-interconvertible} if:
   \item they are the same object, or
   \item one is a union object and the other is a non-static data member of that object ([class.union]), or
   \item one is a standard-layout class object and the other is the first non-static data member of that object or any base class subobject of that object ([class.mem]), or
-  \item \added{$b$ is the object representation of $a$, or the first element thereof, or}
+  \item \added{one is the object representation of the other, or the first element thereof, or}
   \item there exists an object $c$ such that $a$ and $c$ are pointer-interconvertible, and $c$ and $b$ are pointer-interconvertible.
 \end{itemize}
+
+If two objects are pointer-interconvertible, then they have the same address, and it is possible to obtain a pointer to one from a pointer to the other via a \tcode{reinterpret_cast} ([expr.reinterpret.cast]).
+
+\begin{note}
+An array object and its first element are not pointer-interconvertible, even though they have the same address\added{, except if the array is an object representation}.
+\end{note}
 \end{adjustwidth}
 
 %In order to make reading an object representation using a type other than unsigned char well-defined, it must be allowed for the type of the expression to differ from that of the object pointed to in cases where the type of the pointer is char* or std::byte*, as the pointer points to an object of type unsigned char.
@@ -156,6 +219,57 @@ Modify [ptr.launder] paragraph 3 as follows:
 \emph{Returns: } A value of type \tcode{T*} that points to \added{the object} $X$ \added{that would give the program defined behavior. If no such object exists, the behavior is undefined.}
 \end{adjustwidth}
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pagebreak
+\section{Known issues}
+\label{sec:issues}
+
+There are a number of known issues with the proposed wording that need to be resolved before this paper can make any further progress:
+
+\begin{itemize}
+  \item The current proposed wording says that the first element of an object representation is pointer-interconvertible with the object that is represented by the representation. Combined with the existing rules, this means that first elements of some object representations are pointer-interconvertible with first elements of other object representations. In other words, a \tcode{reinterpret_cast} of a value to its own type is no longer equivalent to its operand. Example:
+  \begin{codeblock}
+struct A {
+  unsigned char x[5];
+  unsigned char y[5];
+  // Note: arrays of unsigned char are their own object representation
+} a;
+
+int main(void) {
+  unsigned char* p = &a.x[0];
+  ++reinterpret_cast<unsigned char*>(p)[7]; // OK
+  --p[7]; // not OK
+}
+  \end{codeblock}
+
+  This changes the existing behaviour of \tcode{reinterpret_cast} and potentially breaks array bounds checking.
+
+  \item The current proposed wording for \tcode{std::launder} (returning a pointer to the object that would give the program defined behaviour) doesn’t quite work because there is possibly more than one such object, such as elements of different object representations. Example:
+
+  \begin{codeblock}
+struct A {
+  unsigned char x;
+  unsigned char y;
+} a;
+
+auto f(bool b) {
+  unsigned char *pastRepX = 1 + &a.x;
+  unsigned char *pastRepA = sizeof(A) + reinterpret_cast<unsigned char*>(&a);
+  unsigned char *ambiguous = reinterpret_cast<unsigned char*>(&a);
+  return (b ? pastRepX : pastRepA) // ambiguous;
+}
+  \end{codeblock}
+
+  \item The current proposed wording allows \tcode{reinterpret_cast} or \tcode{std::launder} to \mbox{\tcode{unsigned char*}} to produce a pointer to the first element of an object representation. The same cannot be said for \tcode{std::byte*}.
+
+  \item The current proposed wording does not allow \tcode{reinterpret_cast} of pointers past-the-end of an object to produce pointers past-the-end of the object representation. For cases involving pointer arithmetic, such as looping over the entire object representation (an important use case), such conversions are necessary.
+
+  \item In [expr.static.cast], as well as in [ptr.launder], there might be multiple such objects that would give the program defined behaviour. We don't know how to specify which one is returned.
+
+\end{itemize}
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section*{Document history}
@@ -166,14 +280,15 @@ Modify [ptr.launder] paragraph 3 as follows:
   \item \textbf{R2}, 2019-11-20: Removed contiguous-layout types from wording, this should be tackled by \cite{P1945R0}.
   \item \textbf{R3}, 2022-02-15: Moved wording for casts to the rules of pointer-interconvertibility. Changed the wording for \tcode{std::launder} to bind to the best candidate object.
   \item \textbf{R4}, 2022-03-16: Changed the wording to fix ambiguous usage of $N$ in object representations specification.
-  \item \textbf{R5}, 2022-06-15: Reduced scope of paper to only reading object representations, not writing. Completely rewrote rationale. Added wording to prevent implicit object creation within object representations. Added cross-reference to types with contiguous storage ([intro.object]) in the wording. Fixed inconsistency in the wording by defining that only \tcode{unsigned char} is its own object representation, not \tcode{char} or \tcode{std::byte}. Removed erroneous wording regarding memory locations.
+  \item \textbf{R5}, 2022-06-16: Reduced scope of paper to only reading object representations, not writing. Completely rewrote rationale. Added wording to prevent implicit object creation within object representations. Added cross-reference to types with contiguous storage ([intro.object]) in the wording. Fixed inconsistency in the wording by defining that only \tcode{unsigned char} is its own object representation, not \tcode{char} or \tcode{std::byte}. Removed erroneous wording regarding memory locations. Added list of known issues.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%\section*{Acknowledgements}
+\section*{Acknowledgements}
 
-%TODO
+Many thanks to Jens Maurer and Hubert Tong for their help with the wording. Thanks to Jason Cobb, John Iacino, Marcell Kiss, Killian Long, Theodoric Stier, and everyone who participated on the std-proposals mailing list for their countless reviews and suggestions for earlier revisions of this paper. Thanks to Professor Ben Woodard for his grammatical review of an earlier revision of this paper.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

@@ -13,25 +13,30 @@
 
 \begin{tabular}{ll}
 Document \#: & D2590R2 \\
-Date: & 2022-07-09\\
+Date: & 2022-07-10\\
 Project: & Programming Language C++ \\
 Audience: & Library Working Group, Core Working Group
 \end{tabular}
 
 
 \begin{abstract}
-This paper proposes a new standard library facility \tcode{std::start_lifetime_as}. For objects of sufficiently trivial types, this facility can be used to directly create objects and start their lifetime on-demand to give programs defined behaviour. This proposal completes the functionality  proposed in \cite{P0593R6} and adopted for C++20 by providing the standard library portion of that paper (only the core language portion of that paper made it into C++20).
+This paper proposes a new standard library facility \tcode{std::start_lifetime_as}. For objects of sufficiently trivial types, this facility can be used to efficiently create objects and start their lifetime to give programs defined behaviour, without running any constructor code. This proposal completes the functionality  proposed in \cite{P0593R6} and adopted for C++20 by providing the standard library portion of that paper (only the core language portion of that paper made it into C++20).
 \end{abstract}
 
 \section{Motivation}
 \label{sec:motivation}
 
-Since C++20, certain functions in the C++ standard library such as \tcode{malloc}, \tcode{bit_cast}, and \tcode{memcpy} implicitly create objects and start their lifetime \cite{P0593R6}. As a result, the following code is no longer undefined behaviour:
+\subsection{Creating objects in storage obtained from non-``blessed'' functions}
+
+Since C++20, certain functions in the C++ standard library such as \tcode{malloc}, \tcode{bit_cast}, and \tcode{memcpy} are defined to \emph{implicitly create objects} \cite{P0593R6}. As a result, the following code is no longer undefined behaviour:
 
 \begin{codeblock}
-struct X { int a, b; };
+struct X {
+  int a, b;
+};
+
 X* make_x() {
-  X* p = (X*)malloc(sizeof(struct X));
+  X* p = (X*)malloc(sizeof(struct X)); // implicitly creates an object of type \tcode{X}
   p->a = 1;
   p->b = 2;
   return p;
@@ -40,7 +45,7 @@ X* make_x() {
 
 However, if the memory allocation or memory mapping function is not on this list of ``blessed'' standard library functions, code like the above still has undefined behaviour in C++20. We are accessing an object through a pointer to \tcode{X}, however there is no object of type \tcode{X} within its lifetime at that memory location.
 
-For non-standard functions such as \tcode{mmap} on POSIX systems and \tcode{VirtualAlloc} on Windows systems, the implementation can ensure that those functions implicitly create objects, and document that. In the absence of such documentation, we probably still won't hit undefined behaviour in practice, because the compiler typically cannot introspect the implementation of the syscall and prove that it doesn't perform \tcode{new (p) std::byte[n]} on its returned pointer.
+For non-standard syscalls such as \tcode{mmap} on POSIX systems and \tcode{VirtualAlloc} on Windows systems, the implementation can specify that those functions implicitly create objects, and document that. Unfortunately, such a specification is typically absent, and therefore the code is technically undefined behaviour. In practice, this will typically work regardless, because the compiler cannot introspect the implementation of the syscall and prove that it doesn't perform \tcode{new (p) std::byte[n]} on its returned pointer.
 
 But what about non-standard memory allocation or memory mapping functions that are provided by the user? Consider, for example, a library providing a memory pool, where the storage reuse is expressed in C++ code rather than in a syscall and is visible to the compiler. The current C++20 wording does not provide a solution for this use case, and code using such storage will be undefined behaviour.
 
@@ -56,7 +61,9 @@ X* make_x() {
 }
 \end{codeblock}
 
-An even more interesting use case arises when a C++ program is given a sequence of bytes (perhaps from a disk or network), and it knows those bytes are a valid representation of type \tcode{X}. How can it efficiently obtain a \tcode{X*} that can be legitimately used to access the object? Any attempt involving \tcode{reinterpret_cast} will result in undefined behaviour:
+\subsection{Deserialising objects from a sequence of bytes}
+
+Consider a C++ program that receives a sequence of bytes, perhaps over a network or from disk, and it knows that those bytes are a valid object representation of type \tcode{X}. How can it efficiently (i.e. without running any constructor code) obtain an \tcode{X*} that can be legitimately used to access the object? Any attempt involving \tcode{reinterpret_cast} will result in undefined behaviour:
 
 \begin{lstlisting}
 void process(Stream* stream) {
@@ -68,7 +75,7 @@ void process(Stream* stream) {
 }
 \end{lstlisting}
 
-How can we make this program well-defined without sacrificing efficiency? If the destination type is a trivially-copyable implicit-lifetime type, this can be accomplished by copying the storage elsewhere, using placement new of an array of byte-like type, and copying the storage back to its original location, then using \tcode{std::launder} to acquire a pointer to the newly-created object. However, this would be very verbose and hard to get right. For expressivity and optimisability, a combined operation to create an object of implicit-lifetime type in-place while preserving the object representation may be useful. This is exactly what \tcode{std::start_lifetime_as} is designed to do:
+How can we make this program well-defined without sacrificing efficiency? If the destination type is a trivially-copyable implicit-lifetime type, this can be accomplished by copying the storage elsewhere, using placement new of an array of byte-like type, and copying the storage back to its original location, then using \tcode{std::launder} to acquire a pointer to the newly-created object, and finally relying on the compiler to optimise away all the copying. However, this would be very verbose and hard to get right. For expressivity and optimisability, a combined operation to create an object of implicit-lifetime type in-place while preserving the object representation may be useful. This is exactly what \tcode{std::start_lifetime_as} is designed to do:
 
 \begin{codeblock}
 void process(Stream* stream) {
@@ -80,12 +87,24 @@ void process(Stream* stream) {
 }
 \end{codeblock}
 
-Note that in both of these use cases, the lifetime of the object is being started, however no constructor is actually being called and no code runs to achieve this. Just like implicit object creation, \tcode{std::start_lifetime_as} only works for \emph{implicit-lifetime types}, i.e. types that are either aggregates or have at least one trivial eligible constructor and a trivial, non-deleted destructor.
+Note that in both of these use cases, the lifetime of the object is being started, however no constructor is actually being called and no code runs to achieve this. Just like implicit object creation, \tcode{std::start_lifetime_as} only works for \emph{implicit-lifetime types}, i.e. types that are either aggregates or have at least one trivial eligible constructor and a trivial, non-deleted destructor. Note that if an object so created has subobjects that are themselves not of implicit-lifetime type, such subobjects would \emph{not} be implicitly created along with the parent object.
 
-Note also how \tcode{std::start_lifetime_as} differs from \tcode{std::launder}. As far as the C++ abstract machine is concerned, \tcode{std::start_lifetime_as} actually creates a new object and starts its lifetime (even if no code runs). On the other hand, \tcode{std::launder} never creates a new object, but can only be used to obtain a pointer to an object that already exists at the given memory location, with its lifetime already started through other means. This is actually a common misconception about \tcode{std::launder}. Creating a library facility that actually does the thing that \tcode{std::launder} does not do, but is sometimes mistakenly assumed to do, would help remove this pitfall.
+\subsection{Difference between \tcode{std::start_lifetime_as} and \tcode{std::launder}}
 
-\cite{P0593R5} had wording for both a core language portion and a standard library portion, and this paper in its entirety has already been approved by EWG and LEWG for C++20. The core language portion was then carried over into revision \cite{P0593R6} and actually made it into C++20. However, the standard library portion did not, because LWG did not have enough time to review the wording before the C++20 cutoff date. In this paper, we have extracted this still-missing library part from \cite{P0593R5} and are hereby proposing it again.
+Note how \tcode{std::start_lifetime_as} differs from \tcode{std::launder}. As far as the C++ abstract machine is concerned, \tcode{std::start_lifetime_as} actually creates a new object and starts its lifetime (even if no code runs). On the other hand, \tcode{std::launder} never creates a new object, but can only be used to obtain a pointer to an object that already exists at the given memory location, with its lifetime already started through other means. This is actually a common misconception about \tcode{std::launder}. Creating a library facility that actually does the thing that \tcode{std::launder} does not do, but is sometimes mistakenly assumed to do, would help remove this pitfall.
 
+\section{History}
+\cite{P0593R5} had wording for both a core language portion and a standard library portion, and this paper in its entirety has already been approved by EWG and LEWG for C++20. The core language portion was then carried over into revision \cite{P0593R6} and  made it into C++20. However, the standard library portion did not, because LWG did not have enough time to review the wording before the C++20 cutoff date. In this paper, we have extracted this still-missing library part from \cite{P0593R5} and are hereby proposing it again.
+
+\section{Design}
+
+We have taken the existing design from \cite{P0593R5} and added \tcode{const} and \tcode{const volatile} overloads for completeness and consistency. To avoid the combinatorial explosion, we considered a constrained additional template parameter approach, such that the parameter is restricted to \tcode{is_void}, but that approach would forbid conversions. This will not work in practice because the argument is rarely a \tcode{void*}, but typically a pointer to storage, such as \tcode{unsigned char*}. The constrained template approach is therefore not viable.
+
+\tcode{std::start_lifetime_as} and \tcode{std::start_lifetime_as_array} can never throw an exception because they do not actually run any code, so we added \tcode{noexcept}. We further added a precondition missing in \cite{P0593R5} stating that the passed-in storage is suitably aligned for the type of object being created.
+
+With the current design, \tcode{std::start_lifetime_as} handles non-array types as well as arrays of known bound, while \tcode{std::start_lifetime_as_array} handles arrays of unknown bound. It has been pointed out that this is inconsistent with \tcode{std::make_shared} and \tcode{std::make_unique}, where arrays of unknown bound are handled by a constrained function template with the same name, rather than a function with the \tcode{_array} suffix. We believe that \tcode{std::start_lifetime_as} could be redesigned to be consistent with this. This also raises the question of whether the case of arrays of known bound should also be handled by a separate constrained function template, again like \tcode{std::make_shared} and \tcode{std::make_unique}. With that, \tcode{start_lifetime_as<int[16]>(storage)} could be made to return an \tcode{int*}. With the current design, it returns an \tcode{int(*)[16]}. However, with the current deadline for the C++23 CD, we cannot consider further design changes at this stage, because that would mean deferring the whole feature to C++26. We therefore prefer this to be raised as an NB comment.
+
+Finally, we discussed how \tcode{std::start_lifetime_as_array} should handle the case of \tcode{n == 0}. On the one hand, it seems useful to support it: imagine that we receive an optional sequence of elements over a network, preceded by a header that tells you how many elements there are, and we \tcode{std::start_lifetime_as_array} that sequence before accessing the elements. If there are no elements, the call to \mbox{\tcode{std::start_lifetime_as_array}} has no effect. On the other hand, it is not clear what the return value should be in this case. CWG and LWG therefore decided to not add support for the \tcode{n == 0} case at this stage. If necessary, this can also be handled via an NB comment.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Proposed wording}
@@ -116,7 +135,7 @@ Some functions in the C++ standard library implicitly create objects (\added{[ob
 
 In header \tcode{<memory>} synopsis [memory.syn], add the following after the declarations of \tcode{std::align} and \tcode{std::assume_aligned}:
 
-\begin{adjustwidth}{0.5cm}{0.5cm}
+%\begin{adjustwidth}{0.5cm}{0.5cm}
 
 \begin{addedblock}
 \begin{codeblock}
@@ -139,7 +158,7 @@ template<typename T>
   const volatile T* start_lifetime_as_array(const volatile void* p, size_t n) noexcept;
 \end{codeblock}
 \end{addedblock}
-\end{adjustwidth}
+%\end{adjustwidth}
 
 Add the following subclause immediately after [ptr.align]:
 
@@ -164,7 +183,7 @@ template<typename T>
 
 \emph{Effects:} Implicitly creates objects ([intro.object]) within the denoted region as follows: an object $a$ of type \tcode{T}, whose address is \tcode{p}, and objects nested within $a$. The object representation of $a$ is the contents of the storage prior to the call to \tcode{start_lifetime_as}. The value of each created object $o$ of trivially-copyable type \tcode{U} is determined in the same manner as for a call to \tcode{bit_cast<U>(E)} ([bit.cast]), where \tcode{E} is an lvalue of type \tcode{U} denoting $o$, except that the storage is not accessed. The value of any other created object is unspecified. \begin{note}The unspecified value can be indeterminate.\end{note}
 
-\emph{Returns:} A pointer to \tcode{A}.
+\emph{Returns:} A pointer to $a$.
 \end{adjustwidth}
 
 \begin{codeblock}
@@ -211,7 +230,7 @@ Table 36 in [support.limits.general].
 \begin{itemize}
 \item \textbf{R0}, 2022-05-15: Initial version.
 \item \textbf{R1}, 2022-06-15: Expanded motivation; various wording fixes following CWG review.
-\item \textbf{R2}, 2022-07-09: Added \tcode{const} and \tcode{const volatile} overloads, \tcode{noexcept}, and alignment precondition; moved wording for \emph{reachable through} from [ptr.launder] to [basic.compound]; minor wording fixes following CWG review and LWG small group review.
+\item \textbf{R2}, 2022-07-10: Added \tcode{const} and \tcode{const volatile} overloads, \tcode{noexcept}, and alignment precondition; moved wording for \emph{reachable through} from [ptr.launder] to [basic.compound]; minor wording fixes following CWG review and LWG small group review.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

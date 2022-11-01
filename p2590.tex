@@ -12,8 +12,8 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D2590R2 \\
-Date: & 2022-07-10\\
+Document \#: & P2590R2 \\
+Date: & 2022-07-15\\
 Project: & Programming Language C++ \\
 Audience: & Library Working Group, Core Working Group
 \end{tabular}
@@ -31,9 +31,7 @@ This paper proposes a new standard library facility \tcode{std::start_lifetime_a
 Since C++20, certain functions in the C++ standard library such as \tcode{malloc}, \tcode{bit_cast}, and \tcode{memcpy} are defined to \emph{implicitly create objects} \cite{P0593R6}. As a result, the following code is no longer undefined behaviour:
 
 \begin{codeblock}
-struct X {
-  int a, b;
-};
+struct X { int a, b; };
 
 X* make_x() {
   X* p = (X*)malloc(sizeof(struct X)); // implicitly creates an object of type \tcode{X}
@@ -53,6 +51,7 @@ We propose a standard library facility \mbox{\tcode{std::start_lifetime_as}} to 
 
 \begin{codeblock}
 struct X { int a, b; };
+
 X* make_x() {
   X* p = std::start_lifetime_as<X>(myMalloc(sizeof(struct X));
   p->a = 1;
@@ -140,21 +139,21 @@ In header \tcode{<memory>} synopsis [memory.syn], add the following after the de
 \begin{addedblock}
 \begin{codeblock}
 // [obj.lifetime] Explicit lifetime management
-template<typename T>
+template<class T>
   T* start_lifetime_as(void* p) noexcept;
-template<typename T>
+template<class T>
   const T* start_lifetime_as(const void* p) noexcept;
-template<typename T>
+template<class T>
   volatile T* start_lifetime_as(volatile void* p) noexcept;
-template<typename T>
+template<class T>
   const volatile T* start_lifetime_as(const volatile void* p) noexcept;
-template<typename T>
+template<class T>
   T* start_lifetime_as_array(void* p, size_t n) noexcept;
-template<typename T>
+template<class T>
   const T* start_lifetime_as_array(const void* p, size_t n) noexcept;
-template<typename T>
+template<class T>
   volatile T* start_lifetime_as_array(volatile void* p, size_t n) noexcept;
-template<typename T>
+template<class T>
   const volatile T* start_lifetime_as_array(const volatile void* p, size_t n) noexcept;
 \end{codeblock}
 \end{addedblock}
@@ -166,13 +165,13 @@ Add the following subclause immediately after [ptr.align]:
 \textbf{Explicit lifetime management \hspace{83mm}[obj.lifetime]}
 
 \begin{codeblock}
-template<typename T>
+template<class T>
   T* start_lifetime_as(void* p) noexcept;
-template<typename T>
+template<class T>
   const T* start_lifetime_as(const void* p) noexcept;
-template<typename T>
+template<class T>
   volatile T* start_lifetime_as(volatile void* p) noexcept;
-template<typename T>
+template<class T>
   const volatile T* start_lifetime_as(const volatile void* p) noexcept;
 \end{codeblock}
 
@@ -187,13 +186,13 @@ template<typename T>
 \end{adjustwidth}
 
 \begin{codeblock}
-template<typename T>
+template<class T>
   T* start_lifetime_as_array(void* p, size_t n) noexcept;
-template<typename T>
+template<class T>
   const T* start_lifetime_as_array(const void* p, size_t n) noexcept;
-template<typename T>
+template<class T>
   volatile T* start_lifetime_as_array(volatile void* p, size_t n) noexcept;
-template<typename T>
+template<class T>
   const volatile T* start_lifetime_as_array(const volatile void* p, size_t n) noexcept;
 \end{codeblock}
 
@@ -230,7 +229,7 @@ Table 36 in [support.limits.general].
 \begin{itemize}
 \item \textbf{R0}, 2022-05-15: Initial version.
 \item \textbf{R1}, 2022-06-15: Expanded motivation; various wording fixes following CWG review.
-\item \textbf{R2}, 2022-07-10: Added \tcode{const} and \tcode{const volatile} overloads, \tcode{noexcept}, and alignment precondition; moved wording for \emph{reachable through} from [ptr.launder] to [basic.compound]; minor wording fixes following CWG review and LWG small group review.
+\item \textbf{R2}, 2022-07-15: Added \tcode{const} and \tcode{const volatile} overloads, \tcode{noexcept}, and alignment precondition; moved wording for \emph{reachable through} from [ptr.launder] to [basic.compound]; minor wording fixes following CWG and LWG review.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

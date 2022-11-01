@@ -32,7 +32,7 @@ Consider the following program, which takes an \tcode{int} and prints the underl
 void print_hex(int n) {
   unsigned char* a = (unsigned char*)(&n);
   for (int i = 0; i < sizeof(int); ++i)
-  printf("%02x ", a[i]);
+    printf("%02x ", a[i]);
 }
 
 int main() {

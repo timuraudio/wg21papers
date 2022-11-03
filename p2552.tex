@@ -11,15 +11,15 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P2552R0 \\
-Date: & 2022-02-15\\
+Document \#: & D2552R1 \\
+Date: & 2022-11-02\\
 Project: & Programming Language C++ \\
 Audience: & Evolution Working Group, Core Working Group
 \end{tabular}
 
 
 \begin{abstract}
-There is a general notion in C++ that standard attributes should be ``ignorable''. However, currently there does not seem to be a common understanding of what this means exactly. This paper is proposing a definition that could be useful as a design guide for future language feature proposals.
+There is a general notion in C++ that standard attributes should be ``ignorable''. However, currently there does not seem to be a common understanding of what this means exactly. The C++ standard itself is ambiguous on this point. In this paper, we consider three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \mbox{\tcode{__has_cpp_attribute}}. We discuss where and how the C++ standard is underspecified and why this is problematic, survey existing implementation practice, and propose different options to resolve the existing ambiguities.
 \end{abstract}
 
 %\vspace{5mm}
@@ -27,100 +27,392 @@ There is a general notion in C++ that standard attributes should be ``ignorable'
 \section{Motivation}
 \label{sec:motivation}
 
-Whenever proposals for new C++ attributes or attribute-like language features are considered, there is usually a discussion around the idea that attributes should be ``ignorable'', and that new attributes should be compatible with this principle. However, there does not seem to be a common understanding of what this means exactly. The principle of ignorability of standard attributes in C++ is currently some kind of ``gentlemen's agreement'' that has its origin in the standardisation of attribute syntax for C++11 \cite{N2761}. However, this ``agreement'' is not codified anywhere and is therefore often misunderstood.
 
-Does it mean that an implementation can choose to ignore any standard attribute and still be conforming? That doesn't sound right: a malformed \emph{attribute-specifier}, for example, \tcode{[[fallthrough(42)]]}, should result in a compilation error (and all major C++ compilers issue one). Rather than just saying that attributes are ``ignorable'', a better rule seems to be: if the program is well-defined \emph{with} the attribute, then ignoring the attribute should not change the observable behaviour of that program. But that does not quite work either: if an implementation implements the functionality of the \tcode{[[no_unique_address]]} attribute, its effects are clearly observable, as it can change the layout of a type. So what is the rule then?
+The C++ standard says the following about the ignorability of attributes ([dcl.attr.grammar]/6):
 
-The purpose of this proposal is to clearly define what we mean by ``ignorability'' of standard attributes. The goal is to avoid such discussions in the future and to guide future C++ language proposals by helping to decide whether or not a particular new language feature could or should be specified as an attribute.
+\begin{adjustwidth}{0.5cm}{0.5cm}
+For an \emph{attribute-token} (including an \emph{attribute-scoped-token})  not specified in this document, the behavior is implementation-defined. Any \emph{attribute-token} that is not recognized by the implementation is ignored.
+\end{adjustwidth}
 
-Further, attributes are a design space that C++ shares with C. The C standard actually \emph{does} define what the common semantics of all its standard attributes are (see \ref{subsec:c_compat}). We should seek to be as compatible with this as reasonably possible.
+This wording is ambiguous. It is not clear at all whether this allows the implementation to ignore any  \emph{attribute-token not specified in this document} (i.e. only non-standard attributes), or any  \emph{attribute-token, including those specified in this document} (i.e. including standard attributes). This ambiguity is a known defect: there is a Core issue \cite{CWG2538} and a recent NB comment (GB 9.12.1p6).
 
-\section{Proposed rule}
+Standard attributes are a feature shared between C and C++. The C standard says the following:
 
-We propose to define the semantics of standard attributes as follows:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A strictly conforming program using a standard attribute remains
+strictly conforming in the absence of that attribute. [...] Standard attributes specified by this document can be parsed but ignored by an implementation without changing the semantics of a correct program; the same is not true for attributes not specified by this document.
+\end{adjustwidth}
+
+This makes it clear that the intent is for standard attributes to be ignorable, however it is not entirely clear what this means: ``parse but ignore'' implies that the compiler needs to at least parse them (i.e. it cannot treat a standard attribute as token soup). So the C standard might be talking about a different kind of ignorability than the C++ standard does (ignoring the \emph{attribute-token}). 
+
+Before we can try to fix the defect in the C++ wording, we therefore need to answer the following two questions:
+
+\begin{itemize}
+\item Should an implementation be allowed to ``ignore'' a standard attribute?
+\item What does it mean to ``ignore'' a standard attribute?
+\end{itemize}
+
+We will start by defining what ``ignore'' means. There are different properties of standard attributes that could or could not be declared ``ignorable'', with different consequences for the standard. In particular, we can draw a distinction between \emph{syntactic ignorability} (i.e. ignoring the form of the argument clause, the attribute's appertainment, and so forth) and \emph{semantic ignorability} (i.e. ignoring the effect that the attribute would have on the program).
+
+Whether standard attributes are \emph{syntactically} ignorable is a matter of contention. At the heart of the issue is the question whether a compiler is required to properly parse a standard attribute (which includes syntax-checking the argument clause, appertainment, and so forth) even if it then does not implement any semantics for that attribute.
+
+On the other hand, it is uncontroversial that attributes are meant to be \emph{semantically} ignorable. However, we have a problem here as well: it is not quite clear what this means exactly. The principle of semantic ignorability is currently some kind of ``gentlemens' agreement'' that originated in the standardisation of attribute syntax for C++11 \cite{N2761}. However, this ``agreement'' is not codified anywhere. The rule only exists implicitly and can be interpreted in different ways. This is not a good position to be in if one wants to arrive at a sound and consistent language design.
+
+Finally, the behaviour of \tcode{__has_cpp_attribute} is ambiguous as well. In particular, it is unclear whether or not it should return a positive value for a standard attribute if the compiler is aware of the attribute and can parse correctly, even if it then does not implement any useful semantics for it. There is current implementation divergence on this point, so the standard should specify the correct behaviour.
+
+\section{The status quo}
+
+\subsection{Syntactic ignorability}
+\label{subsec:syntax}
+\subsubsection{Argument clause}
+\label{subsubsec:args}
+
+The C++ grammar defines the \emph{attribute-argument-clause} of an attribute to have the form:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\tcode{( }\emph{balanced-token-seq}$_\emph{opt}$\tcode{ )}
+\end{adjustwidth}
+where \emph{balanced-token-seq} is any token sequence with balanced parentheses, square brackets, and curly braces. This allows a wide variety of possible arguments for standard attributes. It is up to the specification of each individual attribute to constrain this further ([dcl.attr.grammar]/4):
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+[...] The \emph{attribute-token} determines additional requirements on the \emph{attribute-argument-clause} (if any).
+\end{adjustwidth}
+
+Every standard attribute specifies explicitly whether it can have an argument clause, whether this argument clause is optional or mandatory, and what form the argument clause shall have, for example in [dcl.attr.noreturn/1]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The \emph{attribute-token} \tcode{noreturn} specifies that a function does not return. No \emph{attribute-argument-clause} shall be present.
+\end{adjustwidth}
+
+or in [dcl.attr.deprecated]/1:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The \emph{attribute-token} \tcode{deprecated} can be used to mark names and entities whose use is still allowed, but is discouraged for some reason. An \emph{attribute-argument-clause} may be present and, if present, it shall have the form:
+
+\tcode{( }\emph{string-literal}$_\emph{opt}$\tcode{ )}
+\end{adjustwidth}
+
+On the one hand, this is all normative wording, therefore it seems that a program violating these requirements should be ill-formed, and a conforming compiler must emit a diagnostic. On the other hand, due to the ambiguity in [dcl.attr.grammar]/6, it is unclear whether [dcl.attr.grammar]/6 overrides these requirements and allows an implementation to completely ignore the argument clause:
+
+\begin{codeblock}
+[[noreturn("cannot have a reason")]] int f();                 // Ill-formed or ignorable?
+[[deprecated(not_a_string)]] int g();                         // Ill-formed or ignorable?
+[[nodiscard(this?is!a:balanced%{token[sequence]})]] int h();  // Ill-formed or ignorable?
+\end{codeblock}
+
+Existing practice is that all of Clang, GCC, ICC, and MSVC are very good at diagnosing syntax errors in the argument clause. We tried many different ill-formed constructions like the above and got a diagnostic on all four compilers in all cases. The only questionable (but still conforming) case we found was \tcode{[[carries_dependency(some_argument)]]} on GCC, where the emitted diagnostic said that the \tcode{carries_dependency} attribute is not supported, but did not specifically call out the syntax error in the argument clause.
+
+\subsubsection{Appertainment}
+\label{subsubsec:appertainment}
+
+On the appertainment of a standard attribute, [dcl.attr.grammar]/5 says:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Each \emph{attribute-specifier-seq} is said to \emph{appertain} to some entity or statement, identified by the syntactic context where it appears. If an \emph{attribute-specifier-seq} that appertains to some entity or statement contains an \emph{attribute} or \emph{alignment-specifier} that is not allowed to apply to that entity or statement, the program is ill-formed.
+\end{adjustwidth}
+
+Every standard attribute has normative requirements on appertainment. For example, \tcode{noreturn} ``may be applied to a function or a lambda call operator'' ([dcl.attr.noreturn]/1); \mbox{\tcode{no_unique_address}} ``may appertain to a non-static data member other than a bit-field'' ([dcl.attr.nouniqueaddr]/1); \tcode{fallthrough} ``may be applied to a null statement'' ([dcl.attr.fallthrough]/1); and so forth.
+
+Similarly to syntax errors in the argument clause, it is currently ambiguous whether [dcl.attr.grammar]/6 allows the compiler to ignore these appertainment rules:
+
+\begin{codeblock}
+int main() {
+  [[fallthrough]] int i;  // Ill-formed or ignorable?
+}
+\end{codeblock}
+
+Again, we surveyed existing practice on Clang, GCC, ICC, and MSVC. We found that generally, compilers are very good at diagnosing appertainment errors as well, but unlike with the argument clause we did find some false negatives. For example, no compiler diagnoses \tcode{[[deprecated]]} or \tcode{[[maybe_unused]]} on static data members, and GCC allows any standard attribute to appertain to an empty declaration at class scope without warning:
+\begin{codeblock}
+struct X { [[nodiscard]]; };  // no diagnostic on GCC
+\end{codeblock}
+The code triggering those false negatives is typically quite obscure. We could not find any cases where the failure to diagnose appertainment rules introduced a bug or changed the behaviour of a program.
+
+\subsubsection{Additional syntactic requirements}
+
+\label{subsec:additionalreqs}
+Some standard attributes have additional normative syntactic requirements on top of syntactic rules for the argument clause and appertainment. In particular, [dcl.attr.likelihood]/1 constraints which \emph{attribute-token}s can appear in an \emph{attribute-specifier-seq}:
+
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The \emph{attribute-token} \tcode{likely} shall not appear in an \emph{attribute-specifier-seq} that contains the \emph{attribute-token} \tcode{unlikely}.
+\end{adjustwidth}
+
+and ([dcl.attr.fallthrough]/1) specifies:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A fallthrough statement may only appear within an enclosing \tcode{switch} statement. The next statement that would be executed after a fallthrough statement shall be a labeled statement whose label is a case label or default label for the same \tcode{switch} statement and, if the fallthrough statement is contained in an iteration statement, the next statement shall be part of the same execution of the substatement of the innermost enclosing iteration statement. The program is ill-formed if there is no such statement.
+\end{adjustwidth}
+
+Just like with the other requirements, the question here is whether a program violating these syntactic requirements is ill-formed, or whether [dcl.attr.grammar]/6 allows to ignore such violations.
+
+Again, we looked at existing practice on Clang, GCC, ICC, and MSVC. The case of \tcode{likely} and \tcode{unlikely} appearing in the same \emph{attribute-specifier-seq} is diagnosed by all four compilers. On the other hand, the additional rules for \tcode{fallthrough} are not consistently diagnosed on all four compilers. In [dcl.attr.fallthrough]/3, the C++ standard gives the following example code, which contains four syntax errors explicitly marked as such:
+\begin{codeblock}
+void f(int n) {
+  void g(), h(), i();
+  switch (n) {
+  case 1:
+  case 2:
+    g();
+    [[fallthrough]];
+  case 3:                 // warning on fallthrough discouraged
+    do {
+      [[fallthrough]];    // error: next statement is not part of the same substatement execution
+    } while (false);
+  case 6:
+    do {
+      [[fallthrough]];    // error: next statement is not part of the same substatement execution
+    } while (n--);
+  case 7:
+    while (false) {
+      [[fallthrough]];    // error: next statement is not part of the same substatement execution
+    }
+  case 5:
+    h();
+  case 4:                 // implementation may warn on fallthrough
+    i();
+    [[fallthrough]];      // error
+  }
+}
+\end{codeblock}
+
+Only ICC and Clang diagnose all four syntax errors. GCC only diagnoses the second and the fourth, and MSVC diagnoses only the fourth.
+
+\subsubsection{Expression parsing and ODR-use}
+\label{subsubsec:odruse}
+
+With attribute \tcode{assume} \cite{P1774R8}, we added an attribute to C++23 that contains an expression in its argument clause. This has several interesting consequences, which are likewise affected by the current ambiguity in [dcl.attr.grammar]/6.
+
+First of all, in order to detect syntax errors inside the expression such as
+\begin{codeblock}
+void f(int i) {
+  [[assume(i >=)]];  // Ill-formed or ignorable?
+}
+\end{codeblock}
+the compiler has to parse expression grammar inside the attribute's argument clause; merely treating the argument clause as a \emph{balanced-token-sequence} is not enough (it would be enough for the other standard attributes with an argument clause, \tcode{deprecated} and \tcode{nodiscard}, since their argument is merely a \emph{string-literal}). One compiler vendor, MSVC, has told us that this is technically challenging for them to implement. On the other hand, two other vendors, GCC and Clang, have told us that their compilers have no problem parsing expressions inside an attribute's argument clause, and in fact this is already existing practice for their vendor-specific non-standard attributes. MSVC itself also does not seem to have a problem with parsing expressions inside other constructs such as \tcode{__declspec(...)}.
+
+ Apart from syntax errors in the expression grammar, expression parsing also involves ODR-usage of the entities in the expression, which can trigger template instantiations. If such an instantiation in turn triggers a failing \tcode{static_assert}, this would render the program ill-formed as well:
+ 
+\begin{codeblock}
+template <typename T>
+struct X {
+  static_assert(sizeof(T) > 1);
+  bool f() { return true; }
+};
+
+int main() {
+  [[assume(X<char>().f())]];  // Ill-formed or ignorable?
+}
+\end{codeblock}
+
+In addition, ODR-use can also trigger lambda captures, which is observable both at compile time and at runtime. We can even construct a (very contrived) example where the lambda capture has an effect on the layout of a class:
+
+\begin{codeblock}
+constexpr auto f(int i) {
+  return sizeof( [=] { [[assume(i == 0)]]; } );
+}
+
+struct X {
+  char data[f(0)];
+};
+\end{codeblock}
+
+In this example, \tcode{sizeof(X)} and therefore the ABI will depend on whether or not the \tcode{assume} is syntactically ignored.
+
+If [dcl.attr.grammar]/6 is interpreted as ``only non-standard attributes can be syntactically ignored'' (following the suggested resolution of \cite{CWG2538}), this means that in the template instantiation example, the compiler must instantiate the template, and must trigger the failing \tcode{static_assert} (or whatever other effects on the program the template instantiation will cause). In the lambda capture example, the compiler must perform the lambda capture, and therefore change the layout of the class, even if the compiler then decides to then ignore the attribute \emph{semantically}, i.e. not implement an assumptions facility.
+
+On the other hand, if [dcl.attr.grammar]/6 is interpreted as ``all attributes, including standard attributes, can be syntactically ignored'', the compiler is free to not ODR-use the entities in the expression, not perform the template instantiations or the lambda capture, and in fact not parse the expression at all, but is allowed to treat the entire thing as token soup and skip over it.
+
+Note that this question is not in any way related to the \emph{semantics} of the \tcode{assume} attribute, which is entirely orthogonal. This concerns the design space of attributes as a whole; \tcode{assume} just happens to be the only standard attribute currently containing an expression. Any attribute containing an expression would run into the same question, such as the proposed \tcode{trivially_relocatable} attribute \cite{P1144R5}, or a hypothetical attribute-like syntax for contract annotations.
+
+Note that changing the layout of a class through such a construct is nothing new: many other constructs like \tcode{[[no_unique_address]]}, \tcode{assert}, and others can also trigger changes in class layout. Note also that the last code example is a valid but highly contrived usage of assumptions. In real code, it is not useful to \emph{only} use a variable in an assumption, but not anywhere else in the surrounding code. So in real-world usage the assumption would never end up being the thing triggering the lambda capture (and if anyone were to write such code, they would have much bigger problems than the class layout of \tcode{struct X}).
+
+Let us look again at existing practice. The standard attribute version of \tcode{assume} is not implemented yet on any major compiler, as it was only added very recently for C++23. But three major compilers implement the same functionality as a built-in: \tcode{__assume} on MSVC and ICC, and \mbox{\tcode{__builtin_assume}} on Clang.
+
+On all three compilers, the expression in the argument clause is always ODR-used, and the side effects of this ODR-use (such as lambda captures changing class layout) are always triggered. Interestingly, this also happens when the actual assumption is then semantically ignored by the compiler, as is the case on Clang for expressions that have side effects. All of this is consistent with the interpretation that standard attributes can only be ignored semantically, but not syntactically.
+
+\subsection{Semantic ignorability}
+\label{subsec:semantic}
+
+The original paper that introduced attributes to C++ \cite{N2761} says --- somewhat vaguely --- that a standard attribute should be  ``something that helps but can be ignorable with little serious side-effects'', but the paper does not mention a strict rule of semantic ignorability. It also contains a list of possible features that the authors believed at the time would or would not be good candidates for a standard attributes. This list contains \tcode{alignas}, which was initially proposed as an attribute, but then changed to a keyword before C++11 was finalised \cite{N3190}. The ``agreement'' has evolved: attributes should now be features that are semantically ignorable in the strict sense, i.e. their effect on the program is optional, and \tcode{alignas} does not fit the bill: its effects on the alignment of an object are mandatory, not optional. The original paper also says that attributes should only appertain to declarations, not statements, which also changed later: \tcode{likely}, \tcode{unlikely}, \tcode{fallthrough}, and \tcode{assume} can all apply to statements (the latter two only to null statements). What should or should not be an attribute has evolved over the years, so we should base our rules on the attributes that have actually been standardised so far.
+
+All standard attributes are currently normatively defined in such a way that they are syntactically ignorable. However, how this is achieved varies from attribute to attribute. We can distinguish four different categories:
+
+\begin{itemize}
+\item Attributes that produce or suppress diagnostics and otherwise have no effect: \tcode{deprecated}, \tcode{fallthrough}, \tcode{maybe_unused}, and \tcode{nodiscard}. They are normatively defined to do nothing. The desired effect is described in a section called ``recommended practice''.
+\item Attributes that serve as optimisation hints to the compiler and otherwise have no effect: \tcode{likely}, \tcode{unlikely}, and \tcode{carries_dependency}. They are also defined to do nothing and have a ``recommended practice'' section.
+\item Attributes that can turn an otherwise well-defined program into undefined behaviour: \tcode{noreturn} and \tcode{assume}. They are semantically ignorable because undefined behaviour means the implementation can do literally anything, and that includes ignoring the effects of the attribute and compiling and executing the program as if they were not there.
+\item Attributes that change the semantics of the program in an observable way. We currently only have one such attribute: \tcode{no_unique_address}. It is semantically ignorable because its effect is carefully specified to be so: it introduces a \emph{potentially-overlapping subobject}, i.e. a subobject that either is or is not overlapping, depending on whether the compiler chooses to implement or semantically ignore the attribute.
+\end{itemize}
+
+Unfortunately, there is currently no explicit definition of what constitutes an attribute and what it means for it to be semantically ignorable. As a result, different people have a different mental model of it.
+
+Some say that it means that a program has the same behaviour (or the semantics) with or without the attribute. This is clearly wrong: it only applies to the first two of the four categories listed above. It is easy to construct a counterexample:
+
+\begin{codeblock}
+[[noreturn]] int f() { return 0; }
+int main() { return f(); }
+\end{codeblock}
+
+This program returns \tcode{0} without the attribute, but has undefined behaviour with the attribute, which means that the behaviour of the program can change, and will often change in practice.
+
+Others say that --- and this is the version we hear most often --- given a well-formed program with well-defined behaviour, omitting an attribute does not change the behaviour (or the semantics) of the program. However, this is also wrong, and we can again construct a counterexample:
+
+\begin{codeblock}
+struct X {};
+struct Y {
+  [[no_unique_address]] X x;
+  int i; 
+};
+
+int main() { return (sizeof(Y) == sizeof(int)); }
+\end{codeblock}
+
+This program will return \tcode{1} with the attribute, but \tcode{0} without. However, since the effects of \mbox{\tcode{no_unique_address}} are optional, the program may also return \tcode{0} with the attribute. A compiler is allowed to not implement the semantics of \tcode{no_unique_address} and still be conformant. This can be seen from the specification of \tcode{no_unique_address}, but it would be desirable to have a general rule that can be applied to all present and future attributes.
+
+Based on the specification of all currently existing standard attributes, we believe that the following rule would capture the nature of semantic ignorability sufficiently accurately:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 Given a well-formed program with well-defined behaviour, omitting all occurrences of a particular standard attribute shall result in a well-formed program whose observable behaviour is consistent with a correct execution of the original program.
 \end{adjustwidth}
 
-It is not entirely clear whether the C++ standard itself is the ideal place to codify such a definition. On the one hand, the C standard does something similar (see \ref{subsec:c_compat}). On the other hand, the C++ standard does not typically try to constrain future evolution of the language, only to define what is and isn't conforming with the current standard. So, alternatively, such a definition could instead be published in a new standing document containing design principles for new core language features. We would like to seek guidance from the C++ committee on this point.
+Codifying such a rule would help avoid future discussions about what should and should not be an attribute. It would also help guide language design for other language features such as contracts annotations \cite{P2521R2}. One of the possible syntaxes for contracts annotations is an attribute-like syntax. If we choose this syntax, we might want to consider being consistent with attribute ignorability semantics, too.
 
-Our own position is that this definition should go into the C++ standard itself (in [dcl.attr]), so it would formally only apply to the attributes that are already currently in the standard, and not add any new information per se. However, the existence of such an explicit rule in the standard would force any new attribute proposal that doesn't want to follow the above principle to carve out an explicit exception for itself. We believe this would be a strong enough motivation for future proposals to stick to the rule in order to avoid introducing inconsistencies to the standard.
+If we had codified a rule earlier, we might have ended up with a different and simpler rule, such as the aforementoned ``given a well-formed program with well-defined behaviour, omitting an attribute does not change the behaviour/semantics of the program''. As a result, we would perhaps never have standardised \mbox{\tcode{no_unique_address}}, which violates that rule, as an attribute. That ship has sailed with C++20, but codifying a rule now will help us being more mindful going forward.
 
-Another question is whether such a rule should apply only to true standard attributes (i.e. those following the \emph{attribute-specifier} grammar), or also to hypothetical new language features that are ``attribute-like'' (i.e. using double square brackets but a novel syntax), such as attribute-like syntax for contract annotations \cite{P2461R1}. Again, we believe that it is enough to spell out the rule for existing attributes in the standard, and then ``attribute-like'' proposals will be likely to follow suit in order to be consistent.
+We should also look at existing practice: which attributes are actually being semantically ignored? We looked at the latest available versions of Clang, GCC, ICC, and MSVC. It seems that none of them implement any semantics for \tcode{carries_dependency} (so perhaps we should not have standardised \tcode{carries_dependency} either, but that is another story).
 
-\section{Discussion}
+In addition, MSVC does not implement any semantics for \tcode{no_unique_address}, which has the unfortunate consequence that class layout is inconsistent across different compilers on the same platform.
 
-\subsection{Well-formedness}
+All other standard attributes seem to have meaningful implementations on all major compilers.
 
-In order for the above ``ignorability'' rule to apply, the program has to be well-formed \emph{with} the attribute, i.e. the implementation is not allowed to ignore ill-formed standard attributes. The standard says:
+\subsection{\tcode{__has_cpp_attribute}}
+
+The behavior of \tcode{__has_cpp_attribute} as specified in the standard today is also ambiguous and should be fixed. On the one hand, it currently requires implementations to report a nonzero
+error even for recognised, but semantically ignored attributes ([cpp.cond]/6):
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-The \emph{attribute-token} determines additional requirements on the \emph{attribute-argument-clause} (if any). Each \emph{attribute-specifier-seq} is said to appertain to some entity or statement, identified by the syntactic context where it appears ([stmt.stmt], [dcl.dcl], [dcl.decl]). If an \emph{attribute-specifier-seq} that appertains to some entity or statement contains an \emph{attribute} or \emph{alignment-specifier} that is not allowed to apply to that entity or statement, the program is ill-formed.
+For an attribute specified in this document, the value of the \emph{has-attribute-expression} is given by Table 22. For other attributes recognized by the implementation, the value is implementation-defined.
 \end{adjustwidth}
 
-In other words, an attribute can only be ``ignorable'' if it is well-formed, i.e. if the attribute appertains to an entity that it is allowed to appertain to, and if the \emph{attribute-argument-clause} has the correct shape. Otherwise, the program is ill-formed, and the compiler is required to issue a diagnostic. All major C++ compilers follow this rule and emit an error if the user tries to use the wrong type of argument (\tcode{[[deprecated(42)]]}), use an argument where none is allowed (\tcode{[[noreturn("x")]]}), use an attribute in the wrong place (\tcode{[[fallthrough]] int x;}), etc.
+On the other hand, it simultaneously does not require them to do that when they do not support the attribute ([cpp.cond]/5):
 
-Currently, all standard attributes either have no arguments, or a single string literal as an argument, so verifying the well-formedness of an  \emph{attribute-argument-clause} is trivial. However, new proposals such as \tcode{[[assume(\emph{expr})]]} \cite{P1774R6} and \tcode{[[trivially_relocatable(\emph{expr})]]} \cite{P1144R5} propose attributes with an expression as an argument. This has the consequence that even if an implementation chooses not to implement the functionality of such an attribute, it will have to parse the expression inside the \emph{attribute-argument-clause} and issue a diagnostic if the expression is ill-formed. Further, parsing the expression might trigger template instantiations, and again the implementation will have to issue a diagnostic in case this fails. This is fully compatible with the above ``ignorability'' rule.
-
-According to Jens Maurer, one of the original authors of standard attributes \cite{N2761}, it was always intended that a conforming compiler needs to syntax-check all attributes specified in the standard.  After having done so, the compiler may choose to ignore the attribute, i.e. ignore the ``recommended practice'' sections for the attribute. This means that the sentence ``The \emph{attribute-token} determines additional requirements on the \emph{attribute-argument-clause} (if any)'' is always in force for attributes specified in the standard. The standard already implies this today, but in order to make it unambiguous, we should change the wording
 \begin{adjustwidth}{0.5cm}{0.5cm}
-For an \emph{attribute-token} (including an \emph{attribute-scoped-token})  not specified in this document, the behavior is implementation-defined. Any \emph{attribute-token} that is not recognized by the implementation is ignored.
-\end{adjustwidth}
-to
-\begin{adjustwidth}{0.5cm}{0.5cm}
-For an \emph{attribute-token} (including an \emph{attribute-scoped-token})  not specified in this document, the behavior is implementation-defined; any such \emph{attribute-token} that is not recognized by the implementation is ignored.
+Each \emph{has-attribute-expression} is replaced by a non-zero \emph{pp-number} matching the form of an \emph{integer-literal} if the implementation supports an attribute with the name specified by interpreting the \emph{pp-token}s, after macro expansion, as an \emph{attribute-token}, and by \tcode{0} otherwise.
 \end{adjustwidth}
 
-Jens Maurer suggested to open a Core issue for this; however, we might as well just roll this wording tweak into the present paper.
+The wording is therefore contradictory. As a result, it is unclear whether or not \mbox{\tcode{__has_cpp_attribute}} should return a positive value if a compiler recognise and syntactically checks a standard attribute but then semantically ignores it. 
 
-As should be clear from the above, the requirement of well-formedness should apply only to standard attributes. We do not propose to introduce any restrictions for non-standard attributes such as \tcode{[[gnu::unused]]} or \tcode{[[omp::directive (parallel for, schedule(static))]]}. They are truly ignorable in the sense that if implementation does not recognise them, it can completely skip them. The existing rule that the \emph{attribute-argument-clause} can be any \emph{balanced-token-seq} was created specifically to allow implementations to cleanly ignore non-standard attributes whose details (structure of arguments) are unknown to the implementation.  
+This is an area of implementation divergence. Clang and ICC both report a positive value for \mbox{\tcode{__has_cpp_attribute(carries_dependency)}}, even though they semantically ignore it; on the other hand, GCC reports \tcode{0} (and emits a diagnostic that it is being ignored). MSVC is inconsistent even with itself: it reports a positive value for \mbox{\tcode{__has_cpp_attribute(carries_dependency)}}, but \tcode{0} for \mbox{\tcode{__has_cpp_attribute(no_unique_address)}}, even though it does not implement semantics for either.
 
-\subsection{Well-definedness}
+\section{What happened so far?}
 
-In order for the above ``ignorability'' rule to apply, the program must not have undefined behaviour \emph{with} the attribute. This means that the addition of an attribute is allowed to introduce undefined behaviour, however the removal of an attribute is \emph{not} allowed to do that.
-
-This is compatible with the existing standard attribute \tcode{[[noreturn]]} as well as the proposed new attribute \tcode{[[assume(\emph{expr})]]}  \cite{P1774R6}, both of which can introduce undefined behaviour into an otherwise valid program. On the other hand, this means that new language features that turn undefined behaviour into well-defined behaviour cannot be attributes.
-
-\subsection{Omission of all occurrences}
-
-The above ``ignorability'' rule works by considering omission of all occurrences of a particular standard attribute token, such as \tcode{noreturn}, regardless of whether it occurs in its own double square brackets or as part of an \emph{attribute-list} such as \tcode{[[noreturn, deprecated]]}. We are not interested in considering the consequences of omitting some but not all occurrences of \tcode{noreturn} in a given program.
-
-\subsection{Consistency with original program}
-
-Attributes are allowed to have effects that cause a change in the observable behaviour of a program; notably, \tcode{[[no_unique_address]]} does so by altering the memory layout of a class. However, any such effects need to be optional. This is what we mean by ``ignorability'': not that ignoring the attribute will not change the behaviour of the program, but that the program you get without the attribute is a valid and conforming version of the original program with the attribute. Note that the effects of \tcode{[[no_unique_address]]} are optional. The non-static data member marked with \tcode{[[no_unique_address]]} can share the address of another non-static data member or that of a base class, but it doesn't have to; therefore, an implementation could choose to not implement the functionality of \tcode{[[no_unique_address]]} and still be conforming. If \tcode{[[no_unique_address]]} would cause a mandatory change in class layout rather than an optional one, it could not be an attribute.
-
-By the same token, the existing feature \tcode{alignas} cannot be an attribute, because its effects on the alignment of an object are mandatory, not optional. Indeed, \tcode{alignas} was initially proposed as an attribute, but this was later reverted before C++11 was finalised \cite{N3190}.
-
-Any core language feature that does not influence the observable behaviour of a program at all, but affects only ``non-behavioural'' things like warnings or providing information to the back-end is a good candidate for a standard attribute. Most existing standard attributes fall into this category: \tcode{[[carries_dependency]]}, \tcode{[[deprecated]]}, \tcode{[[fallthrough]]}, \tcode{[[likely]]}, \tcode{[[unlikely]]}, \tcode{[[maybe_unused]]}, and \tcode{[[nodiscard]]}.
-
-\subsection{Compatibility with C}
-\label{subsec:c_compat}
-
-The C standard specifies the following rule for standard attributes:
+Regarding syntactic ignorability, the authors of \cite{N2761} have told us that the original design intent was to allow standard attributes to be ignored only semantically, not syntactically. The same interpretation is also recommended by CWG. The proposed resolution of \cite{CWG2538} and NB comment GB 9.12.1p6, as approved by CWG, is as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-A strictly conforming program using a standard attribute remains
-strictly conforming in the absence of that attribute. [...] Standard attributes specified by this document can be parsed but
-ignored by an implementation without changing the semantics of a
-correct program; the same is not true for attributes not specified by
-this document.
-\end{adjustwidth}
-
-The existing wording for C++, together with the additional wording we propose here, would create a rule that is compatible with the above, but arguably more precise.
-
-\section{Wording}
-
-Modify [dcl.attr.grammar] as follows:
-
-\begin{adjustwidth}{0.5cm}{0.5cm}
-\added{Given a well-formed program with well-defined behaviour, omitting all occurrences of an \emph{attribute-token} specified in this document shall result in a well-formed program whose observable behaviour is consistent with a correct execution of the original program.}
-
 For an \emph{attribute-token} (including an \emph{attribute-scoped-token})  not specified in this document, the behavior is implementation-defined\removed{. Any}\added{; any such} \emph{attribute-token} that is not recognized by the implementation is ignored.
+\added{[\emph{Note:} A program is ill-formed if it contains an \emph{attribute} specified in [dcl.attr] that violates the rules to which entity or statement the attribute may apply or the syntax rules for the attribute's \emph{attribute-argument-clause}, if any. --- \emph{end note}]}
+
 \end{adjustwidth}
 
-%\section*{Acknowledgements}
-% none so far
+EWG conducted a poll on the question in a teleconference earlier this year. The result was consensus in favour of the resolution recommended by CWG:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+It is EWG's intent that [dcl.attr]/6 \emph{only} permits an implementation to ignore a standard attribute's effect, but not appertainment and argument parsing.
+
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+2 & 6 & 3 & 0 & 2
+\end{tabular}
+\end{adjustwidth}
+
+The same question was then put to an electronic poll for confirmation, with the following result:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Resolve CWG2538 by clarifying that it is EWG’s intent that [dcl.attr]/6 \emph{only} permits an implementation to ignore a standard attribute’s effect, but not appertainment and argument parsing.
+
+\begin{tabular}{lllll}
+SF & F & N & A & SA \\
+11 & 6 & 4 & 0 & 3
+\end{tabular}
+\end{adjustwidth}
+
+Despite the strong majority in favour of the approach recommended by CWG, this poll was deemed by the chair to be No Consensus, because the three strongly against votes came from implementers. Thus, the issue remains unresolved. Some interesting comments with arguments in favour and against can be found in \cite{P1018R17}.
+
+Regarding defining a rule for semantic ignorability, this is something we had already proposed in an earlier version of this paper \cite{P2552R0}, but the paper has not been seen by EWG yet.
+
+Regarding \tcode{__has_cpp_attribute}, we are not aware yet of an opened Core issue for this problem. This issue is not unique to C++; C has a similar problem with \tcode{__has_c_attribute} (C2x 6.10.1p9 and 6.7.12.*). Aaron Ballman told us that an NB comment will be filed proposing to amend each attribute specification to add ``if the implementation supports the attribute'' to make it clear that \tcode{__has_c_attribute} returns \tcode{0} for an attribute ignored by the implementation. C++ should follow suit.
+
+\section{Where do we go from here?}
+
+To resolve the ambiguities surrounding standard attributes, we should do the following:
+
+\begin{enumerate}
+\item Clarify whether or not an implementation is allowed to syntactically ignore a standard attribute,
+\item Clarify what we mean when we say that standard attributes are semantically ignorable,
+\item Clarify the behaviour of \tcode{__has_cpp_attribute} for attributes that the implementation ignores (either syntactically and semantically, or only semantically)
+\end{enumerate}
+
+With each question, the committee has different options. Below we describe the options we think are possible, discuss the tradeoffs that come with each option, and propose our recommendation.
+
+\subsection{Syntactic ignorability}
+
+We believe that the question about syntactic ignorability is the most urgent of the three questions to resolve, and should be dealt with in the C++23 timeframe. We have four options:
+
+\begin{itemize}
+\item \textbf{Option 1A.} Specify that standard attributes cannot be syntactically ignored (= adopt proposed resolution for \cite{CWG2538} as recommended by CWG).
+\item \textbf{Option 1B.} Specify that standard attributes can be syntactically ignored (= parsed as a \emph{balanced-token-sequence} and then skipped entirely; argument clause and appertainment do not need to be syntax checked; entities inside the argument clause do not need to be ODR-used).
+\item \textbf{Option 1C.} Specify that standard attributes are conditionally-supported (similar to 1B, but implementations have to explicitly document if they do not support a particular standard attribute).
+\item \textbf{Option 1D.} Do nothing (leave this ambiguous).
+\end{itemize}
+
+From our perspective, option 1D, while being the default if no consensus can be reached, is by far the worst. It does nothing to resolve \cite{CWG2538} and NB comment GB 9.12.1p6, and it does not even save the committee any time, as this debate surely will come around again. To fix the problem, we must choose 1A, 1B, or 1C.
+
+1A is the resolution that matches the original design intent of C++ attributes (according to the authors of \cite{N2761}), the resolution approved and recommended by CWG, and the option that had majority support in EWG every time there was a poll on it. We believe that 1A is the choice of sound language design. Standard attributes are not just arbitrary token sequences, even if they are \emph{semantically} ignorable. We should try hard not to add optional language features on the syntax level to the language, and we should avoid treating standard attributes as a bucket for any language feature that we do not care about being implemented. There is a small number of standard attributes. If we bothered to specify something in the
+standard, implementations should at least bother to syntax-check it. This will ensure safety, predictability, portability, and consistency across implementations. It is also broadly consistent with existing practice (see section \ref{subsec:syntax}). For all these reasons, we prefer option 1A.
+
+With regards to ODR-using the entities inside an \tcode{assume}, as discussed in detail in section \ref{subsubsec:odruse}, we believe that requiring the ODR-usage (1A) even if the assumption is semantically ignored is the option that is most consistent, portable, and matching existing practice with \tcode{__assume} and \tcode{__builtin_assume}. We do not want to introduce areas of gratuitous non-portability to the language such as leaving it up to the implementation whether or not a particular lambda capture gets triggered. We also do not believe that code should ever depend on whether or not a particular template instantiation happens; such usage is explicitly discouraged by CWG (see \cite{CWG2118}). We would like to remind the reader again that this issue is completely orthogonal to the semantics of \tcode{assume} and concerns any hypothetical attribute or attribute-like thing that contains an expression, such as the proposed \tcode{trivially_relocatable} attribute \cite{P1144R5}, or a hypothetical attribute-like syntax for contract annotations.
+ 
+1B is the option supported by the three compiler implementers that voted against the recommended resolution in the EWG electronic poll. Implementer concerns should of course always be taken seriously. In particular, we heard from Clang that their interpretation of [dcl.attr.grammar]/6 has always been 1B; that switching to 1A would be an unacceptable implementation burden in particular with regards to checking  appertainment;  that no users are actually asking for this status quo to change; and that existing practice should take priority over the original design. Interestingly, we have found that all major compilers (including Clang) are actually very good at syntax-checking the argument clause and appertainment (see existing practice discussion in sections \ref{subsubsec:args} and \ref{subsubsec:appertainment}), so we are not sure where the problem actually is.
+
+Another implementer concern is MSVC's comment that parsing expressions inside an attribute-argument clause is technically challenging for them and that they would instead prefer to treat them as token soup that can be skipped entirely (see discussion in section \ref{subsubsec:odruse}). Yet another argument in favour of option 1B is that the benefits of checking syntactic requirements for something with no semantic effect are negligible, and therefore the standard should not require them.
+
+1C has not been discussed before, but we consider it a superior alternative to 1B. It still allows the implementation to completely ignore a standard attribute and treat it as token soup, but it requires that the implementation explicitly documents that. We believe that this is more user-friendly than 1B.
+
+\subsection{Semantic ignorability}
+
+If we pick 1B or 1C (full syntactic ignorability), then the issue of defining semantic ignorability becomes a non-issue: syntactic ignorability implies semantic ignorability. This has the interesting consequence that it would be no longer necessary to hide the semantics of standard attribute in a ``recommended practice'' section or make the semantics explicitly optional: if attributes are ignorable on the syntax level, then any effects they have are completely optional by default, overriding any normative wording in [dcl.attr]. We can therefore move wording out of the ``Recommended practice'' sections and make it regular normative wording; we can simplify the notion of \emph{potentially-overlapping subobject} to just \emph{overlapping subobject}; and so forth. This transformation will simplify the standard, but not change its meaning, and thus does not need EWG's involvement.
+
+If we pick 1A (no syntactic ignorability), then we see the following options:
+
+\begin{itemize}
+\item \textbf{Option 2A.} Specify that standard attributes are meant to be semantically ignorable, and what this means exactly, normatively in the C++ standard.
+\item \textbf{Option 2B.} Specify this in a separate new Standing Document (SD) instead. This SD might also contain other design principles for new language features.
+\item \textbf{Option 2C.} Do nothing (leave this implicit).
+\end{itemize}
+
+We propose 2A. We believe that the rule we outlined in section \ref{subsec:semantic} accurately captures the current rules of semantic ignorability:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Given a well-formed program with well-defined behaviour, omitting all occurrences of a particular standard attribute shall result in a well-formed program whose observable behaviour is consistent with a correct execution of the original program.
+\end{adjustwidth}
+We therefore propose that this wording should go through CWG wording review and then be added to [dcl.attr]. Formally, it would only apply to the attributes that are already in the standard, and thus not add any new information per se, as those attributes are already defined to be semantically ignorable in different ways (see discussion section \ref{subsec:semantic}). However, the existence of such an explicit rule in the standard would be very helpful for codifying the intended behaviour of all future standard attributes, too: any new attribute proposal that does not want to follow the rule would have to carve out an explicit exception for itself. We believe this would be a strong enough deterrent for future proposals that they will stick to the rule, thus leading to consistent language design.
+
+Alternatively, one could hold the position that the C++ standard is not the place to try and constrain future evolution of the language, only to define what is and is not conforming with the current standard. Therefore, this rule could instead be published in a new standing document (option 2B). If this option were to be chosen, it would make most sense to create a new standard document for all such design guidelines for new core language features, not just for attributes.
+
+We strongly believe that on this question, too, doing nothing (2C) is the worst option. If the rules around semantic ignorability of standard attributes remain unwritten, the misunderstandings on this subject will continue, and the discussions around what should or should not be an attribute will keep wasting precious committee time.
+
+\subsection{\tcode{__has_cpp_attribute}}
+
+With regards to the intended behaviour of \tcode{__has_cpp_attribute}, we have the following options:
+
+\begin{itemize}
+\item \textbf{Option 3A.} Specify that \tcode{__has_cpp_attribute} should only return a positive value for a standard attribute if an an implementation has a useful implementation of its semantics (GCC behaviour).
+\item \textbf{Option 3B.} Specify that \tcode{__has_cpp_attribute} should also return a positive value for a standard attribute if an implementation can syntax-parse it, even if it does not implement any useful semantics (Clang and ICC behaviour).
+\item \textbf{Option 3C.} Do nothing (leave this ambiguous).
+\end{itemize}
+
+We propose 3A. \tcode{__has_cpp_attribute} is typically used in a preprocessor \tcode{\#if} to query whether the compiler implements a certain feature. Being able to query, for example, whether the compiler will honour the class layout changes introduced by a \tcode{no_unique_address}, is a lot more useful than merely querying if the compiler can recognise the syntax of the attribute. From what we have heard, this option is also in line with what WG14 intends to do for \tcode{__has_c_attribute}, and we should not end up in a world where the specifications of \tcode{__has_cpp_attribute} and \tcode{__has_c_attribute} contradict each other (but this particular point should probably be confirmed with SG22 before approving any wording on it).
+
+\section*{Acknowledgements}
+We would like to thank Aaron Ballman, Erich Keane, Jens Maurer, and Peter Brett for their very valuable comments on an earlier draft of this paper.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

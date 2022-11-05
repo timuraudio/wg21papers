@@ -19,7 +19,7 @@ Audience: & Evolution Working Group, Core Working Group
 
 
 \begin{abstract}
-There is a general notion in C++ that standard attributes should be ``ignorable''. However, currently there does not seem to be a common understanding of what this means exactly. The C++ standard itself is ambiguous on this point. In this paper, we consider three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \mbox{\tcode{__has_cpp_attribute}}. We discuss where and how the C++ standard is underspecified and why this is problematic, survey existing implementation practice, and propose different options to resolve the existing ambiguities.
+There is a general notion in C++ that standard attributes should be ignorable. However, currently there does not seem to be a common understanding of what ``ignorable`` actually means, and the C++ standard itself is ambiguous on this. In this paper, we consider three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \mbox{\tcode{__has_cpp_attribute}}. We discuss where and how the C++ standard is underspecified and why that is problematic, survey existing implementation practice, and propose different options to resolve existing ambiguities.
 \end{abstract}
 
 %\vspace{5mm}
@@ -28,37 +28,37 @@ There is a general notion in C++ that standard attributes should be ``ignorable'
 \label{sec:motivation}
 
 
-The C++ standard says the following about the ignorability of attributes ([dcl.attr.grammar]/6):
+The C++ standard says about the ignorability of attributes ([dcl.attr.grammar]/6):
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 For an \emph{attribute-token} (including an \emph{attribute-scoped-token})  not specified in this document, the behavior is implementation-defined. Any \emph{attribute-token} that is not recognized by the implementation is ignored.
 \end{adjustwidth}
 
-This wording is ambiguous. It is not clear at all whether this allows the implementation to ignore any  \emph{attribute-token not specified in this document} (i.e. only non-standard attributes), or any  \emph{attribute-token, including those specified in this document} (i.e. including standard attributes). This ambiguity is a known defect: there is a Core issue \cite{CWG2538} and a recent NB comment (GB 9.12.1p6).
+This wording is ambiguous. It is not clear at all whether it allows the implementation to ignore any  \emph{attribute-token not specified in this document} (i.e. only non-standard attributes), or any  \emph{attribute-token, including those specified in this document} (i.e. including standard attributes). This ambiguity is a known defect: there is a Core issue \cite{CWG2538} and a recent NB comment (GB 9.12.1p6).
 
-Standard attributes are a feature shared between C and C++. The C standard says the following:
+Standard attributes are a feature shared between C and C++. The C standard says:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 A strictly conforming program using a standard attribute remains
 strictly conforming in the absence of that attribute. [...] Standard attributes specified by this document can be parsed but ignored by an implementation without changing the semantics of a correct program; the same is not true for attributes not specified by this document.
 \end{adjustwidth}
 
-This makes it clear that the intent is for standard attributes to be ignorable, however it is not entirely clear what this means: ``parse but ignore'' implies that the compiler needs to at least parse them (i.e. it cannot treat a standard attribute as token soup). So the C standard might be talking about a different kind of ignorability than the C++ standard does (ignoring the \emph{attribute-token}). 
+It is clear from the C wording that the intent is for standard attributes to be ignorable, however it is not entirely clear what that means: ``parse but ignore'' implies that the compiler needs to at least parse them (i.e. it cannot treat a standard attribute as token soup). So the C standard might be talking about a different kind of ignorability than the C++ standard does (ignoring the \emph{attribute-token}).
 
-Before we can try to fix the defect in the C++ wording, we therefore need to answer the following two questions:
+Before we can try to fix the defect in the C++ wording, we therefore need to answer two questions:
 
 \begin{itemize}
 \item Should an implementation be allowed to ``ignore'' a standard attribute?
 \item What does it mean to ``ignore'' a standard attribute?
 \end{itemize}
 
-We will start by defining what ``ignore'' means. There are different properties of standard attributes that could or could not be declared ``ignorable'', with different consequences for the standard. In particular, we can draw a distinction between \emph{syntactic ignorability} (i.e. ignoring the form of the argument clause, the attribute's appertainment, and so forth) and \emph{semantic ignorability} (i.e. ignoring the effect that the attribute would have on the program).
+We will start by defining what ``ignore'' means. There are different properties of standard attributes that could or could not be declared ``ignorable'', with different consequences for the standard. In particular, we can draw a distinction between \emph{syntactic ignorability} (i.e., ignoring the form of the argument clause, the attribute's appertainment, and so forth) and \emph{semantic ignorability} (i.e., ignoring the effect that the attribute would have on the program).
 
 Whether standard attributes are \emph{syntactically} ignorable is a matter of contention. At the heart of the issue is the question whether a compiler is required to properly parse a standard attribute (which includes syntax-checking the argument clause, appertainment, and so forth) even if it then does not implement any semantics for that attribute.
 
-On the other hand, it is uncontroversial that attributes are meant to be \emph{semantically} ignorable. However, we have a problem here as well: it is not quite clear what this means exactly. The principle of semantic ignorability is currently some kind of ``gentlemens' agreement'' that originated in the standardisation of attribute syntax for C++11 \cite{N2761}. However, this ``agreement'' is not codified anywhere. The rule only exists implicitly and can be interpreted in different ways. This is not a good position to be in if one wants to arrive at a sound and consistent language design.
+On the other hand, it is uncontroversial that attributes are meant to be \emph{semantically} ignorable. However, we have a problem here as well: it is not quite clear what semantic ignorability means exactly. The principle of semantic ignorability is currently some kind of ``gentlemens' agreement'' that originated in the standardisation of attribute syntax for C++11 \cite{N2761}. However, this ``agreement'' is not codified anywhere. The rule exists only implicitly and can be interpreted in different ways. This is not a good position to be in if our goal is a sound and consistent language design.
 
-Finally, the behaviour of \tcode{__has_cpp_attribute} is ambiguous as well. In particular, it is unclear whether or not it should return a positive value for a standard attribute if the compiler is aware of the attribute and can parse correctly, even if it then does not implement any useful semantics for it. There is current implementation divergence on this point, so the standard should specify the correct behaviour.
+Finally, the behaviour of \tcode{__has_cpp_attribute} is ambiguous as well. In particular, it is unclear whether \mbox{\tcode{__has_cpp_attribute}} should return a positive value for a standard attribute if the compiler is aware of the attribute and can parse it correctly, but does not implement any useful semantics for it. There is current implementation divergence on this point, so the standard should specify the correct behaviour.
 
 \section{The status quo}
 
@@ -71,7 +71,7 @@ The C++ grammar defines the \emph{attribute-argument-clause} of an attribute to 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \tcode{( }\emph{balanced-token-seq}$_\emph{opt}$\tcode{ )}
 \end{adjustwidth}
-where \emph{balanced-token-seq} is any token sequence with balanced parentheses, square brackets, and curly braces. This allows a wide variety of possible arguments for standard attributes. It is up to the specification of each individual attribute to constrain this further ([dcl.attr.grammar]/4):
+where \emph{balanced-token-seq} is any token sequence with balanced parentheses, square brackets, and curly braces. This base grammar allows for a wide variety of possible arguments for standard attributes. It is up to the specification of each individual attribute to constrain the grammar for its arguments further ([dcl.attr.grammar]/4):
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 [...] The \emph{attribute-token} determines additional requirements on the \emph{attribute-argument-clause} (if any).

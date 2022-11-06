@@ -45,11 +45,11 @@ strictly conforming in the absence of that attribute. [...] Standard attributes 
 
 It is clear from the C wording that the intent is for standard attributes to be ignorable, however it is not entirely clear what that means: ``parse but ignore'' implies that the compiler needs to at least parse them (i.e. it cannot treat a standard attribute as token soup). So the C standard might be talking about a different kind of ignorability than the C++ standard does (ignoring the \emph{attribute-token}).
 
-Before we can try to fix the defect in the C++ wording, we therefore need to answer two questions:
+Before we can try to fix the defect in the C++ wording, we need to answer two questions:
 
 \begin{itemize}
-\item Should an implementation be allowed to ``ignore'' a standard attribute?
-\item What does it mean to ``ignore'' a standard attribute?
+\item Should an implementation be allowed to ignore a standard attribute?
+\item What does it mean to ignore a standard attribute?
 \end{itemize}
 
 We will start by defining what ``ignore'' means. There are different properties of standard attributes that could or could not be declared ``ignorable'', with different consequences for the standard. In particular, we can draw a distinction between \emph{syntactic ignorability} (i.e., ignoring the form of the argument clause, the attribute's appertainment, and so forth) and \emph{semantic ignorability} (i.e., ignoring the effect that the attribute would have on the program).

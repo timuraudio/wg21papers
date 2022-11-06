@@ -99,7 +99,9 @@ On the one hand, this is all normative wording, therefore it seems that a progra
 [[nodiscard(this?is!a:balanced%{token[sequence]})]] int h();  // Ill-formed or ignorable?
 \end{codeblock}
 
-Existing practice is that all of Clang, GCC, ICC, and MSVC are very good at diagnosing syntax errors in the argument clause. We tried many different ill-formed constructions like the above and got a diagnostic on all four compilers in all cases. The only questionable (but still conforming) case we found was \tcode{[[carries_dependency(some_argument)]]} on GCC, where the emitted diagnostic said that the \tcode{carries_dependency} attribute is not supported, but did not specifically call out the syntax error in the argument clause.
+\subsubsection*{\emph{Existing practice}}
+
+Clang, GCC, ICC, and MSVC are all very good at diagnosing syntax errors in the argument clause. We tried many different ill-formed constructions like the above and got a diagnostic on all four compilers in all cases. The only questionable (but still conforming) case we found was \tcode{[[carries_dependency(some_argument)]]} on GCC, where the emitted diagnostic said that the \tcode{carries_dependency} attribute is not supported, but did not specifically call out the syntax error in the argument clause.
 
 \subsubsection{Appertainment}
 \label{subsubsec:appertainment}
@@ -120,11 +122,13 @@ int main() {
 }
 \end{codeblock}
 
-Again, we surveyed existing practice on Clang, GCC, ICC, and MSVC. We found that generally, compilers are very good at diagnosing appertainment errors as well, but unlike with the argument clause we did find some false negatives. For example, no compiler diagnoses \tcode{[[deprecated]]} or \tcode{[[maybe_unused]]} on static data members, and GCC allows any standard attribute to appertain to an empty declaration at class scope without warning:
+\subsubsection*{\emph{Existing practice}}
+
+We found that generally, Clang, GCC, ICC, and MSVC are very good at diagnosing appertainment errors as well. But, unlike with argument clause errors, with appertainment errors we did find some false negatives on all four compilers. For example, no compiler diagnoses \tcode{[[deprecated]]} or \tcode{[[maybe_unused]]} on static data members, and GCC allows any standard attribute to appertain to an empty declaration at class scope without warning:
 \begin{codeblock}
 struct X { [[nodiscard]]; };  // no diagnostic on GCC
 \end{codeblock}
-The code triggering those false negatives is typically quite obscure. We could not find any cases where the failure to diagnose appertainment rules introduced a bug or changed the behaviour of a program.
+However, the code triggering those false negatives is typically quite obscure. We could not find any cases on any compiler where the failure to diagnose appertainment rules introduced a bug or changed the behaviour of a program.
 
 \subsubsection{Additional syntactic requirements}
 
@@ -144,7 +148,9 @@ A fallthrough statement may only appear within an enclosing \tcode{switch} state
 
 Just like with the other requirements, the question here is whether a program violating these syntactic requirements is ill-formed, or whether [dcl.attr.grammar]/6 allows to ignore such violations.
 
-Again, we looked at existing practice on Clang, GCC, ICC, and MSVC. The case of \tcode{likely} and \tcode{unlikely} appearing in the same \emph{attribute-specifier-seq} is diagnosed by all four compilers. On the other hand, the additional rules for \tcode{fallthrough} are not consistently diagnosed on all four compilers. In [dcl.attr.fallthrough]/3, the C++ standard gives the following example code, which contains four syntax errors explicitly marked as such:
+\subsubsection*{\emph{Existing practice}}
+
+The case of \tcode{likely} and \tcode{unlikely} appearing in the same \emph{attribute-specifier-seq} is reliably diagnosed by all of Clang, GCC, ICC, and MSVC. On the other hand, the additional rules for \tcode{fallthrough} are not consistently diagnosed. In [dcl.attr.fallthrough]/3, the C++ standard gives the following example code, which contains four syntax errors explicitly marked as such:
 \begin{codeblock}
 void f(int n) {
   void g(), h(), i();
@@ -225,9 +231,13 @@ Note that this question is not in any way related to the \emph{semantics} of the
 
 Note that changing the layout of a class through such a construct is nothing new: many other constructs like \tcode{[[no_unique_address]]}, \tcode{assert}, and others can also trigger changes in class layout. Note also that the last code example is a valid but highly contrived usage of assumptions. In real code, it is not useful to \emph{only} use a variable in an assumption, but not anywhere else in the surrounding code. So in real-world usage the assumption would never end up being the thing triggering the lambda capture (and if anyone were to write such code, they would have much bigger problems than the class layout of \tcode{struct X}).
 
-Let us look again at existing practice. The standard attribute version of \tcode{assume} is not implemented yet on any major compiler, as it was only added very recently for C++23. But three major compilers implement the same functionality as a built-in: \tcode{__assume} on MSVC and ICC, and \mbox{\tcode{__builtin_assume}} on Clang.
+\subsubsection*{\emph{Existing practice}}
 
-On all three compilers, the expression in the argument clause is always ODR-used, and the side effects of this ODR-use (such as lambda captures changing class layout) are always triggered. Interestingly, this also happens when the actual assumption is then semantically ignored by the compiler, as is the case on Clang for expressions that have side effects. All of this is consistent with the interpretation that standard attributes can only be ignored semantically, but not syntactically.
+The standard attribute version of \tcode{assume} is not implemented yet on any major compiler, as it was only added very recently for C++23. But three major compilers implement the same functionality as a built-in: \tcode{__assume} on MSVC and ICC, and \mbox{\tcode{__builtin_assume}} on Clang.
+
+On all three compilers, the expression in the argument clause is always ODR-used, and the side effects of this ODR-use (such as lambda captures changing class layout) are always triggered. Interestingly, this also happens when the actual assumption is then semantically ignored by the compiler, as is the case on Clang for expressions that have side effects.
+
+All of this is consistent with the interpretation that standard attributes can only be ignored semantically, but not syntactically.
 
 \subsection{Semantic ignorability}
 \label{subsec:semantic}
@@ -278,7 +288,9 @@ Codifying such a rule would help avoid future discussions about what should and 
 
 If we had codified a rule earlier, we might have ended up with a different and simpler rule, such as the aforementoned ``given a well-formed program with well-defined behaviour, omitting an attribute does not change the behaviour/semantics of the program''. As a result, we would perhaps never have standardised \mbox{\tcode{no_unique_address}}, which violates that rule, as an attribute. That ship has sailed with C++20, but codifying a rule now will help us being more mindful going forward.
 
-We should also look at existing practice: which attributes are actually being semantically ignored? We looked at the latest available versions of Clang, GCC, ICC, and MSVC. It seems that none of them implement any semantics for \tcode{carries_dependency} (so perhaps we should not have standardised \tcode{carries_dependency} either, but that is another story).
+\subsubsection*{\emph{Existing practice}}
+
+Which attributes are actually being semantically ignored by today's major compilers? Again, we looked at the latest available versions of Clang, GCC, ICC, and MSVC. It seems that none of them implement any semantics for \tcode{carries_dependency} (so perhaps we should not have standardised \tcode{carries_dependency} either, but that is another story).
 
 In addition, MSVC does not implement any semantics for \tcode{no_unique_address}, which has the unfortunate consequence that class layout is inconsistent across different compilers on the same platform.
 
@@ -300,6 +312,8 @@ Each \emph{has-attribute-expression} is replaced by a non-zero \emph{pp-number} 
 \end{adjustwidth}
 
 The wording is therefore contradictory. As a result, it is unclear whether or not \mbox{\tcode{__has_cpp_attribute}} should return a positive value if a compiler recognise and syntactically checks a standard attribute but then semantically ignores it. 
+
+\subsubsection*{\emph{Existing practice}}
 
 This is an area of implementation divergence. Clang and ICC both report a positive value for \mbox{\tcode{__has_cpp_attribute(carries_dependency)}}, even though they semantically ignore it; however, GCC reports \tcode{0} (and emits a diagnostic that it is being ignored). MSVC is inconsistent even with itself: it reports a positive value for \mbox{\tcode{__has_cpp_attribute(carries_dependency)}}, but \tcode{0} for \mbox{\tcode{__has_cpp_attribute(no_unique_address)}}, even though it does not implement semantics for either.
 

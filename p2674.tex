@@ -7,10 +7,10 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P2674R0 \\
-Date: &2022-10-14 \\
+Document \#: & D2674R1 \\
+Date: &2022-11-07 \\
 Project: & Programming Language C++ \\
-Audience: & Library Evolution Working Group, Library Working Group
+Audience: & Library Evolution Working Group, Library Working Group, Core Working Group
 \end{tabular}
 
 \begin{abstract}
@@ -110,20 +110,21 @@ In [meta.unary.prop], add a row to Table 48:
 \added{\tcode{T} is an implicit-lifetime type ([basic.types.general]).}
  &
 \small
-\added{\tcode{remove_}}\added{\tcode{all_}}\added{\tcode{extents_}}\added{\tcode{t<T>}}
-\added{ shall be a complete type or \emph{cv} \tcode{void}.}
+\added{\tcode{T}}\added{ shall be an array type or a complete type or \emph{cv} \tcode{void}.}
 \\
 \hline
 \end{tabularx}
+\vspace{3mm}
 
-%\section*{Document history}
+Add feature test macro \tcode{__cpp_lib_is_implicit_lifetime} with a suitable value to [version.syn] paragraph 2.
 
-%\begin{itemize}
-%\item \textbf{R0}, 2022-10-13: initial version
-%\end{itemize}
+\section*{Document history}
 
-%\section*{Acknowledgements}
-\pagebreak %MANUAL
+\begin{itemize}
+\item \textbf{R0}, 2022-10-14: Initial version.
+\item \textbf{R1}, 2022-11-07: Fixed preconditions wording; added feature test macro.
+\end{itemize}
+
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}
 \bibliography{ref}

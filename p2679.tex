@@ -19,14 +19,14 @@
 
 \begin{tabular}{ll}
 Document \#: & D2679R1 \\
-Date: & 2022-11-07\\
+Date: & 2022-11-09\\
 Project: & Programming Language C++ \\
-Audience: & Library Evolution Working Group, Library Working Group, Core Working Group
+Audience: & Core Working Group, Library Working Group
 \end{tabular}
 
 
 \begin{abstract}
-\tcode{std::start_lifetime_as}, a facility to explicitly start the lifetime of an object of implicit-lifetime type inside a block of suitably aligned storage, was introduced in \cite{P2590R2} and voted into C++23. However, it has since emerged that for array types, the current API is broken and inconsistent. This paper proposes the necessary fixes.
+\tcode{std::start_lifetime_as}, a facility to explicitly start the lifetime of an object of implicit-lifetime type inside a block of suitably aligned storage, was introduced in \cite{P2590R2} and voted into C++23. However, it has since emerged that for array types, the current API is inconsistent and incomplete. This paper proposes the necessary fixes.
 \end{abstract}
 
 \section{The problem}
@@ -36,11 +36,13 @@ Audience: & Library Evolution Working Group, Library Working Group, Core Working
 
 This API is inconsistent with other APIs in the standard library that create objects and accept both array and non-array types, such as \tcode{std::make_shared} and \tcode{std::make_unique}. These have a version for non-array types, a version for array types of known bound, and a version for array types of unknown bound, respectively, all with the same name.
 
-Further, the current naming is also inconsistent with itself in multiple ways: the overloads that work for arrays of \emph{unknown} bound have the suffix \tcode{_array} in the name, but the overloads that work for arrays of \emph{known} bound do not. This does not make any sense and is highly confusing for users.
+The current naming is also inconsistent with itself in multiple ways: the overloads that work for arrays of \emph{unknown} bound have the suffix \tcode{_array} in the name, but the overloads that work for arrays of \emph{known} bound do not. This does not make any sense and is highly confusing for users.
 
 In the same way that the naming is inconsistent with existing standard APIs and also with itself, the template parameters are also inconsistent. For \tcode{std::start_lifetime_as}, when used with an array type \tcode{U[N]} of known bound, the template argument that the user needs to provide is the type \tcode{U[N]} of the object being created (for example, \tcode{std::start_lifetime_as<int[16]>}), while for \tcode{std::start_lifetime_as_array}, the template argument is not the type \tcode{U[]} of the object being created, but the type of its elements \tcode{U}.
 
-Finally, the overloads for arrays of \emph{unknown} bound (the ones with the suffix \tcode{_array}) return a pointer to the first element of the array, while the overloads without the suffix \tcode{_array}, when used with an array type of known bound, return a pointer to the array itself. In other words, a call to \tcode{std::start_lifetime_as_array<int>(p, 16)} will return an \tcode{int*}, but at the same time a call to \tcode{std::start_lifetime_as<int[16]>(p)} will return an \tcode{int(*)[16]}, which is awkward and inconsistent.
+Further, the overloads for arrays of \emph{unknown} bound (the ones with the suffix \tcode{_array}) return a pointer to the first element of the array, while the overloads without the suffix \tcode{_array}, when used with an array type of known bound, return a pointer to the array itself. In other words, a call to \tcode{std::start_lifetime_as_array<int>(p, 16)} will return an \tcode{int*}, but at the same time a call to \tcode{std::start_lifetime_as<int[16]>(p)} will return an \tcode{int(*)[16]}. This is inconsistent and awkward.
+
+Finally, the version for arrays of unknown bound currently does not work with the value \tcode{0} for its second parameter; passing \tcode{0} is undefined behaviour. This makes it unnecessarily difficult and error-prone for generic code to interact with this API.
 \section{Proposed solution}
 \label{sec:solution}
 
@@ -50,15 +52,14 @@ We propose to fix the specification of \tcode{std::start_lifetime_as} as follows
 \item Change the name of the existing \mbox{\tcode{std::start_lifetime_as_array<T>}} overloads for array types of unknown bound to \mbox{\tcode{std::start_lifetime_as<T>}}, matching the name of the other overloads.
 \item Make the overloads for array types of unknown bound return a pointer to the created array instead of a pointer to the first element.
 \item Adding \emph{Mandates} clauses to all overloads to make the versions taking one argument compile only with non-array types and array types of known bound, and the versions taking two arguments compile only with array types of unknown bound.
+\item For the overloads for array types of unknown bound, allow the value \tcode{0} for the second parameter. In this case, return a pointer which compares equal to the pointer passed in but which may only be used in the manner which past-the-end pointers may be used.
 \end{itemize}
 
 This leaves us with a single overload set that covers all three cases (non-arrays, arrays of known bound, and arrays of unknown bound). This is clean, user-friendly, and consistent with other APIs in the standard library that create objects and accept both array and non-array types, such as \tcode{std::make_shared} and \tcode{std::make_unique}.
 
 In each case, the name of the function is now \tcode{std::start_lifetime_as}, the template parameter is the type of the object being created, and the return value is a pointer to the object being created.
 
-We consider this proposal a critical bugfix for \tcode{std::start_lifetime_as}. We therefore strongly recommend that it should be adopted in the C++23 timeframe, and that \tcode{std::start_lifetime_as} should not be shipped without this bugfix applied.
-
-This proposal fixes a submitted NB comment targeting C++23.
+This proposal resolves NB comments CA-086 and GB-087 targeting C++23.
 
 \section{Tony table}
 
@@ -73,6 +74,9 @@ unsigned char* buf = /* ... */;
 int* p1 = start_lifetime_as<int>(buf);
 int(* p2)[10] = start_lifetime_as<int[10]>(buf);
 int* p3 = start_lifetime_as_array<int>(buf, 10);
+
+// Ill-formed:
+int* p4 = start_lifetime_as_array<int>(buf, 0);
 \end{lstlisting}&
 \begin{lstlisting}[basicstyle=\footnotesize \ttfamily]
 unsigned char* buf = /* ... */;
@@ -80,6 +84,9 @@ unsigned char* buf = /* ... */;
 int* p1 = start_lifetime_as<int>(buf);
 int(* p2)[10] = start_lifetime_as<int[10]>(buf);
 int(* p3)[] = start_lifetime_as<int[]>(buf, 10);
+
+// Well-formed, but \tcode{p4} cannot be dereferenced:
+int* p4 = start_lifetime_as_array<int>(buf, 0);
 \end{lstlisting} \\
 \hline
 \end{tabular} 
@@ -91,15 +98,16 @@ The design intent is that using the wrong interface with the wrong type should l
 
 In the initial version of the paper, we proposed that for the array case (known or unknown bound), \tcode{std::start_lifetime_as} should return a pointer to the first element of the array rather than a pointer to the array itself. It has since been pointed out that if we do that, there will be no way to obtain a pointer to the array itself. In the case of an array of known bound, this also would mean that the compile-time information about the size of the array, which is embedded in the type, would be lost. LEWG asked to revise the paper such that for the array case (known or unknown bound), \tcode{std::start_lifetime_as} returns a pointer to the created array. This enables passing the created array by reference, preserving the size information in the type:
 
-\pagebreak %MANUAL
-
 \begin{codeblock}
 void processBlock(Data (&block)[8]);
 void doStuff() {
+  // ...
   processBlock(*std::start_lifetime_as<Data[8]>(dataFromNetwork));
 }
 \end{codeblock}
 It also makes the overload set even more consistent, because now \tcode{std::start_lifetime_as} always returns a pointer to the created object.
+
+The case of the second parameter being \tcode{0} is intended to be consistent with other cases where we refer to dynamic arrays with no elements, such as \tcode{new int [0];}. This is well-formed and returns a pointer that cannot be dereferenced.
 \section{Proposed wording}
 \label{sec:wording}
 
@@ -152,8 +160,6 @@ Modify [obj.lifetime] as follows:
 
 \emph{Returns:} A pointer to $a$.
 
-\pagebreak % MANUAL
-
 \small\tcode{template<class T>} \\
 \small\phantom{\tcode{xx}}\tcode{T* start_lifetime_as}\removed{_\tcode{array}}\tcode{(void* p, size_t n) noexcept;} \\
 \small\tcode{template<class T>} \\
@@ -166,7 +172,7 @@ Modify [obj.lifetime] as follows:
 
 \added{\emph{Mandates:} \tcode{T} is an array type of unknown bound \tcode{U[]}.}
 
-\emph{Preconditions:} \tcode{n > 0} is \tcode{true}.\added{ [\tcode{p}, \tcode{(char*)p + (n * sizeof(U))}) denotes a region of allocated storage that is a subset of the region of storage reachable through ([basic.compound]) \tcode{p} and suitably aligned for an array of \tcode{U}.}
+\emph{Preconditions:} \removed{\tcode{n > 0} is \tcode{true}.}\added{ [\tcode{p}, \tcode{(char*)p + (n * sizeof(U))}) denotes a region of allocated storage that is a subset of the region of storage reachable through ([basic.compound]) \tcode{p} and suitably aligned for an array of \tcode{U}.}
 
 \emph{Effects:} \removed{Equivalent to: \tcode{return *start}_\tcode{lifetime}_\tcode{as<U>(p);} where \tcode{U} is the type ``array of \tcode{n} \tcode{T}''.}\added{Implicitly creates an object $a$ as if by a call to \tcode{start}_\tcode{lifetime}_\tcode{as<U[n]>;} where \tcode{n} is treated as a core constant expression.}
 
@@ -180,7 +186,7 @@ Modify [obj.lifetime] as follows:
 
 \begin{itemize}
 \item \textbf{R0}, 2022-10-15: Initial version.
-\item \textbf{R1}, 2022-11-07: Incorporated changes requested by LEWG.
+\item \textbf{R1}, 2022-11-09: For arrays of unknown bound, made \tcode{std::start_lifetime_as} return a pointer to the array rather than a pointer to the first element (as requested by LEWG) and allowed the value \tcode{0} as the second parameter (incorporating a resolution for NB comment CA-086).
 \end{itemize}
 
 \section*{Acknowledgements}

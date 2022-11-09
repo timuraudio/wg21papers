@@ -8,9 +8,9 @@
 
 \begin{tabular}{ll}
 Document \#: & D2674R1 \\
-Date: &2022-11-07 \\
+Date: &2022-11-09 \\
 Project: & Programming Language C++ \\
-Audience: & Library Evolution Working Group, Library Working Group, Core Working Group
+Audience: & Core Working Group, Library Working Group
 \end{tabular}
 
 \begin{abstract}
@@ -39,8 +39,7 @@ There are certain operations that are only valid for implicit-lifetime types. In
 
 Unfortunately, C++ lacks the ability to programmatically check whether a type is an implicit-lifetime type, and to constrain functions using such operations to only be valid for such types. This is particularly important to help catch a possible regression: if a type that was once implicit-lifetime mistakenly loses that property as a part of a change, this silently turns previously correct code into undefined behaviour.
 
-To fix this issue, this paper proposes to add the type trait \tcode{std::is_implicit_lifetime<T>}. Because this is necessary to avoid a class of bugs, we consider this proposal a bugfix, rather than a new feature request, and propose to adopt it in the C++23 timeframe. This fixes a submitted NB comment.
-\pagebreak %MANUAL
+To fix this issue, this paper proposes to add the type trait \tcode{std::is_implicit_lifetime<T>}. This resolves NB comment GB-089 for C++23.
 
 In addition, the proposed type trait will be very useful for adding container support for implicit lifetime types \cite{P1010R1}.
 
@@ -110,7 +109,7 @@ In [meta.unary.prop], add a row to Table 48:
 \added{\tcode{T} is an implicit-lifetime type ([basic.types.general]).}
  &
 \small
-\added{\tcode{T}}\added{ shall be an array type or a complete type or \emph{cv} \tcode{void}.}
+\added{\tcode{T}}\added{ shall be a complete type, $cv$ \tcode{void}, or an array of unknown bound.}
 \\
 \hline
 \end{tabularx}
@@ -118,11 +117,12 @@ In [meta.unary.prop], add a row to Table 48:
 
 Add feature test macro \tcode{__cpp_lib_is_implicit_lifetime} with a suitable value to [version.syn] paragraph 2.
 
+\pagebreak % MANUAL
 \section*{Document history}
 
 \begin{itemize}
 \item \textbf{R0}, 2022-10-14: Initial version.
-\item \textbf{R1}, 2022-11-07: Fixed preconditions wording; added feature test macro.
+\item \textbf{R1}, 2022-11-09: Fixed preconditions wording; added feature test macro.
 \end{itemize}
 
 \renewcommand{\bibname}{References}

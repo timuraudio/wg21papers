@@ -7,8 +7,8 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D2674R1 \\
-Date: &2022-11-09 \\
+Document \#: & P2674R1 \\
+Date: &2022-11-11 \\
 Project: & Programming Language C++ \\
 Audience: & Core Working Group, Library Working Group
 \end{tabular}
@@ -109,20 +109,26 @@ In [meta.unary.prop], add a row to Table 48:
 \added{\tcode{T} is an implicit-lifetime type ([basic.types.general]).}
  &
 \small
-\added{\tcode{T}}\added{ shall be a complete type, $cv$ \tcode{void}, or an array of unknown bound.}
+\added{\tcode{T}}\added{ shall be an array type, a complete type, or $cv$ \tcode{void}.}
 \\
 \hline
 \end{tabularx}
 \vspace{3mm}
 
-Add feature test macro \tcode{__cpp_lib_is_implicit_lifetime} with a suitable value to [version.syn] paragraph 2.
+Insert the following to [version.syn], header \tcode{<version>} synopsis:
+
+\begin{addedblock}
+\begin{codeblock}
+#define ___cpp_lib_is_implicit_lifetime 20XXXXL  // also in \tcode{<type_traits>}
+\end{codeblock}
+\end{addedblock}
 
 \pagebreak % MANUAL
 \section*{Document history}
 
 \begin{itemize}
 \item \textbf{R0}, 2022-10-14: Initial version.
-\item \textbf{R1}, 2022-11-09: Fixed preconditions wording; added feature test macro.
+\item \textbf{R1}, 2022-11-11: Fixed preconditions wording; added feature test macro.
 \end{itemize}
 
 \renewcommand{\bibname}{References}

@@ -11,8 +11,8 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D2552R1 \\
-Date: & 2022-11-07\\
+Document \#: & P2552R1 \\
+Date: & 2022-11-15\\
 Project: & Programming Language C++ \\
 Audience: & Evolution Working Group, Core Working Group
 \end{tabular}
@@ -233,9 +233,9 @@ Note that the question of whether an expression must be ODR-used is in no way re
 
 \subsubsection*{\emph{Existing practice}}
 
-The standard attribute version of \tcode{assume} is not implemented yet on any major compiler, as it was added only very recently for C++23. But three major compilers implement the same functionality as a built-in: \tcode{__assume} on MSVC and ICC, and \mbox{\tcode{__builtin_assume}} on Clang.
+\tcode{assume} was added recently for C++23. GCC already implements it with the standard attribute syntax. The other three major compilers implement the same functionality as a built-in: \tcode{__assume} on MSVC and ICC, and \mbox{\tcode{__builtin_assume}} on Clang.
 
-On all three compilers, the expression in the argument clause is always ODR-used, and the side effects of this ODR-use (such as lambda captures changing class layout) are always triggered. Interestingly, the ODR-use also happens when the actual assumption is then semantically ignored by the compiler, as is the case on Clang for expressions that have side effects. This behaviour is consistent with the interpretation that standard attributes can be ignored only semantically, but not syntactically.
+On all four compilers, regardless of whether the attribute syntax or the built-in syntax is used, the expression in the argument clause is always ODR-used, and the side effects of this ODR-use (such as lambda captures changing class layout) are always triggered. Interestingly, the ODR-use also happens when the actual assumption is then semantically ignored by the compiler, as is the case on Clang for expressions that have side effects. This behaviour is consistent with the interpretation that standard attributes can be ignored only semantically, but not syntactically.
 
 \subsection{Semantic ignorability}
 \label{subsec:semantic}
@@ -299,28 +299,28 @@ In order to find a rule for semantic ignorability that matches existing practice
 \subsubsection{Regions of program behaviour}
 \label{subsubsec:framework}
 
-The standard distinguishes undefined behaviour, unspecified behaviour, and implementation-defined behaviour. Let us call the behaviour that falls into none of these regions, i.e. the behaviour that is fully specified by the standard itself, the \emph{essential behaviour} of a C++ program. An example for essential behaviour is \tcode{sizeof(char)}, which must evaluate to \tcode{1}.
+The standard distinguishes undefined behaviour, unspecified behaviour, and implementation-defined behaviour. Let us call the behaviour that falls into none of these regions, i.e. the behaviour that is fully specified by the standard itself, the \emph{mandated behaviour} of a C++ program. An example for mandated behaviour is \tcode{sizeof(char)}, which must evaluate to \tcode{1}.
 
 We can then distinguish the following regions of program behaviour:
 
 \begin{figure}[!htbp]
-  \includegraphics[width=0.55\linewidth]{images/p2552_essential_behaviour.png}
+  \includegraphics[width=0.55\linewidth]{images/p2552_mandated_behaviour.png}
   \centering
   \caption{Regions of behaviour of a C++ program}
   \label{fig:behaviour}
 \end{figure}
 
-The \emph{specified behaviour} is the union of essential behaviour (specified by the standard) and implementation-defined behaviour (specified by the implementation). The \emph{defined behaviour}, i.e. behaviour that is not undefined, is the union of specified behaviour and unspecified behaviour. Finally, the full set of behaviour exhibited by a C++ program is the union of defined behaviour and undefined behaviour.
+The \emph{specified behaviour} is the union of mandated behaviour (specified by the standard) and implementation-defined behaviour (specified by the implementation). The \emph{defined behaviour}, i.e. behaviour that is not undefined, is the union of specified behaviour and unspecified behaviour. Finally, the full set of behaviour exhibited by a C++ program is the union of defined behaviour and undefined behaviour.
 
 \subsubsection{Proposed rule for semantic ignorability}
 \label{subsubsec:semanticrule}
 With this framework in place, we can now formulate a rule for semantic ignorability of standard attributes:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-Given a well-formed program, omitting all occurrences of a particular standard attribute shall result in a well-formed program that exhibits the same \emph{essential behaviour} as the original program.
+Given a well-formed program, omitting all occurrences of a particular standard attribute shall result in a well-formed program that exhibits the same \emph{mandated behaviour} as the original program.
 \end{adjustwidth}
 
-It is easy to see that the above rule works for all categories of standard attributes we identified in section \ref{subsubsec:attributecategories}: semantically ignoring any of them does not change the \emph{essential behaviour} of a C++ program in any way. For \tcode{no_unique_address} in particular, [intro.object] says:
+It is easy to see that the above rule works for all categories of standard attributes we identified in section \ref{subsubsec:attributecategories}: semantically ignoring any of them does not change the \emph{mandated behaviour} of a C++ program in any way. For \tcode{no_unique_address} in particular, [intro.object] says:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 A \emph{potentially-overlapping subobject} is either:
 \begin{itemize}
@@ -337,13 +337,13 @@ An object has nonzero size if it
 Otherwise, if the object is a base class subobject of a standard-layout class type with no non-static data members, it has zero size. Otherwise, the circumstances under which the object has zero size are implementation-defined. 
 \end{adjustwidth}
 
-Therefore, in the code example above, whether \tcode{sizeof(Y) == sizeof(int)} holds is implementation-defined, and therefore neither option constitutes essential behaviour of the program.
+Therefore, in the code example above, whether \tcode{sizeof(Y) == sizeof(int)} holds is implementation-defined, and therefore neither option constitutes mandated behaviour of the program.
 
 Conversely, for \tcode{alignas}, which sits in the same space in the grammar as standard attributes, but is not an attribute, [dcl.align]/4 says:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 The alignment requirement of an entity is the strictest nonzero alignment specified by its \emph{alignment-specifier}s, if any; otherwise, the \emph{alignment-specifier}s have no effect.
 \end{adjustwidth}
-The effect that the alignment requirement of an entity has is fully defined by the standard: it constitutes essential behaviour of the program. Therefore, \tcode{alignas} cannot be an attribute.
+The effect that the alignment requirement of an entity has is fully defined by the standard: it constitutes mandated behaviour of the program. Therefore, \tcode{alignas} cannot be an attribute.
 
 Codifying the proposed rule would enable consistent language design going forward, which would greatly simplify future discussions about what should and should not be an attribute. Having such a rule would also help guide language design for other language features such as Contracts \cite{P2521R2}. One of the possible syntaxes for contract annotations is an attribute-like syntax \cite{P2487R0}. If we choose this syntax, we should be consistent with attribute ignorability semantics, too. We believe that the framework we developed here for standard attributes can be used for specifying contracts checks as well.
 
@@ -446,7 +446,7 @@ We propose 1A. This option is the resolution that matches the original design in
 
 With regards to parsing expressions inside an attribute, if we do not choose 1A, then a compiler is allowed to silently accept an ill-formed expression, and the code will compile and appear to work fine; when we go to port the code to another compiler, the code will break. From a production and maintenance perspective, anything but 1A therefore seems like a very bad idea. 
  
-With regards to ODR-using the entities inside such an expression, as discussed in detail in section \ref{subsubsec:odruse}, we believe that 1A, i.e. requiring the ODR-usage even if the assumption is semantically ignored, is the option that is most consistent and portable. It also matches existing practice with \tcode{__assume} and \tcode{__builtin_assume}. Leaving it up to the implementation whether a particular template instantiation happens, or whether a particular lambda capture gets triggered, would introduce areas of gratuitous non-portability to the language. We must avoid this. 
+With regards to ODR-using the entities inside such an expression, as discussed in detail in section \ref{subsubsec:odruse}, we believe that 1A, i.e. requiring the ODR-usage even if the assumption is semantically ignored, is the option that is most consistent and portable. It also matches existing practice with the existing implementations of \tcode{assume}. Leaving it up to the implementation whether a particular template instantiation happens, or whether a particular lambda capture gets triggered, would introduce areas of gratuitous non-portability to the language. We must avoid this. 
 
 We would like to remind the reader that this issue is completely orthogonal to the semantics of \tcode{assume}. It concerns any hypothetical attribute or attribute-like thing that contains an expression, which includes the proposed \tcode{trivially_relocatable} attribute \cite{P1144R5} and a hypothetical attribute-like syntax for Contracts \cite{P2487R0}.
  
@@ -470,13 +470,13 @@ If we pick 1A (no syntactic ignorability), then we see the following options:
 
 We propose 2A. We believe that the rule we outlined in section \ref{subsubsec:semanticrule} accurately captures the current rules of semantic ignorability:
 \begin{adjustwidth}{0.5cm}{0.5cm}
-Given a well-formed program, omitting all occurrences of a particular standard attribute shall result in a well-formed program that exhibits the same \emph{essential behaviour} as the original program.
+Given a well-formed program, omitting all occurrences of a particular standard attribute shall result in a well-formed program that exhibits the same \emph{mandated behaviour} as the original program.
 \end{adjustwidth}
-We therefore propose that this wording should go through CWG wording review and then be added to [dcl.attr], and the required concept of \emph{essential behaviour} that we developed in section \ref{subsubsec:framework} added to [intro.defs]. Formally, it would only apply to the attributes that are already in the standard, and thus not add any new information per se, as those attributes are already defined to be semantically ignorable in different ways (see discussion in section \ref{subsec:semantic}). However, the existence of such an explicit rule in the standard would be very helpful for codifying the intended behaviour of all future standard attributes, too: any new attribute proposal that does not want to follow the rule would have to carve out an explicit exception for itself. We believe that the presence of the normative rule would be a strong enough deterrent for future proposals that they will stick to it, thus leading to consistent language design.
+We therefore propose that this wording should go through CWG wording review and then be added to [dcl.attr], and the required concept of \emph{mandated behaviour} that we developed in section \ref{subsubsec:framework} added to [intro.defs]. Formally, it would only apply to the attributes that are already in the standard, and thus not add any new information per se, as those attributes are already defined to be semantically ignorable in different ways (see discussion in section \ref{subsec:semantic}). However, the existence of such an explicit rule in the standard would be very helpful for codifying the intended behaviour of all future standard attributes, too: any new attribute proposal that does not want to follow the rule would have to carve out an explicit exception for itself. We believe that the presence of the normative rule would be a strong enough deterrent for future proposals that they will stick to it, thus leading to consistent language design.
 
 Alternatively, one could hold the position that the C++ standard is not the place to try and constrain future evolution of the language, only to define what is and is not conforming with the current standard. Therefore, this rule could instead be published in a new standing document (option 2B). If this option were to be chosen, it would make most sense to create a new standing document for all such design guidelines for new core language features, not just for attributes.
 
-Doing nothing (2C) means that the standard will continue to say nothing about the semantic ignorability of standard attributes. This means that misunderstandings on this subject will continue, and the discussions around what should or should not be an attribute will keep wasting precious committee time. We believe that choosing 2C only makes sense if we decide to throw away the idea of ignorability of attributes as a design guideline entirely, and consciously allow new features using attributes syntax to modify the \emph{essential behaviour} of a program. In other words, 2C is the correct choice if we want to open up the design space of attributes to any feature that could be implemented as a keyword, but that we do not want to reserve an actual keyword for, and that cannot (or should not) be specified as a contextual keyword for technical reasons.
+Doing nothing (2C) means that the standard will continue to say nothing about the semantic ignorability of standard attributes. This means that misunderstandings on this subject will continue, and the discussions around what should or should not be an attribute will keep wasting precious committee time. We believe that choosing 2C only makes sense if we decide to throw away the idea of ignorability of attributes as a design guideline entirely, and consciously allow new features using attributes syntax to modify the \emph{mandated behaviour} of a program. In other words, 2C is the correct choice if we want to open up the design space of attributes to any feature that could be implemented as a keyword, but that we do not want to reserve an actual keyword for, and that cannot (or should not) be specified as a contextual keyword for technical reasons.
 
 \subsection{\tcode{__has_cpp_attribute}}
 
@@ -491,7 +491,7 @@ With regards to the intended behaviour of \tcode{__has_cpp_attribute}, we have t
 We propose 3A. \tcode{__has_cpp_attribute} is typically used in a preprocessor \tcode{\#if} to query whether the compiler implements a certain feature. Being able to query, for example, whether the compiler will honour the class layout changes introduced by a \tcode{no_unique_address}, is a lot more useful than merely querying if the compiler can recognise the syntax of the attribute. From what we have heard, this option is also in line with what WG14 intends to do for \tcode{__has_c_attribute}, and we should not end up in a world where the specifications of \tcode{__has_cpp_attribute} and \tcode{__has_c_attribute} contradict each other (but this particular point should  be confirmed with SG22 before approving any wording on it).
 
 \section*{Acknowledgements}
-We would like to thank John Lakos for his thorough review of the paper and for contributing the idea of regions of program behaviour and the concept of \emph{essential behaviour}; Corentin Jabot for contributing the code example where removing a \mbox{\tcode{[[no_unique_address]]}} attribute can cause a program to stop compiling; and Aaron Ballman, Erich Keane, Jens Maurer, and Peter Brett for their valuable comments on earlier drafts of this paper.
+We would like to thank John Lakos for his thorough review of the paper and for contributing the idea of regions of program behaviour and the concept of \emph{mandated behaviour}; Corentin Jabot for contributing the code example where removing a \mbox{\tcode{[[no_unique_address]]}} attribute can cause a program to stop compiling; and Aaron Ballman, Erich Keane, Jens Maurer, and Peter Brett for their valuable comments on earlier drafts of this paper.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

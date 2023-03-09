@@ -14,71 +14,69 @@ Audience: & Library Evolution Working Group
 \end{tabular}
 
 \begin{abstract}
-The Lakos Rule is a longstanding design principle in the C++ standard library. It stipulates that a function with a narrow contract should not be  \tcode{noexcept}, even if it is known to not throw when called with valid input. In this paper, we present a case study showing why the Lakos Rule is still useful and important today, and why we should not remove it, at least not until we have standardised a C++ Contracts facility that offers a superior alternative.
+The Lakos Rule is a longstanding design principle in the C++ Standard Library. It stipulates that a function with a narrow contract should not be \tcode{noexcept}, even if it is known to not throw when called with valid input. This paper presents a case study showing why the Lakos Rule is still useful and important today and why we should not remove it, at least not until we have standardised a C++ Contracts facility that offers a superior alternative.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
 
-C++ functions -- in the standard library or in other places -- can have \emph{preconditions}, which are a form of \emph{contract}. A function that has no preconditions on its input values -- i.e. a function that has defined behaviour for any input values -- is said to have a \emph{wide contract}.  If such a function is known to never throw an exception, it should be marked as \tcode{noexcept}. An example of such a function in the C++ standard library is \tcode{std::get(std::array)}.
+C++ functions --- in the Standard Library or in other places --- can have \emph{preconditions}, which are a form of \emph{contract}. A function that has no preconditions on its input values --- i.e., a function that has defined behaviour for any input values --- is said to have a \emph{wide contract}.  If such a function is known to never throw an exception, that function should be marked as \tcode{noexcept}. An example of such a function in the C++ Standard Library is \tcode{std::get(std::array)}.
 
-By contrast, a function that has preconditions on its input values -- i.e. a function that has undefined behaviour for some input values, which are considered \emph{invalid} -- is said to have a \emph{narrow contract}. An example of a function with a narrow contract in the C++ standard library is \tcode{std::vector::operator[]}.
+By contrast, a function that has preconditions on its input values --- i.e., a function that has undefined behaviour for some input values, which are considered \emph{invalid} --- is said to have a \emph{narrow contract}. An example of a function with a narrow contract in the C++ standard library is \tcode{std::vector::operator[]}.
 
-It has been a longstanding design principle in the C++ standard library that a function with a narrow contract should not be marked as \tcode{noexcept}, even if it is known to never throw an exception for \emph{valid} input values. In the latter case, it should merely be specified as ``Throws: nothing''. Not marking such a function as \tcode{noexcept} allows for testing strategies that involve throwing exceptions as a way of diagnosing \emph{contract violations} -- i.e. bugs introduced by calling the function with invalid input values (calling it \emph{out of contract}). This design principle is also known as the \emph{Lakos Rule}.
+A longstanding design principle in the C++ Standard Library has been that a function with a narrow contract should not be marked as \tcode{noexcept}, even if it is known to never throw an exception for \emph{valid} input values. In the latter case, the function should merely be specified as ``Throws: nothing''. Not marking such a function as \tcode{noexcept} allows for testing strategies that involve throwing exceptions as a way of diagnosing \emph{contract violations} --- i.e., bugs introduced by calling the function with invalid input values (calling it \emph{out of contract}). This design principle is also known as the \emph{Lakos Rule}.
 
-The Lakos Rule was first proposed in \cite{N3248}, then adopted with \cite{N3279}. An updated version of the rule was codified into policy in \cite{P0884R0}. See \cite{O'Dwyer2018} for a more detailed summary.
+The Lakos Rule was first proposed in \cite{N3248} and adopted with \cite{N3279}. An updated version of the rule was codified into policy in \cite{P0884R0}. See \cite{O'Dwyer2018} for a more detailed summary.
 
-More recently, it has been argued in \cite{P1656R2} that the Lakos Rule should be abandoned as a design principle, and that functions which are known to never throw for valid input values should always be marked as \tcode{noexcept}, regardless of whether they have a wide or a narrow contract. It has been further proposed in \cite{P2148R0} to adopt a new standing document with design guidelines for the evolution of the C++
-Standard Library that move away from the Lakos Rule.
+More recently, the authors of \cite{P1656R2} argued that the Lakos Rule should be abandoned as a design principle and that functions that are known to never throw for valid input values should always be marked as \tcode{noexcept}, regardless of whether they have a wide or a narrow contract. Further, the authors of \cite{P2148R0} proposed adopting a new standing document with design guidelines for the evolution of the C++ Standard Library that move away from the Lakos Rule.
 
-In section \ref{sec:casestudy} of this paper, we present a case study to demonstrate that the Lakos Rule is still useful and important today, as it can help detect and prevent bugs in different kinds of code bases. In section \ref{sec:contracts} we argue further that a C++ Contracts facility might offer a superior solution to the problem of testing for contract violations, and that we might want to reconsider the Lakos Rule after we have standardised such a facility; but that we should not remove the Lakos Rule before standardising Contracts as there is currently no viable alternative for cross-platform codebases that rely on the Lakos Rule to test for contract violations.
+In section \ref{sec:casestudy} of this paper, we present a case study to demonstrate that the Lakos Rule is still useful and important today because it can help detect and prevent bugs in different kinds of code bases. In section \ref{sec:contracts}, we argue further that a C++ Contracts facility might offer a superior solution to the problem of testing for contract violations and that we might want to reconsider the Lakos Rule after we have standardised such a facility; we should not, however, remove the Lakos Rule before standardising Contracts since no viable alternative is currently available for cross-platform codebases that rely on the Lakos Rule to test for contract violations.
 
-\section{Case study}
+\section{Case Study}
 \label{sec:casestudy}
 
 \subsection{The premise}
 
-In 2018, I co-founded the music technology company Cradle (\hyperref[https://cradle.app]{\tcode{https://cradle.app}}) and became its CTO. I was in the enviable position of being able to start a brand new code base from scratch, following the latest modern C++ best practices. I also hired a brand new developer team, with the freedom to introduce whatever software technology and coding guidelines made most sense for the thing we set out to accomplish.
+In 2018, I co-founded the music technology company Cradle (\hyperref[https://cradle.app]{\tcode{https://cradle.app}}) and became its CTO. I was in the enviable position of being able to start a brand new code base from scratch, following the latest modern C++ best practices. I also hired a brand new developer team . We had the freedom to introduce whatever software technology and coding guidelines made most sense for the goal we set out to accomplish.
 
-From the start, the core guiding principle for building Cradle's software stack and engineering culture was a strong focus on code quality. One of the things we introduced to achieve this goal is to aim for a high unit test coverage. Focusing on automated testing in general, and unit testing in particular, tends to be less common in  music production software than in other industries. We found out in practice that, by having a strong culture of unit testing and test-driven development (TDD), we were able to deliver software at  a significantly higher quality standard, with much fewer bugs and crashes reported by users. The parts of our code base where TDD proved to be particularly effective were the foundational, generic C++ libraries that the rest of the codebase relied upon. In general, whenever feasible, we aim for every line of product code to have some corresponding test code.
+From the start, the core guiding principle for building Cradle's software stack and engineering culture was a strong focus on code quality. One of the ideals we introduced to achieve this goal is to aim for a high unit test coverage. Focusing on automated testing in general, and unit testing in particular, tends to be less common in  music production software than in other industries. We learned in practice that, by having a strong culture of unit testing and test-driven development (TDD), we were able to deliver software at a significantly higher quality standard, with far fewer bugs and crashes reported by users. The parts of our codebase where TDD proved to be particularly effective were the foundational, generic C++ libraries that the rest of the codebase relied upon. In general, whenever feasible, we aim for every line of product code to have some corresponding test code.
 
 \subsection{The problem}
 
-However, as we started practicing TDD with modern C++, we immediately ran into the following problem. Let us consider the following C++ function as an example (a very typical function for a foundational audio software library):
+However, as we started practicing TDD with modern C++, we immediately ran into a problem. Let us consider an example C++ function (a very typical function for a foundational audio software library):
 \begin{codeblock}
 float fast_log(float x);  // efficiently computes the base e logarithm of x
 \end{codeblock}
 
-This function is specified to have a narrow contract: it has a precondition that \tcode{x >= 0}. If this precondition is violated, the behaviour is undefined; this specification is necessary to achieve maximum performance in a release build. Calling \tcode{fast_log} with an argument less than \tcode{0} is therefore unconditionally a bug.
+This function is specified to have a narrow contract: It has a precondition that \tcode{x >= 0}. If this precondition is violated, the behaviour is undefined; this specification is necessary to achieve maximum performance in a release build. Calling \tcode{fast_log} with an argument less than \tcode{0} is therefore unconditionally a bug.
 
-Now, writing unit tests to ensure that this function returns the correct result for valid input is straightforward. One such test might look like this:
+Now, writing unit tests to ensure that this function returns the correct result for valid input is straightforward:
 \begin{codeblock}
 CHECK_APPROX_EQUAL(fast_log(1), 0);
 \end{codeblock}
-where \tcode{CHECK_APPROX_EQUAL} is some macro provided by the unit test framework, checking that two floating-point numbers are approximately equal within some specified tolerance. But this is not the only kind of unit test that we need to write. We also need to ensure that the function behaves as intended when called out of contract.
+In this example, \tcode{CHECK_APPROX_EQUAL} is some macro provided by the unit test framework, checking that two floating-point numbers are approximately equal within some specified tolerance. But this is not the only kind of unit tests that we need to write. We also need to ensure that the function behaves as intended when called out of contract.
 
-In our case, the intended behaviour for invalid input is as follows: in debug mode, the precondition \tcode{x >= 0} should be checked, and a contract violation should trigger an assertion failure; in release mode, the precondition should be ignored, and a contract violation would in general lead to undefined behaviour. Checking the precondition in debug mode is critically important, as otherwise the developer might not realise they have called \tcode{fast_log} out of contract, and introduce a new bug to the code base.
+In our case, the intended behaviour for invalid input is that (1) in debug mode, the precondition \tcode{x >= 0} should be checked and a contract violation should trigger an assertion failure and (2) in release mode, the precondition should be ignored and a contract violation would, in general, lead to undefined behaviour. Checking the precondition in debug mode is critically important since otherwise the developer might not realise they have called \tcode{fast_log} out of contract and could introduce a new bug to the code base.
 
-Adding a precondition check in C++23, which lacks a Contracts facility, might look like this:
+Suppose a precondition check is added to C++23, which lacks a Contracts facility:
 \begin{codeblock}
 float fast_log(float x) {
   ASSERT(x >= 0);
   // implementation
 }
 \end{codeblock}
-where \tcode{ASSERT} is a macro that prints a diagnostic and aborts the program in a debug build, and does nothing in a release build\footnote{In our codebase, there is a third case: whenever a debugger is attached, the macro calls a function that causes the debugger to break, very similar to \tcode{std::breakpoint()} as proposed in \cite{P2514R0}. This is one of the reasons why we, like many other codebases, have a custom \tcode{ASSERT} macro and do not simply use the \tcode{assert} macro from header \tcode{cassert}.}.
+In this example, \tcode{ASSERT} is a macro that prints a diagnostic and aborts the program in a debug build and does nothing in a release build.\footnote{Our codebase includes a third case: When a debugger is attached, the macro calls a function that causes the debugger to break, very similar to \tcode{std::breakpoint()} as proposed in \cite{P2514R0}. This situation is one of the reasons why our codebase, like many other codebases, has a custom \tcode{ASSERT} macro rather than simply using the \tcode{assert} macro from header \tcode{cassert}.}
 
-Following our principle that, whenever feasible, every line of product code should have some corresponding test code, when adding such a precondition check to \tcode{fast_log}, we also need to write a unit test to ensure that the precondition check has in fact been added:
+If we follow our principle that, whenever feasible, every line of product code should have some corresponding test code, then when adding such a precondition check to \tcode{fast_log}, we also need to write a unit test to ensure that the precondition check has in fact been added:
 \begin{codeblock}
 CHECK_ASSERT_FAIL(fast_log(-1));
 \end{codeblock}
 But how do we write such a test?
 
-\subsection{Solution: the Lakos Rule}
-Once we hit the \tcode{ASSERT} macro, and the assertion fails, it is no longer meaningful to continue executing the body of the function; this will either crash or lead to other forms of undefined behaviour. Therefore, in order to continue running our unit test suite, we need a way to exit the function other than by returning a value, at the point where the \tcode{ASSERT} fails. 
+\subsection{Solution: The Lakos Rule}
+Once we hit the \tcode{ASSERT} macro and the assertion fails, continuing to execute the body of the function is no longer meaningful; the code will either crash or lead to other forms of undefined behaviour. To continue running our unit test suite, we therefore need a way to exit the function other than by returning a value, at the point where the \tcode{ASSERT} fails, other than by returning a value.
 
-The most natural way to do so is to throw an exception. This is exactly why the Lakos Rule exists: since \tcode{fast_log} has a narrow contract, we do not mark it as \tcode{noexcept}, and we can define our \tcode{ASSERT} macro as follows:
-
+The most natural way to achieve this exit is to throw an exception, which is exactly why the Lakos Rule exists. Since \tcode{fast_log} has a narrow contract, we do not mark it as \tcode{noexcept}, and we can define our \tcode{ASSERT} macro:
 \begin{codeblock}
 #if NDEBUG
   #define ASSERT(expr)
@@ -90,29 +88,28 @@ Then, we can define our \tcode{CHECK_ASSERT_FAIL} as checking that an exception 
 
 \subsection{Alternatives}
 
-If we abandon the Lakos Rule as a design principle, as proposed in \cite{P1656R2} and \cite{P2148R0}, writing such tests (and therefore preventing bugs due to missing asserts) becomes much harder. Without the Lakos Rule, \tcode{fast_log} ought to be marked as \tcode{noexcept}, since it is known to never throw when called with valid input. This makes writing the \tcode{ASSERT} and \tcode{CHECK_ASSERT_FAIL} macros as above impossible: throwing \tcode{AssertFail()} out of a function marked \tcode{noexcept} would call \tcode{std::terminate}, immediately bringing down the whole test suite. At Cradle, we experimented with the following workarounds, none of which were deemed satisfactory.
+If we abandon the Lakos Rule as a design principle, as proposed in \cite{P1656R2} and \cite{P2148R0}, writing such tests (and, therefore, preventing bugs due to missing asserts) becomes much harder. Without the Lakos Rule, \tcode{fast_log} ought to be marked as \tcode{noexcept}, since this function is known to never throw when called with valid input. Writing the \tcode{ASSERT} and \tcode{CHECK_ASSERT_FAIL} macros as above thus becomes impossible: Throwing \tcode{AssertFail()} out of a function marked \tcode{noexcept} would call \tcode{std::terminate}, immediately bringing down the whole test suite. At Cradle, we experimented with the following workarounds, none of which were deemed satisfactory.
 
 \subsubsection{Death tests}
 
-In order to prevent \tcode{std::terminate} from bringing down the whole test suite, we can write our \tcode{CHECK_ASSERT_FAIL} as a death test. In a death test, the current process is forked, the code under test is run in the child process, and then the unit test framework checks that that child process has terminated abnormally, in which case the death test passes. This approach works in theory, but has several drawbacks:
-
+To prevent \tcode{std::terminate} from bringing down the whole test suite, we can write our \tcode{CHECK_ASSERT_FAIL} as a death test. In a death test, the current process is forked, the code under test is run in the child process, and then the unit test framework checks that that child process has terminated abnormally, in which case the death test passes. This approach works in theory, but has several drawbacks.
 \begin{itemize}
-\item Most C++ unit test frameworks do not offer support for death tests. From the popular C++ unit test frameworks, only GoogleTest does, while Catch2, Boost.Test, CppTest, and DocTest do not. At Cradle, for various technical reasons we ended up using Catch2, which means that death tests were not available to us.
-\item We found death tests to have a significant runtime overhead when compared to unit tests that merely check whether an exception has been thrown. Running all unit tests takes orders of magnitude more time when using death tests, significantly slowing down the CI pipieline.
-\item Death tests lose information: the unit test framework can verify that the child process has terminated abnormally, but not whether this was actually caused by a contract violation (which is the thing we want to test).
+\item Most C++ unit test frameworks do not offer support for death tests. From the popular C++ unit test frameworks, only GoogleTest does, and Catch2, Boost.Test, CppTest, and DocTest do not. At Cradle, for various technical reasons, we ended up using Catch2, which means that death tests were unavailable to us.
+\item We found death tests to have a significant runtime overhead when compared to unit tests that merely check whether an exception has been thrown. Running all unit tests takes orders of magnitude more time when using death tests, significantly slowing down the CI pipeline.
+\item Death tests lose information: The unit test framework can verify that the child process has terminated abnormally but not whether this termination was actually caused by a contract violation (which is what we want to test).
 \end{itemize}
 
 \subsubsection{POSIX signals}
 
-If we cannot use child processes and death tests, and we cannot use exceptions, another way to abort the execution of the function from our \tcode{ASSERT} macro and to signal a contract violation to our unit test framework is to raise a POSIX signal. This works well on POSIX platforms; however, at Cradle, we are deploying cross-platform audio software which should run (and therefore be tested on) all of macOS, Linux, and Windows. POSIX signals are not available on Windows, therefore this approach is not viable.
+If we cannot use child processes and death tests and if we cannot use exceptions, another way to abort the execution of the function from our \tcode{ASSERT} macro and to signal a contract violation to our unit test framework is to raise a POSIX signal. This method works well on POSIX platforms; however, at Cradle, we are deploying cross-platform audio software that should run (and therefore be tested on) all of macOS, Linux, and Windows platforms. POSIX signals are unavailable on Windows, so this approach is not viable.
 
 \subsubsection{\tcode{setjmp} and \tcode{longjmp}}
 
-Yet another way to abort the execution of the function from our \tcode{ASSERT} macro is to use \tcode{setjmp} and \tcode{longjmp}. This has the disadvantage that the stack is not unwound. If we run thousands of unit tests invoving data structures that allocate significant amounts of memory on the heap, we end up with an unacceptable amount of memory leaks.
+Yet another way to abort the execution of the function from our \tcode{ASSERT} macro is to use \tcode{setjmp} and \tcode{longjmp}. This option has the disadvantage of the stack being not unwound. If we run thousands of unit tests involving data structures that allocate significant amounts of memory on the heap, we end up with an unacceptable amount of memory leaks.
 
 \subsubsection{Making \tcode{noexcept} conditional on whether we are in unit test mode}
 
-Another workaround that we used at Cradle was to introduce a macro as follows:
+Another workaround that we used at Cradle was our method of introducing a macro:
 \begin{codeblock}
 #if UNIT_TEST_MODE
   #define NOEXCEPT 
@@ -120,30 +117,30 @@ Another workaround that we used at Cradle was to introduce a macro as follows:
   #define NOEXCEPT noexcept
 #endif
 \end{codeblock}
-Then, we can mark all functions with a narrow contract with this \tcode{NOEXCEPT} macro rather than the \tcode{noexcept} keyword, and compile the library with \tcode{-DUNIT_TEST_MODE=1} for the purposes of running unit tests. However, this is not satisfactory either, because in this way we effectively end up not unit testing our actual code, but unit testing code that is compiled differently and results in a different binary with different behaviour.
+Then, we can mark all functions with a narrow contract with this \tcode{NOEXCEPT} macro rather than the \tcode{noexcept} keyword and compile the library with \tcode{-DUNIT_TEST_MODE=1} for the purposes of running unit tests. However, this option is also unsatisfactory because, in this way, we effectively end up unit testing not our actual code but code that is compiled differently and results in a different binary with different behaviour.
 
 \section{Contracts}
 \label{sec:contracts}
 
-SG21 is currently working on standardising a \emph{Contracts facility}, i.e. a new language feature to be added to standard C++ that allows the user to express preconditions, postconditions, and assertions in C++ code. Attempts to standardise a Contracts facility have a long history; according to the current SG21 roadmap \cite{P2695R1} we are aiming to get a Contracts MVP into C++26. See \cite{P2521R3} and references therein for a summary of the current state of this effort.
+SG21 is currently working on standardising a \emph{Contracts facility}, i.e., a new language feature to be added to the C++ Standard and that allows the user to express preconditions, postconditions, and assertions in C++ code. Attempts to standardise a Contracts facility have a long history; according to the current SG21 roadmap \cite{P2695R1}, we are aiming to get a Contracts MVP into C++26. See \cite{P2521R3} and references therein for a summary of the current state of this effort.
 
-With the Contracts MVP, we will be able to express the precondition of \tcode{fast_log} as follows (using one of the three options for syntax currently under consideration):
+With the Contracts MVP, we will thus be able to express the precondition of \tcode{fast_log}, using one of the three options for syntax currently under consideration:
 \begin{codeblock}
 float fast_log(float x) [[ pre: x >= 0 ]];
 \end{codeblock}
 
-The current Contracts MVP proposes two build modes: \emph{No_eval}, in which the precondition is ignored, and \emph{Eval_and_abort}, in which the precondition is checked; if the predicate evaluates to \tcode{false}, \tcode{std::terminate} is called. At first, it seems that for purposes of testing for contract violations we have not gained much: calling \tcode{fast_log} out of contract will result in \tcode{std::terminate} being called, which leaves death tests as the only viable method to write tests for such a call.
+The current Contracts MVP proposes two build modes: \emph{No_eval}, in which the precondition is ignored, and \emph{Eval_and_abort}, in which the precondition is checked; if the predicate evaluates to \tcode{false}, \tcode{std::terminate} is called. At first, iwe seem to have gained little for purposes of testing for contract violations: Calling \tcode{fast_log} out of contract will result in \tcode{std::terminate} being called, which leaves death tests as the only viable method to write tests for such a call.
 
-However, the Contracts MVP is merely a first step towards having a standardised Contracts facility. The Contracts MVP is explicitly designed to be extended, such as by adding custom violation handlers (\cite{P2698R0}, \cite{P2811R0}) or other facilities (\cite{P2784R0}) which allow us to test out-of-contract calls without relying on the function under test not being marked as \tcode{noexcept}. Even if we only get the Contracts MVP in C++26, without custom violation handlers or similar facilities, the Contracts MVP is explicitly designed to allow compiler vendors to offer additional build modes where such behaviour can be configured. In either case, we will have a superior way to test for contract violations, and we will no longer need the Lakos Rule to enable this. However, as long as such a Contracts facility is not part of standard C++, there is no adequate replacement for the Lakos Rule, and we should therefore not remove it from the standard library design guidelines at this time.
+However, the Contracts MVP is merely a first step toward having a standardised Contracts facility. The Contracts MVP is explicitly designed to be extended, such as by adding custom violation handlers (\cite{P2698R0}, \cite{P2811R0}) or other facilities (\cite{P2784R0}) that allow us to test out-of-contract calls without relying on the function under test not being marked as \tcode{noexcept}. Even if we get only the Contracts MVP --- without custom violation handlers or similar facilities --- in C++26, the Contracts MVP is explicitly designed to allow compiler vendors to offer additional build modes in which such behaviour can be configured. In either case, we will have a superior way to test for contract violations, and we will no longer need the Lakos Rule to enable this testing. As long as such a Contracts facility is not part of the C++ Standard, however, no adequate replacement for the Lakos Rule is available. We should, therefore, retain the Lakos Rule in the Standard Library design guidelines.
 
 \section{Conclusion}
-At Cradle, we found that testing our code for contract violations has proven to be an important part of keeping our code quality high and reducing the amount of introduced bugs. We found that out of all methods to achieve this kind of testing, following the Lakos Rule is the most straightforward and effective method with the most favourable tradeoffs. 
+At Cradle, we found that testing our code for contract violations has proven to be an important part of keeping our code quality high and reducing the number of introduced bugs. We found that, out of all methods to achieve this kind of testing, the Lakos Rule is the most straightforward and effective method and offers the most favourable tradeoffs. 
 
-We experimented with death tests, POSIX signals, \tcode{setjmp} and \tcode{longjmp}, and making \tcode{noexcept} conditional on whether we are in unit test mode. We found that all of these alternative approaches have worse tradeoffs than following the Lakos Rule for our use case.
+We experimented with using death tests, POSIX signals, and \tcode{setjmp} and \tcode{longjmp} and with making \tcode{noexcept} conditional on whether we are in unit test mode. We found that all these alternative approaches have worse tradeoffs than following the Lakos Rule for our use case.
 
-Since the Lakos Rule works so well for foundational C++ libraries in the cross-platform software space, it is reasonable to assume that it would also be a viable approach for at least some implementations of the C++ standard library. We therefore urge the C++ committee to not abandon the Lakos Rule as a design principle for the standard library, at least not until we standardise a Contracts facility in C++.
+Since the Lakos Rule works so well for foundational C++ libraries in the cross-platform software space, assuming that it would also be a viable approach for at least some implementations of the C++ Standard Library is a reasonable assumption. We therefore urge the C++ committee to retain the Lakos Rule as a design principle for the Standard Library, at least until we standardise a Contracts facility in C++.
 
-A standard C++ Contracts facility might provide a superior way to test a codebase for contract violations, at which point the Lakos Rule might no longer be needed. However, changing our library design guidelines and removing the Lakos Rule should only be considered at that point, and not while no such superior facility exists in standard C++.
+A standard C++ Contracts facility might provide a superior way to test a codebase for contract violations, at which point the Lakos Rule might no longer be needed. However, changing our library design guidelines and removing the Lakos Rule should be considered only at that point, not while no such superior facility exists in the C++ Standard.
 
 %\section*{Document history}
 
@@ -151,6 +148,10 @@ A standard C++ Contracts facility might provide a superior way to test a codebas
 %\item \textbf{R0}, 2023-03-08: Initial version.
 %\item \textbf{R1}, 20XX-XX-XX: ??
 %\end{itemize}
+
+\section*{Acknowledegments}
+
+We would like to thank Lori Hughes for proofreading a draft of this paper.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

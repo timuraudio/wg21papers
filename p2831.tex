@@ -73,15 +73,15 @@ Once we hit the \tcode{ASSERT} macro and the assertion fails, continuing to exec
 
 \subsubsection{The Lakos Rule}
 
-The most natural, portable, and effective way to exit the function at the point of the contract violation is by throwing an exception. The Lakos Rule exists precisely to enable this technique. Since \tcode{front} has a narrow contract, we do not declare it \tcode{noexcept}, even though we know that it will never throw when called in-contract. In the absence of \tcode{noexcept}, we can define our \tcode{ASSERT} macro as follows:
+The most natural, portable, and effective way to exit the function at the point of the contract violation is by throwing an exception. The Lakos Rule exists precisely to enable this technique. Since \tcode{front} has a narrow contract, we do not declare it \tcode{noexcept}, even though we know that it will never throw when called in-contract. In the absence of \tcode{noexcept}, we can define our \tcode{ASSERT} macro as follows\footnote{At Cradle, we have a slightly more sophisticated definition: when debugging locally, i.e. if a debugger is attached, the \tcode{ASSERT} macro will trigger a breakpoint, using utilities like the ones proposed in \cite{P2514R0}; otherwise (that is, when running the test suite locally or remotely), the \tcode{ASSERT} macro is throwing an \tcode{AssertFail} exception as shown here.}:
 \begin{codeblock}
 #if TEST_ASSERTIONS
   #define ASSERT(expr) if (!expr) throw AssertFail();
 #else
-  // other possible actions: ignore, assume, log and continue, log and terminate, trigger a breakpoint
+  // other possible actions: ignore, assume, log and continue, log and terminate
 #endif
 \end{codeblock}
-Then, in \tcode{TEST_ASSERTIONS} mode, we can define our \tcode{REQUIRE_ASSERT_FAIL} as checking that an exception of type \tcode{AssertFail} has been thrown. Every modern C++ testing framework provides this mechanism; it is straightfoward, efficient, and portable.
+Then, in \tcode{TEST_ASSERTIONS} mode (which will often, but not always, correspond to debug mode), we can define our \tcode{REQUIRE_ASSERT_FAIL} as checking that an exception of type \tcode{AssertFail} has been thrown. Every modern C++ testing framework provides this mechanism; it is straightfoward, efficient, and portable.
 
 An important advantage of exception-based negative testing is that we can communicate an arbitrary amount of information about the contract violation back to the testing framework via the thrown exception object. \cite{P1656R2} repeats the canard that stack unwinding destroys information. This may be true in the na\" ive case, but any sophisticated implementation will collect the relevant information before stack unwinding, either immediately before throwing the exception or (for more general benefit) at the end of the search phase, under the control of the catch block but before stack unwinding begins.
 

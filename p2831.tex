@@ -21,7 +21,7 @@ The Lakos Rule is a longstanding design principle in the C++ Standard Library. I
 \section{Introduction}
 \label{sec:intro}
 
-C++ functions --- in the C++ Standard Library or in other places --- can have \emph{preconditions}, which are a form of \emph{contract}. A function that has no preconditions on its input (parameter) values or on the state accessible from it (object state or global state) --- i.e., a function that has defined behaviour for any combination of input values and accessible state --- is said to have a \emph{wide contract}. Examples of such functions in the C++ Standard Library are \tcode{std::vector::at} and \tcode{std::vector::size}.
+C++ functions --- in the C++ Standard Library or in other places --- can have \emph{preconditions}, which are a form of \emph{contract}. A function that has no preconditions on its input (parameter) values or on the state (object state or global state) accessible from it --- i.e., a function that has defined behaviour for any combination of input values and accessible state --- is said to have a \emph{wide contract}. Examples of such functions in the C++ Standard Library are \tcode{std::vector::at} and \tcode{std::vector::size}.
 
 If such a function is required to never throw an exception (or if it is somehow known that it will never throw an exception), it may be declared \tcode{noexcept} (conditionally or unconditionally). This is the case for \tcode{std::vector::size}.
 
@@ -59,7 +59,7 @@ T& front() {
 \end{codeblock}
 
 
-Whenever feasible, every piece of functional code should have corresponding test code. This precondition check is no different: we need to write a unit test to ensure that the precondition check has in fact been added. This is sometimes called \emph{negative testing}:
+Precondition checks are code, and just like any other code, ought to be tested. We therefore need to write a unit test to ensure that the precondition check has in fact been added. This is sometimes called \emph{negative testing}:
 \begin{codeblock}
 std::vector<int> v;  // empty
 REQUIRE_ASSERT_FAIL(v.front());
@@ -100,7 +100,7 @@ A workaround used by some libraries is to introduce a macro along the lines of
 \end{codeblock}
 Then, we can mark all functions with a narrow contract with \tcode{MY_NOEXCEPT} instead of \tcode{noexcept} proper. Thus functions with a narrow contract can be \tcode{noexcept} in production, and at the same time we can use exception-based negative testing on them when compiled in \mbox{\tcode{TEST_ASSERTIONS}} mode.
 
-However, this option is  unsatisfactory because we effectively end up unit testing not our actual code but code compiled with a different specification, which may result in different behaviour: switching the \tcode{noexcept} specification of a function depending on the build mode can trigger different code paths being taken. This is observable by users and causes confusion. Software engineering best practice fairly demands that we test the actual code that is built for production, which is not possible with this technique. That is why libc++ ultimately decided against this approach after having introduced it; see \ref{subsec:major}.
+However, this option is  unsatisfactory because we effectively end up unit testing not our actual code but code compiled with a different specification, which may result in different behaviour: switching the \tcode{noexcept} specification of a function depending on the build mode can trigger different code paths being taken. This is observable by users (for example, turning moves into copies) and causes confusion. Software engineering best practice fairly demands that we test the actual code that is built for production, which is not possible with this technique. That is why libc++ ultimately decided against this approach after having introduced it; see \ref{subsec:major}.
 
 \subsection{\tcode{setjmp} and \tcode{longjmp}}
 
@@ -204,15 +204,17 @@ It is important to note that the C++ Standard allows implementations to unilater
 
 The Lakos Rule stipulates that functions with a narrow contract should not be marked as \tcode{noexcept}, even if they are known to never throw an exception when called in-contract. Part of the resistance to this rule is a widespread practice to mark as many functions as possible as \tcode{noexcept}, often for no good reason.
 
-It is true that in some cases, \tcode{noexcept} leads to smaller binary code being generated. In particular, when calling a \tcode{noexcept} function from another \tcode{noexcept} function, the compiler emits only the function call (if we ignore inlining). But when calling a non-\tcode{noexcept} function from a \tcode{noexcept} function, the compiler has to ensure that \tcode{std::terminate} gets called when an exception gets thrown (and escapes the calling function). In general, that means that the compiler generates:
+It is true that in some cases, \tcode{noexcept} leads to smaller binary code being generated if the compiler cannot otherwise reason about the function not throwing (for example, because its definition is in another TU). In particular, when calling a non-\tcode{noexcept} function \tcode{f} from a \tcode{noexcept} function, the compiler has to ensure that \tcode{std::terminate} gets called when an exception gets thrown (and escapes the calling function). In general, that means that instead of \tcode{f()}, the compiler generates:
 \begin{codeblock}
-try { func(); } catch ( ...) { std::terminate(); }
+try { f(); } catch ( ...) { std::terminate(); }
 \end{codeblock}
-instead of just \tcode{func()}.
+On the other hand, when calling a \tcode{noexcept} function from another \tcode{noexcept} function, the compiler can emit just the function call (if we ignore inlining). In addition, for a \tcode{noexcept} function, the compiler does not have to generate unwind information because such a function never participates in unwinding.
 
-In practice however, such differences in codegen rarely have any measurable impact on runtime performance if the error path is not taken. In fact, we are not aware of any study conclusively proving that \tcode{noexcept} results in measurable performance benefits in real-world code. Similarly, we are not aware of any study showing that exception-handling codegen has any penalty to compiler optimisations (as is sometimes claimed). More compact codegen can of course be a benefit in itself, even if there is no measurable speedup, particularly on embedded platforms where binary size matters. But on such platforms, C++ is typically compiled with exceptions disabled anyway, which removes any potential benefit from adding \tcode{noexcept}.
+There exist older platforms where generating unwind information has a runtime cost (see \cite{TR18015} section 5.4, where such platforms are said to use the ``code'' approach). But on all modern platforms, generating unwind information happens at compile time (the ``table'' approach, also called ``zero-cost exceptions''). On such platforms, the differences in codegen between \tcode{noexcept} and non-\tcode{noexcept} typically do not lead to any measurable difference to runtime performance if the error path is not taken (see also \cite{EMC++S}, section 3.1). In fact, we are not aware of any study showing a measurable speedup in real-world code on any modern platform. Similarly, we are not aware of any study showing that exception-handling codegen has any penalty to compiler optimisations (as is sometimes claimed).
 
-There is one genuine reason to mark a function as \tcode{noexcept}: whenever a C++ program programmatically queries whether a function can throw, using the \tcode{noexcept} operator, and then chooses a different code path or algorithm depending on the return value of that operator. An example of an algorithm where such a query occurs is \tcode{std::vector::push_back}; the functions being queried for \tcode{noexcept} are nearly always constructors or implementations of \tcode{swap}. If no such query is expected, we generally do not see a good reason to deviate from the Lakos Rule, even in performance-sensitive code, unless a measurement can prove otherwise.
+More compact codegen can of course be a benefit in itself, even if there is no measurable speedup, particularly on embedded platforms where binary size matters. But on such platforms, C++ is typically compiled with exceptions disabled anyway, which removes any potential benefit from adding \tcode{noexcept}.
+
+There is one genuine reason to mark a function as \tcode{noexcept}: whenever a C++ program programmatically queries whether a function can throw, using the \tcode{noexcept} operator, and then chooses a different code path or algorithm depending on the return value of that operator. This is observable by the user; for example, copies can be turned into more efficient moves. An example of an algorithm where such a query occurs is \tcode{std::vector::push_back}; the functions being queried for \tcode{noexcept} are nearly always constructors or implementations of \tcode{swap}. If no such query is expected, we generally do not see a good reason to deviate from the Lakos Rule, even in performance-sensitive code, unless a measurement can prove otherwise.
 
 Through the \tcode{noexcept} operator, the \tcode{noexcept} property can also be checked with \tcode{static_assert}. It has been argued that we can therefore get useful compile errors if some construct can throw, and combined with static analysis warnings for \tcode{noexcept} functions this can reduce the potential for errors in the codebase. This may be true for functions with a wide contract, but for functions with a narrow contract, it has the potential to \emph{increase} errors. Wide-contract \tcode{noexcept} functions are total, whereas wide-contract non-\tcode{noexcept} and all narrow-contract functions are partial. The failed \tcode{static_assert} on a \tcode{noexcept} check is telling us something useful: that such a partial function is not guaranteed to return a result of its type. If we would make the called function \tcode{noexcept} on a narrow contract, we would lose this information.
 
@@ -268,4 +270,4 @@ The Lakos Rule is a long-standing design principle of the C++ Standard Library. 
 \bibliographystyle{abstract}
 \bibliography{ref}
 
-\end{document}qu
+\end{document}

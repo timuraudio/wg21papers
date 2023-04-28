@@ -3,7 +3,7 @@
 \begin{document}
 \title{Functions with a narrow contract should not be \tcode{noexcept}}
 \author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})   \\
-Ed Catmur \small(\href{mailto:papers@timur.audio}{ed@catmur.uk})  }
+Ed Catmur \small(\href{mailto:ed@catmur.uk}{ed@catmur.uk})  }
 \date{}
 \maketitle
 
@@ -167,9 +167,15 @@ However, as we started practicing negative testing, we immediately ran into the 
 
 While researching this topic, I asked C++ developers from other companies, including the maintainer of the unit testing framework we were using, about negative testing. According to many of them, negative testing was ``not a thing'', ``outside of the realm of unit testing'', etc. I found this attitude very surprising, as I had proof from my own experience that negative testing can be very effective at preventing real bugs. The only explanation I can think of is that, with the Lakos Rule not being as widely used outside of the C++ Standard Library, many C++ developers have been taught to sprinkle \tcode{noexcept} all over their codebase (see also section \ref{sec:noexcept}), which makes negative testing very difficult, slow, and cumbersome. This in turn means that many people and companies never get to discover the benefits of practicing negative testing and thus are unaware of them. Consider also that many C++ developers work in smaller companies or startups which do not have the resources to develop their own unit testing frameworks (and ideally should not have to).
 
-\subsection{Ed Catmur: \emph{//TODO//}}
+\subsection{Ed Catmur: \emph{Maven}}
 
-// TODO: Ed, if you can, please describe here how you use the Lakos Rule in your codebase and why it's necessary there! //
+At Maven Securities (\hyperref[https://www.mavensecurities.com/]{\tcode{https://www.mavensecurities.com/}}) we use C++ to develop in-house software for trading on financial markets. The codebase has always been written to a high level of quality, but as the company has grown and broadened geographically, testing has become ever more crucial to maintaining a low defect rate while enabling programmers from a wide diversity of backgrounds to contribute to shared libraries in a spirit of open collaboration. The unique requirements of the finance industry mean that we often find ourselves writing specialized versions of standard components such as containers with fine-tuned performance, latency or memory characteristics, but retaining API compatibility as closely as possible with standard and open-source libraries allows us to perform drop-in replacement and means that code stays readily comprehensible to coworkers, other teams and new hires.
+
+While negative testing is particularly prevalent in our foundational libraries, we also find it useful in higher-level components, warranting that bugs in market-facing code can be quickly detected and addressed during development and also that, should defects reach production, that behavior in the presence of defects is predictable, fail-safe and that diagnostics resulting from failure are genuinely useful to front-line support. In particular, this means that we approach \tcode{noexcept} in a spirit of wariness; while it has some performance benefits in theory, the most performance-sensitive code is inlined and allocation-free and so is highly unlikely to benefit in practice. Against this, the potential for \tcode{noexcept} to convert an exception to program termination makes it highly unsafe; a trading program that encounters a fault, throws an exception out to the main I/O loop and shuts down safely is much to be preferred to a process that terminates immediately, potentially leaving connections in an open state and open orders on the exchange, with exposure to financial hazard and regulatory penalties. In this context, the Lakos Rule feels entirely natural: functions with narrow contracts are either inlined, in which case \tcode{noexcept} is largely irrelevant, or they are out-lined, in which case even if exception-free initially, the code is unlikely to stay that way through development.
+
+Although we use death tests where unavoidable, we find the overhead, at a very rough estimate 1000-fold for fork-wait on Linux compared to throw-catch, to be a considerable impediment to achieving the code coverage and rapid test-develop cycle we aspire to. Additionally, the fact that fork-wait is impractical on Windows means that code using such tests lacks full coverage across the compilers and platforms we target.
+
+In my experience, developers arriving at Maven and encountering our codebase for the first time are at least appreciative of the low defect rate that negative testing allows us to achieve and usually, whether from a background in the finance industry or from outside, keenly adopt the tooling that our framework provides for negative testing. To me this indicates that the Lakos Rule is readily comprehensible, at least to developers who have seen the benefits it enables.
 
 \section{Why we need the Lakos Rule in the C++ Standard Library}
 \label{sec:stdlib}

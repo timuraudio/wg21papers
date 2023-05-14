@@ -9,7 +9,7 @@ Ed Catmur \small(\href{mailto:ed@catmur.uk}{ed@catmur.uk})  }
 
 \begin{tabular}{ll}
 Document \#: & D2831R0 \\
-Date: &2023-05-12 \\
+Date: &2023-05-13 \\
 Project: & Programming Language C++ \\
 Audience: & Library Evolution Working Group
 \end{tabular}
@@ -82,7 +82,7 @@ The most natural, portable, and effective way to exit the function at the point 
   // other possible actions: ignore, assume, log and continue, log and terminate
 #endif
 \end{codeblock}
-Then, in \tcode{TEST_ASSERTIONS} mode (which will often, but not always, correspond to debug mode), we can define our \tcode{REQUIRE_ASSERT_FAIL} to verify that an exception of type \tcode{AssertFail} has been thrown, report success or failure, and continue the execution of the test suite. Every modern C++ testing framework provides this mechanism; it is straightfoward, efficient, and portable.
+Then, in \tcode{TEST_ASSERTIONS} mode (which will often, but not always, correspond to debug mode), we can define our \tcode{REQUIRE_ASSERT_FAIL} to verify that an exception of type \tcode{AssertFail} has been thrown, report success or failure, and continue the execution of the test suite. Every modern C++ testing framework provides this mechanism; it is straightforward, efficient, and portable.
 
 An important advantage of exception-based negative testing is that we can communicate an arbitrary amount of information about the contract violation back to the testing framework via the thrown exception object. \cite{P1656R2} repeats the canard that stack unwinding destroys information. This claim might be true in the na\" ive case, but any sophisticated implementation will collect the relevant information before stack unwinding, either immediately before throwing the exception or (for more general benefit) at the end of the search phase, under the control of the catch block but before stack unwinding begins.
 
@@ -105,7 +105,7 @@ This option, however, is unsatisfactory because we effectively end up unit testi
 
 \subsection{\tcode{setjmp} and \tcode{longjmp}}
 
-Another way to exit the function from our \tcode{ASSERT} macro on contract violation is to use \tcode{setjmp} and \tcode{longjmp}. However, this technique does not work for negative testing. With most compilers,\footnote{Notably, Microsoft's implementation of \tcode{setjmp} and \tcode{longjmp} \emph{does} perform stack unwinding with local object destruction, as is done for \tcode{throw} and \tcode{catch} (see \cite{MSVCDoofcLongjmp}), while GCC and Clang do not.} when using \tcode{setjmp} and \tcode{longjmp} instead of \tcode{throw} and \tcode{catch}, the stack is not unwound and destructors of objects on the stack are not called. The C++ Standard specifies in [csetjmp.syn]:
+Another way to exit the function from our \tcode{ASSERT} macro on contract violation is to use \tcode{setjmp} and \tcode{longjmp}. However, this technique does not work for negative testing. With most compilers,\footnote{Notably, Microsoft's implementation of \tcode{setjmp} and \tcode{longjmp} \emph{does} perform stack unwinding with local object destruction, as is done for \tcode{throw} and \tcode{catch} (see \cite{MSVCDocLongjmp}), while GCC and Clang do not.} when using \tcode{setjmp} and \tcode{longjmp} instead of \tcode{throw} and \tcode{catch}, the stack is not unwound and destructors of objects on the stack are not called. The C++ Standard specifies in [csetjmp.syn]:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 The contents of the header \tcode{<csetjmp>} are the same as the C standard library header \tcode{<setjmp.h>}.
@@ -240,6 +240,8 @@ There is one genuine reason to declare a function \tcode{noexcept}: When a C++ p
 
 An example of an algorithm where such a query occurs is \tcode{std::vector::push_back}. Typically, in the presence of \tcode{noexcept}, copies will be turned into more efficient moves, which is both an observable change in behaviour and a measurable difference in performance. This is the original motivation for introducing \tcode{noexcept} in C++11 (see \cite{N2855} and \cite{N3050}), and its introduction is tightly linked to the introduction of move semantics. The functions being queried with the \tcode{noexcept} operator are nearly always copy, move, or swap operations. Hence, we would expect use of \tcode{noexcept} to be limited to copy and move constructors, copy and move assignment operators, and implementations of \tcode{swap}. We do not see a good reason to deviate from the Lakos Rule in any other cases, even in performance-sensitive code, unless a measurement can prove otherwise. This way, we can continue to enable usage of the effective exception-based negative testing strategy for the vast majority of functions having narrow contracts and require a fallback to death tests or other alternatives \emph{only} in those vanishingly few cases (e.g., copy, move, and swap) where there is a sound engineering reason to declare the function under test \tcode{noexcept}.
 
+\pagebreak %MANUAL!!!!
+
 Looking beyond negative testing, we should make sure that exceptions continue to be well supported and optimised by the platforms and libraries we depend on. \tcode{noexcept} has a tendency to be overused, and if exceptions keep hitting arbitrary \tcode{noexcept} barriers, they are likely to rapidly reduce in usability. 
 
 \section{Can Contracts make the Lakos Rule obsolete?}
@@ -261,7 +263,7 @@ Testing code for contract violations (negative testing) is an important part of 
 
 We have considered alternatives that do not require the Lakos Rule, such as a conditional \tcode{noexcept} macro, \tcode{setjmp} and \tcode{longjmp}, using child threads, signals, and three different flavours of death tests. All of them have unfavourable tradeoffs: they either do not scale due to an unacceptable performance overhead, are not implementable on all relevant platforms, or are outright incapable of providing the necessary functionality. In particular, the only alternatives to the Lakos Rule that seem to be somewhat viable are fork-based and clone-based death tests but \emph{only} for UNIX-like platforms (and at reduced efficiency); for other platforms, there are none.
 
-Some C++ Standard Library implementations choose to flout the Lakos Rule and declare nonthrowing functions having narrow contracts \tcode{noexcept}. This misguided practice is due to a combination of having to maintain backward compatibility, not caring about non-UNIX-like platforms (which means they can use death tests instead of exception-based tests, albeit at the price of higher complexity, worse performance, and other tradeoffs), or not caring about testing for contract violations at all. For these implementations, being unable to use exception-based testing is a choice they are free to make: replacing \emph{Throws: nothing} by \tcode{noexcept} is perfectly Standard-conforming, and they can continue to do so without changing the status quo.
+Some C++ Standard Library implementations choose to flout the Lakos Rule and declare nonthrowing functions having narrow contracts \tcode{noexcept}. This practice is due to a combination of having to maintain backward compatibility, not caring about non-UNIX-like platforms (which means they can use death tests instead of exception-based tests, albeit at the price of higher complexity, worse performance, and other tradeoffs), or not caring about testing for contract violations at all. For these implementations, being unable to use exception-based testing is a choice they are free to make: replacing \emph{Throws: nothing} by \tcode{noexcept} is perfectly Standard-conforming, and they can continue to do so without changing the status quo.
 
 Removing the Lakos Rule as a design guideline, however, would preclude the entire C++ community from using exception-based testing for Standard-conforming APIs. This regression would affect not only the major implementations of the C++ Standard Library, but also minor implementations, partial or modified implementations that are industry-specific or platform-specific, and the many non-Standard libraries that implement drop-in replacements with Standard-conforming APIs. Thus, removing the Lakos Rule would irreparably break existing testing strategies or make the affected APIs no longer Standard-conforming, while not providing any practical benefit to anyone. Bloomberg's BDE libraries are one well-known example of a codebase that would be negatively affected but are certainly not the only one: In this paper, we have shown case studies from two separate companies (unrelated to Bloomberg) that would suffer the same fate, and we are aware of others.
 
@@ -278,9 +280,11 @@ The Lakos Rule is a long-standing design principle of the C++ Standard Library a
 %\item \textbf{R1}, 20XX-XX-XX: ??
 %\end{itemize}
 
-%\section*{Acknowledegments}
+\section*{Acknowledgements}
 
-%We would like to thank Lori Hughes for proofreading a draft of this paper.
+We would like to thank Lori Hughes and John Lakos for thoroughly reviewing this paper and providing useful feedback.
+
+\pagebreak %MANUAL!!!!
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

@@ -8,7 +8,7 @@ Ed Catmur \small(\href{mailto:ed@catmur.uk}{ed@catmur.uk})  }
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D2831R0 \\
+Document \#: & P2831R0 \\
 Date: &2023-05-15 \\
 Project: & Programming Language C++ \\
 Audience: & Library Evolution Working Group
@@ -90,7 +90,7 @@ The only issue with exception-based negative testing as described above is that 
 
 The obvious way to solve the \tcode{noexcept} problem is to not declare a function with a narrow contract \tcode{noexcept}, even if we know that the function will never throw when called in contract. In other words, exception-based negative testing is straightforward if we just follow the Lakos Rule. 
 
-If the Standards committee abandons the Lakos Rule as a design principle (as proposed in \cite{P1656R2} and \cite{P2148R0}), functions such as \mbox{\tcode{std::vector::front}} may be declared \tcode{noexcept}. This new direction would make writing negative tests (and, therefore, preventing bugs from being introduced because of out-of-contract calls and missing contract checks) much harder. In the remainder of this section, we discuss various workarounds and their shortcomings compared to the straightforward exception-based technique that the Lakos Rule enables.
+If the Standards committee abandons the Lakos Rule as a design principle (as proposed in \cite{P1656R2} and \cite{P2148R0}), functions such as \mbox{\tcode{std::vector::front}} might be specified as \tcode{noexcept} in a future standard. This new direction would make writing negative tests (and, therefore, preventing bugs from being introduced because of out-of-contract calls and missing contract checks) much harder. In the remainder of this section, we discuss various workarounds and their shortcomings compared to the straightforward exception-based technique that the Lakos Rule enables.
 
 \subsubsection{Conditional \tcode{noexcept} macro}
 \label{subsubsec:conditional}
@@ -127,11 +127,9 @@ This approach is slightly more comprehensible than \tcode{setjmp} and \tcode{lon
 
 \subsection{Stackful coroutines}
 
-Ville Voutilainen recently suggested yet another approach for negative testing without throwing exceptions or performing death tests. While this approach is in many ways a thought experiment, and we are not aware of any testing framework or codebase successfully using this approach, it has been successfully prototyped.
+Ville Voutilainen recently suggested yet another approach for negative testing without throwing exceptions or performing death tests. While this approach is in many ways a thought experiment, and we are not aware of any testing framework or codebase successfully using this approach, it has been successfully prototyped\footnote{For a prototype implementation in standard C++ that can be experimented with on Compiler Explorer, see \hyperref[https://godbolt.org/z/obsfvzrqh]{\tcode{https://godbolt.org/z/obsfvzrqh}}.}.
 
-The idea is that on contract violation, the \tcode{ASSERT} macro would yield to a cooperative scheduler. The tests would have to be written in such a way that the run of a subsequent test would be triggered by the event loop in conjunction with triggering the previous test's result verification. A failed test will run a nested event loop (which is the scheduler yield) and get stuck there, without proceeding to run the body of the function called out of contract. A successful test will just run its code. 
-
-Another way to describe this approach is that each such test would effectively call a callback on completion which would execute all remaining tests, and we would do this recursively for all tests. For the case of a contract violation, this callback would be called at the point where the contract violation has been verified to occur. Conceptually, the test suite then becomes a sequence of stackful coroutine calls.
+The idea is that on contract violation, the \tcode{ASSERT} macro would yield to a cooperative scheduler. The tests would have to be written in such a way that the run of a subsequent test would be triggered by the event loop in conjunction with triggering the previous test's result verification. A failed test will run a nested event loop (which is the scheduler yield) and get stuck there, without proceeding to run the body of the function called out of contract. A successful test will just run its code and then call the nested event loop. In both the failed and the successful cases, the event loop will subsequently run the test result verification of the test, and then the event loop will run the next test. The sequence of tests thus becomes a sequence of recursive calls, and each failed test behaves effectively like a suspended stackful coroutine.
 
 Just like the \tcode{setjmp}/\tcode{longjmp} and child thread approaches, this approach would never call destructors of any parameters or objects created by the test call, therefore leaking memory (invalidating unit tests that track such leakage) and breaking any program logic relying on RAII. In addition, the call stack would keep growing with every test call, consuming a large and unbounded amount of stack space. Finally, the whole test suite would have to be arranged in a very particular way in order to make this technique work, and would require a testing framework that offers the required event loop machinery.
 
@@ -204,11 +202,11 @@ Despite the usefulness of the Lakos Rule in real-world codebases, \cite{P1656R2}
 \subsection{Major C++ Standard Library implementations}
 \label{subsec:major}
 
-Let us consider the three major implementations of the C++ Standard Library: libstdc++, libc++, and the Microsoft STL. libstdc++ and libc++ both use death tests (only on UNIX-like platforms) for negative testing, while the Microsoft STL does not appear to negative test narrow contract preconditions at all.
+Let us consider the three major implementations of the C++ Standard Library: libstdc++, libc++, and the Microsoft STL. libstdc++ and libc++ both use death tests for negative testing, while the Microsoft STL does not appear to negative test narrow contract preconditions at all.
 
-libstdc++ has considered exception-based tests but found that they would break backward compatibility. They resorted to death tests based on the DejaGnu framework.
+libstdc++ chose to use death tests based on the DejaGnu framework. They have considered exception-based tests but found that they would break backward compatibility.
 
-libc++ originally introduced exception-based tests for ease of testing and other reasons but ran into the familiar issue that they could not apply this technique to functions declared \tcode{noexcept}. Since they could not remove \tcode{noexcept} due to backward compatibility, they introduced the conditional \tcode{noexcept} macro  \tcode{_NOEXCEPT_DEBUG}, as described in section \ref{subsubsec:conditional}. They later found that \tcode{_NOEXCEPT_DEBUG} was a ``horrible decision'' (see \cite{LLVMReviewD59166}) because it was observable to the user and changed the behaviour of the program. Left with no other option, they switched to fork-based death tests, which are much slower and run only on UNIX-like platforms.
+libc++ initially chose to use exception-based tests for ease of testing and other reasons but ran into the familiar issue that they could not apply this technique to functions declared \tcode{noexcept}. Since they could not remove \tcode{noexcept} due to backward compatibility, they introduced the conditional \tcode{noexcept} macro  \tcode{_NOEXCEPT_DEBUG}, as described in section \ref{subsubsec:conditional}. They later found that \tcode{_NOEXCEPT_DEBUG} was a ``horrible decision'' (see \cite{LLVMReviewD59166}) because it was observable to the user and changed the behaviour of the program. Left with no other option, they switched to fork-based death tests, which are much slower and run only on UNIX-like platforms.
 
 This anecdote does not demonstrate that exception tests are a bad thing but rather that if they are to be used, the library should be designed for their use from the start. The corollary is that if library implementors (especially any other than the three major ones) are restricted to using death tests, as would be the result of \cite{P1656R2}, they would be able to fully test only on UNIX-like platforms (no Windows, no bare metal, no browser). Adopting \cite{P1656R2} would do irreversible damage: if we were to reverse such a decision in the future, drawing any benefit would be difficult since users would have already come to depend on functions having narrow contracts being declared \tcode{noexcept}.
 
@@ -226,7 +224,7 @@ Note that the C++ Standard allows implementations to unilaterally tighten \emph{
 
 \cite{P1656R2} claims that the difference between specifying \emph{Throws: nothing} in the C++ Standard and specifying \tcode{noexcept} in a particular implementation that chooses to tighten the specification is surprising to users and somehow compromises the design of the C++ Standard. This claim is unfounded. If the difference causes confusion, clarity can and should be provided through consistency, QoI, documentation, and education. The Lakos Rule is highly motivated and straightforward to explain and understand. One of several ways to motivate it,  ``so we can throw exceptions to test debug-mode asserts'', contains just ten words. We should not compromise the ability to test implementations on diverse platforms --- a real benefit that prevents bugs in production software --- for a perceived cleanliness of design.
 
-Other ways to motivate the Lakos Rule are completely unrelated to negative testing and contract checking. A function having a wide contract that is known to never throw (given that it is implemented correctly) can be declared \tcode{noexcept}. In contrast, the behaviour of a function having a narrow contract is undefined when called out of contract; the C++ Standard does not place any restrictions on the behaviour in this case, including any restriction to not throw. We can therefore conclude that it is not logically sound to declare such a function \tcode{noexcept}: Doing so would implicitly define behaviour beyond the current domain of the function and, hence, that extended behaviour would no longer be undefined (according to the letter of the Standard). The concept of a narrow contract and that of a \tcode{noexcept} function therefore contradict each other.
+Other ways to motivate the Lakos Rule are completely unrelated to negative testing and contract checking. A function having a wide contract that is known to never throw (given that it is implemented correctly) can be declared \tcode{noexcept}. In contrast, the behaviour of a function having a narrow contract is undefined when called out of contract; the C++ Standard does not place any restrictions on the behaviour in this case, including any restriction to not throw. We can therefore conclude that it is not logically sound to declare such a function \tcode{noexcept}: Doing so would implicitly define behaviour beyond the current domain of the function and, hence, that extended behaviour would no longer be undefined (according to the letter of the Standard). The concept of a narrow contract and that of a \tcode{noexcept} function therefore contradict each other (see \cite{P2861R0} for a detailed discussion).
 
 This has direct consequences for software design. It follows that once a function having a narrow contract (for example, \tcode{std::span::operator[]}, which has undefined behaviour when called out of bounds), is declared \tcode{noexcept}, it can never be backward-compatibly extended to having a wide contract (for example, be made bounds-safe in a future version by throwing when called out of bounds) due to the implicitly defined behaviour of the \tcode{noexcept} specifier. 
 
@@ -301,7 +299,7 @@ The Lakos Rule is a long-standing design principle of the C++ Standard Library a
 
 \section*{Acknowledgements}
 
-We would like to thank Lori Hughes, John Lakos, and Mungo Gill for thoroughly reviewing this paper and providing useful feedback, and to Ville Voutilainen for describing his idea of negative testing with stackful coroutines.
+We would like to thank Lori Hughes, John Lakos, and Mungo Gill for thoroughly reviewing this paper and providing useful feedback; to Ville Voutilainen for describing his idea of negative testing with stackful coroutines; and to Jonathan Wakely for providing additional useful comments.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

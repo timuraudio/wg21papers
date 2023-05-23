@@ -19,7 +19,7 @@ Audience: & Evolution Working Group, Core Working Group
 
 
 \begin{abstract}
-There is a general notion in C++ that standard attributes should be \emph{ignorable}. However, currently there does not seem to be a common understanding of what ``ignorable`` means, and the C++ standard itself is ambiguous on this matter. We consider three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \mbox{\tcode{__has_cpp_attribute}}. We discuss where and how the C++ standard is underspecified and why that is problematic, survey existing implementation practice, and propose wording to resolve existing ambiguities. For semantic ignorability in particular, we propose a well-defined Ignorability Rule for standard attributes that should be used as a language design rule going forward.
+There is a general notion in C++ that standard attributes should be \emph{ignorable}. However, currently there does not seem to be a common understanding of what ``ignorable`` means, and the C++ standard itself is ambiguous on this matter. We consider three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \mbox{\tcode{__has_cpp_attribute}}. We discuss where and how the C++ standard is underspecified and why that is problematic, survey existing implementation practice, and propose the Three Rules of Ignorability as a language design guideline going forward, along with wording to codify them in the C++ Standard.
 \end{abstract}
 
 %\vspace{5mm}
@@ -45,8 +45,6 @@ strictly conforming in the absence of that attribute. [...] Standard attributes 
 
 It is clear from the C wording that the intent is for standard attributes to be ignorable, however it is not entirely clear what that means: ``parse but ignore'' implies that the compiler needs to at least parse them (i.e. it cannot treat a standard attribute as token soup). So the C standard might be talking about a different kind of ignorability than the C++ standard does (ignoring the \emph{attribute-token}).
 
-\pagebreak %%%%%% MANUAL!
-
 Before we can try to fix the defect in the C++ wording, we need to answer two questions:
 
 \begin{itemize}
@@ -58,10 +56,11 @@ We will start by defining what \emph{ignore} means. There are different properti
 
 Whether standard attributes are \emph{syntactically} ignorable is a matter of contention. At the heart of the issue is the question whether a compiler is required to properly parse a standard attribute (which includes syntax-checking the argument clause, appertainment, and so forth) even if it then does not implement any semantics for that attribute.
 
-On the other hand, it is uncontroversial that attributes are meant to be \emph{semantically} ignorable. However, we have a problem here as well: it is not quite clear what semantic ignorability means exactly. Until and including C++20, the principle of semantic ignorability is some kind of gentlemens' agreement that originated in the standardisation of attribute syntax for C++11 \cite{N2761}. This agreement, however, is not codified anywhere. The rule exists only implicitly and can be interpreted in different ways. Such manifest ambiguity is anathema to sound and consistent language design.
+On the other hand, it is uncontroversial that attributes are meant to be \emph{semantically} ignorable. However, we have a problem here as well: it is not quite clear what semantic ignorability means exactly. Until and including C++20, the principle of semantic ignorability is some kind of gentlemens' agreement that originated in the standardisation of attribute syntax for C++11 \cite{N2761}. This agreement, however, is not codified anywhere. This guideline currently exists only implicitly and can be interpreted in different ways. Such manifest ambiguity is anathema to sound and consistent language design.
 
 Finally, the behaviour of \tcode{__has_cpp_attribute} is ambiguous as well. In particular, it is unclear whether \mbox{\tcode{__has_cpp_attribute}} should return a positive value for a standard attribute if the compiler is aware of the attribute and can parse it correctly, but does not implement any useful semantics for it. There is current implementation divergence on this point, so the standard should specify the correct behaviour.
 
+In this paper, we propose the Three Rules of Ignorability, resolving all of the above ambiguities for standard attributes.
 
 \section{Syntactic ignorability}
 \subsection{The status quo}
@@ -240,10 +239,16 @@ Note that the question of whether an expression must be ODR-used is in no way re
 
 On all four compilers, regardless of whether the attribute syntax or the built-in syntax is used, the expression in the argument clause is always ODR-used, and the side effects of this ODR-use (such as lambda captures changing class layout) are always triggered. Interestingly, the ODR-use also happens when the actual assumption is then semantically ignored by the compiler, as is the case on Clang for expressions that have side effects. This behaviour is consistent with the interpretation that standard attributes can be ignored only semantically, but not syntactically.
 
-\subsection{Proposed solution: no syntactic ignorability}
+\subsection{Proposed solution: the First Ignorability Rule}
 \label{subsec:proposal_syntactic}
 
-We propose to clarify the wording in the Standard to say that standard attributes \emph{cannot} be syntactically ignored, but must be parsed; syntax errors in the argument clause, appertainment rules, and any additional syntactic requirements specified by a particular standard attribute must be diagnosed; and entities in the argument clause must be ODR-used.
+To clarify the specification in the Standard for syntactic ignorability of standard attributes, we propose the following rule:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\textbf{The First Ignorability Rule:}
+
+Standard attributes \emph{cannot be syntactically ignored}, but must be parsed; syntax errors in the argument clause, appertainment rules, and any additional syntactic requirements specified by a particular standard attribute must be diagnosed; and entities in the argument clause must be ODR-used.
+\end{adjustwidth}
 
  Disallowing syntactic ignorability matches the original design intent of C++ attributes (according to the authors of \cite{N2761}). It also matches the proposed resolution of \cite{CWG2538} and NB comment GB 9.12.1p6, as approved by CWG. We believe that this is the choice of sound language design. Standard attributes are not just arbitrary token sequences, even if they are \emph{semantically} ignorable (see section \ref{subsec:proposal_semantic}). We should try hard not to add optional language features on the syntax level to the language, and we should avoid treating standard attributes as a bucket for any language feature that we do not care about being implemented. There are a small number of standard attributes. If we bothered to specify something in the standard, implementations should at least bother to syntax-check it. This will ensure safety, predictability, portability, and consistency across implementations. Option 1A is also broadly consistent with existing practice (see above).
 
@@ -293,7 +298,7 @@ All standard attributes are currently normatively specified in such a way that t
 \item Attributes that change the semantics of the program in an observable way. We currently have only one such attribute: \tcode{no_unique_address}. This attribute is semantically ignorable because its effect is carefully specified to be so: it introduces a \emph{potentially-overlapping subobject}, i.e. a subobject that either \emph{is} or is \emph{not} overlapping, depending on whether the compiler chooses to implement or semantically ignore the attribute.
 \end{itemize}
 
-\subsubsection{Challenges with defining a semantic ignorability rule}
+\subsubsection{Challenges with defining a guideline for semantic ignorability}
 \label{subsubsec:challenges}
 
 Unfortunately, beyond the syntax and grammar, there is currently no clear and explicit definition of what constitutes a standard attribute, and what it means for it to be semantically ignorable. As a result, different people have a different mental model.
@@ -327,31 +332,35 @@ This program might return \tcode{1} \emph{with} the attribute, but it will \emph
 static_assert (sizeof(Y) == sizeof(int));
 \end{codeblock}
 
-we get an even more obvious violation of the rule above: this program might or might not be ill-formed with the attribute, depending on whether the compiler implements it, but is definitely ill-formed without the attribute. Therefore, the omission of the attribute can render a program ill-formed.
+we get an even more obvious violation of the pseudo-rule above: this program might or might not be ill-formed with the attribute, depending on whether the compiler implements it, but is definitely ill-formed without the attribute. Therefore, the omission of the attribute can render a program ill-formed.
 
-If we had codified a rule earlier, we might have ended up with the rule above (given a well-formed program, omitting an attribute does not change the behaviour/semantics of the program). As a result, we would perhaps never have standardised \mbox{\tcode{no_unique_address}}, which violates this rule, as an attribute; however, that ship sailed with C++20.
+If we had codified a rule for semantic ignorability earlier, we might have ended up with the rule above (given a well-formed program, omitting an attribute does not change the behaviour/semantics of the program). As a result, we would perhaps never have standardised \mbox{\tcode{no_unique_address}}, which violates this rule, as an attribute; however, that ship sailed with C++20.
 In order to find a rule for semantic ignorability that matches existing practice, we need to take a closer look at what it actually means when we say that two programs have ``the same semantics'' or ``the same behaviour''.
 
-\subsection{Proposed solution: the Ignorability Rule for standard attributes}
+\subsection{Proposed solution: the Second Ignorability Rule}
 \label{subsec:proposal_semantic}
 
-Our proposed Ignorability Rule can be described as follows:
+Our proposed rule for semantic ignorability of standard attributes can be formulated as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
+\textbf{The Second Ignorability Rule:}
+
 Given a well-formed program, removing all instances of a particular standard attribute is allowed to change the observable behaviour of the program, but only if the behaviour with the attribute removed would have been a conforming behaviour for the original program with the attribute present.
 \end{adjustwidth}
 
 The standard distinguishes undefined behaviour, unspecified behaviour, and implementation-defined behaviour. Let us call the behaviour that falls into none of these regions, i.e. the behaviour that is fully specified by the standard and does not depend on any input parameters to the abstract machine, the \emph{mandated behaviour} of a C++ program. An example for mandated behaviour is \tcode{sizeof(char)}, which must evaluate to \tcode{1} on every conforming implementation.
 
-The following is therefore a corollary of the Ignorability Rule above:
+The following statement is therefore a corollary of the Second Ignorability Rule:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
+\textbf{Corollary:}
+
 Given a well-formed program, removing all instances of a particular standard attribute must result in a well-formed program that exhibits the exact same \emph{mandated behaviour}. 
 \end{adjustwidth}
 
-However, according to the same Rule, implementation-defined and unspecified behaviour is allowed to change from one behaviour to another due to such a removal, as long as both behaviours would be conforming for the original program with the attribute present. If the program has undefined behaviour with a particular standard attribute present, we do not place any restrictions on the behaviour of such a program; the Ignorability Rule does not apply in this case.
+However, according to the Second Ignorability Rule, implementation-defined and unspecified behaviour is allowed to change from one behaviour to another due to such a removal, as long as both behaviours would be conforming for the original program with the attribute present. If the program has undefined behaviour with a particular standard attribute present, we do not place any restrictions on the behaviour of such a program; the Second Ignorability Rule does not apply in this case.
 
-We can now see that the Ignorability Rule works for all categories of standard attributes we identified in section \ref{subsubsec:attributecategories}: semantically ignoring any of them does not change the \emph{mandated behaviour} of a C++ program in any way. For \tcode{no_unique_address} in particular, [intro.object] says:
+We can now see that the Second Ignorability Rule works for all categories of standard attributes we identified in section \ref{subsubsec:attributecategories}: semantically ignoring any of them does not change the \emph{mandated behaviour} of a C++ program in any way. For \tcode{no_unique_address} in particular, [intro.object] says:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 A \emph{potentially-overlapping subobject} is either:
 \begin{itemize}
@@ -389,11 +398,11 @@ The alignment requirement of an entity is the strictest nonzero alignment specif
 \end{adjustwidth}
 The effect that the alignment requirement of an entity has is fully defined by the standard: it constitutes mandated behaviour of the program. Removing \tcode{alignas} from a program would change that mandated behaviour. Therefore, \tcode{alignas} does \emph{not} have optional semantics, and cannot be a standard attribute.
 
-We propose that the Ignorability Rule be spelled out in the C++ Standard (in [dcl.attr]). Formally, it would only apply to the attributes that are already in the standard, and thus not add any new information per se, as those attributes are already defined to be semantically ignorable in different ways (see discussion in section \ref{subsubsec:attributecategories}). However, the existence of such an explicit rule in the standard would be very helpful for codifying the intended behaviour of all future standard attributes, too: any new attribute proposal that does not want to follow the rule would have to carve out an explicit exception for itself. We believe that the presence of the Ignorability Rule in the C++ Standard would be a strong enough deterrent for future proposals that they will stick to it, thus leading to consistent language design. This affects not only future proposals for new standard attributes, but potentially also other language features such as Contracts \cite{P2521R2}. One of the possible syntaxes for contract annotations is an attribute-like syntax \cite{P2487R0}. If we choose this syntax, we should be consistent with attribute ignorability semantics, too. We believe that the Ignorability Rule proposed here for standard attributes can be adapted to apply to contract-checking annotations as well. Finally, we believe that the rule proposed here is compatible with, but more precise than the rule in the C language (see section \ref{sec:motivation}).
+We propose that the Second Ignorability Rule be spelled out in the C++ Standard (in [dcl.attr]). Formally, it would only apply to the attributes that are already in the standard, and thus not add any new information per se, as those attributes are already defined to be semantically ignorable in different ways (see discussion in section \ref{subsubsec:attributecategories}). However, the existence of such an explicit rule in the standard would be very helpful for codifying the intended behaviour of all future standard attributes, too: any new attribute proposal that does not want to follow the rule would have to carve out an explicit exception for itself. We believe that the presence of the Second Ignorability Rule in the C++ Standard would be a strong enough deterrent for future proposals that they will stick to it, thus leading to consistent language design. This affects not only future proposals for new standard attributes, but potentially also other language features such as Contracts \cite{P2521R2}. One of the possible syntaxes for contract annotations is an attribute-like syntax \cite{P2487R0}. If we choose this syntax, we should be consistent with attribute ignorability semantics, too. We believe that the Second Ignorability Rule proposed here for standard attributes can be adapted to apply to contract-checking annotations as well. Finally, we believe that the rule proposed here is compatible with, but more precise than the rule in the C language (see section \ref{sec:motivation}).
 
 \subsubsection{Alternatives}
 
-Alternatively, one could hold the position that the C++ standard is not the place to try and constrain future evolution of the language, only to define what is and is not conforming with the current standard. Therefore, this rule could instead be published in a new standing document. If this option were to be chosen, it would make most sense to create a new standing document for all such design guidelines for new core language features, not just for attributes. However, we think that adding the Ignorability Rule to the Standard itself is more appropriate.
+Alternatively, one could hold the position that the C++ standard is not the place to try and constrain future evolution of the language, only to define what is and is not conforming with the current standard. Therefore, such a rule could instead be published in a new standing document. If this option were to be chosen, it would make most sense to create a new standing document for all such design guidelines for new core language features, not just for attributes. However, we think that adding the Second Ignorability Rule to the Standard itself is more appropriate.
 
 We could also simply do nothing. This would not have an effect on the current specification of standard attributes. But it would mean that the standard will continue to say nothing about the semantic ignorability of standard attributes. Misunderstandings on this subject will continue, and the discussions around what should or should not be an attribute will keep wasting precious committee time.
 
@@ -420,14 +429,21 @@ The wording regarding \mbox{\tcode{__has_cpp_attribute}} is therefore ambiguous.
 
 The \mbox{\tcode{__has_cpp_attribute}} feature is a victim of implementation divergence. Clang and ICC both report a positive value for \mbox{\tcode{__has_cpp_attribute(carries_dependency)}}, even though they semantically ignore it; however, GCC reports \tcode{0} (and emits a diagnostic that it is being ignored). MSVC is inconsistent even with itself: it reports a positive value for \mbox{\tcode{__has_cpp_attribute(carries_dependency)}}, but \tcode{0} for \mbox{\tcode{__has_cpp_attribute(no_unique_address)}}, even though it does not implement semantics for either attribute.
 
-\subsection{Proposed solution}
+\subsection{Proposed solution: the Third Ignorability Rule}
 
 With regards to the intended behaviour of \tcode{__has_cpp_attribute}, we have the following two options to disambiguate the desired behaviour:
 \begin{enumerate}
 \item Specify that \tcode{__has_cpp_attribute} should return a positive value for a standard attribute only if an an implementation has a useful implementation of its semantics (GCC behaviour for \tcode{carries_dependency}, MSVC behaviour for \tcode{no_unique_address}).
 \item Specify that \tcode{__has_cpp_attribute} should also return a positive value for a standard attribute if an implementation can parse it and check the syntax, even if it does not implement any useful semantics (Clang, ICC, and MSVC behaviour for \tcode{carries_dependency}).
 \end{enumerate}
-We propose option 1: \tcode{__has_cpp_attribute} should return a positive value only if an implementation actually implements the optional semantics of the attribute, \emph{not} if it merely parses it and checks the syntax, even though the latter would always be a conforming implementation for any standard attribute due to the Ignorability Rule (see section \ref{subsec:proposal_semantic}).
+
+We propose option 1 as our third and final Ignorability Rule for standard attributes:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\textbf{The Third Ignorability Rule:}
+
+The feature test macro for a standard attribute shall return a positive value if and only if an implementation actually implements the optional semantics of the attribute, \emph{not} if it merely parses it and checks the syntax (as required by the First Ignorability Rule), , despite the fact that the latter would be a conforming implementation for any standard attribute (due to the Second Ignorability Rule).
+\end{adjustwidth}
 
 The motivation is as follows. For cross-platform development, partially-supported standard attributes are often wrapped in macros like the following:
 
@@ -465,14 +481,24 @@ This issue is not unique to C++; C has a similar problem with \tcode{__has_c_att
 
 We are happy to leave it up to quality of implementation to decide what constitutes ``implementing the optional semantics''. Often, this can not be precisely defined: for example, the compiler might decide to not perform any optimisations based on a particular instance of an optimisation-enabling attribute. This can be a perfectly valid decision, and does not mean that the semantics of the attribute are not supported. The intention is to let the implementation communicate through the positive value that it is making an ``honest attempt'' at doing something useful with a particular standard attribute, and it is \emph{not} merely parsing the syntax, checking for syntax and appertainment errors, and then semantically ignoring all instances of that attribute.
 
-If we adopt this proposal, the behaviour of \tcode{__has_cpp_attribute} on Clang, ICC, and MSVC for \tcode{carries_dependency} would constitute a compiler bug, while the behaviour on GCC for \mbox{\tcode{carries_dependency}} and on MSVC for \tcode{no_unique_address} would be considered conformant.
+If we adopt the Third Ignorability Rule, the behaviour of \tcode{__has_cpp_attribute} on Clang, ICC, and MSVC for \tcode{carries_dependency} will constitute a compiler bug, while the behaviour on GCC for \mbox{\tcode{carries_dependency}} and on MSVC for \tcode{no_unique_address} will be considered conformant.
+
+\section{Summary: the Three Rules of Ignorability}
+
+In this paper, we have shown that ignorability of standard attributes is currently not well defined. We have considered three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \tcode{__has_cpp_attribute}. For each case, we highlighted where the current wording has ambiguities, surveyed current implementation practice in the latest versions of four major C++ compilers (MSVC, GCC, Clang, and ICC), and discussed different options to resolve the existing ambiguities. Considering the above, we propose the following Three Rules of Ignorability as a language design guideline for all current and future standard attributes going forward:
+
+\begin{enumerate}
+\item Standard attributes cannot be syntactically ignored, but must be parsed; syntax errors in the argument clause, appertainment rules, and any additional syntactic requirements specified by a particular standard attribute must be diagnosed; and entities in the argument clause must be ODR-used.
+\item Given a well-formed program, removing all instances of a particular standard attribute is allowed to change the observable behaviour of the program, but only if the behaviour with the attribute removed would have been a conforming behaviour for the original program with the attribute present.
+\item The feature test macro for a standard attribute shall return a positive value if and only if an implementation actually implements the optional semantics of the attribute, \emph{not} if it merely parses it and checks the syntax, despite the fact that the latter would be a conforming implementation for any standard attribute.
+\end{enumerate}
 
 \section{Wording}
 \label{sec:wording}
 
 \subsection{Adopted into C++23}
 
-Since the last revision of this paper, wording has been adopted into C++23 for both fixing the ambiguity around syntactic ignorability (as proposed in \ref{subsec:proposal_syntactic}) and addding the Ignorability Rule for semantic ignorability (as proposed in \ref{subsec:proposal_semantic}). This has been done by adopting Core Issues \cite{CWG2538} and \cite{CWG2695}, respectively. The adopted changes are to modify [dcl.attr.grammar] paragraph 6 as follows:
+Since the last revision of this paper, wording has been adopted into C++23 to describe both the First and the Second Ignorability Rule, insofar as they are not already covered by existing wording. This was done by adopting Core Issues \cite{CWG2538} and \cite{CWG2695}, respectively. The adopted changes are to modify [dcl.attr.grammar] paragraph 6 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 For an \emph{attribute-token} (including an \emph{attribute-scoped-token})  not specified in this document, the behavior is implementation-defined\removed{. Any}\added{; any such} \emph{attribute-token} that is not recognized by the implementation is ignored.
@@ -484,7 +510,7 @@ For an \emph{attribute-token} (including an \emph{attribute-scoped-token})  not 
 
 \subsection{Not yet adopted}
 
-Wording for fixing the ambiguity of \tcode{__has_cpp_attribute} has not yet been adopted into the C++ Standard. Our proposed changes relative to the Working Draft \cite{N4944} are to modify [cpp.cond] paragraphs 5 and 6 as follows:
+Wording for the Third Ignorability Rule, fixing the ambiguity of \tcode{__has_cpp_attribute}, has not yet been adopted into the C++ Standard. Our proposed changes relative to the Working Draft \cite{N4944} are to modify [cpp.cond] paragraphs 5 and 6 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 Each \emph{has-attribute-expression} is replaced by a non-zero \emph{pp-number} matching the form of an \emph{integer-literal} if the implementation supports an attribute with the name specified by interpreting the \emph{pp-tokens}, after macro expansion, as an \emph{attribute-token}, and by \tcode{0} otherwise. The program is ill-formed if the \emph{pp-token}s do not match the form of an \emph{attribute-token}.

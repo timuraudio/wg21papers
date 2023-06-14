@@ -11,7 +11,7 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D2552R3 \\
+Document \#: & P2552R3 \\
 Date: & 2023-06-14\\
 Project: & Programming Language C++ \\
 Audience: & Evolution Working Group, Core Working Group
@@ -19,7 +19,7 @@ Audience: & Evolution Working Group, Core Working Group
 
 
 \begin{abstract}
-There is a general notion in C++ that standard attributes should be \emph{ignorable}. However, currently there does not seem to be a common understanding of what ``ignorable`` means, and the C++ standard itself is ambiguous on this matter. We consider three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \mbox{\tcode{__has_cpp_attribute}}. We discuss where and how the C++ standard is underspecified and why that is problematic, survey existing implementation practice, and propose the Three Rules of Ignorability as a language design guideline going forward, along with wording to codify them in the C++ Standard.
+There is a general notion in C++ that standard attributes should be \emph{ignorable}. However, currently there does not seem to be a common understanding of what ``ignorable`` means, and the C++20 Standard itself is ambiguous on this matter. We consider three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \mbox{\tcode{__has_cpp_attribute}}. We discuss where and how the C++20 Standard is underspecified in all three aspects and why that is problematic, survey existing implementation practice, and propose the Three Rules of Ignorability as language design guidelines going forward. Finally, we propose wording to specify the Third Rule of Ignorability (behaviour of \mbox{\tcode{__has_cpp_attribute}}) in the C++ Standard; wording for the other two Rules has already been added for C++23 via Core Issues.
 \end{abstract}
 
 %\vspace{5mm}
@@ -592,6 +592,16 @@ The \emph{attribute-token} \tcode{no_unique_address} specifies that a non-static
 \end{adjustwidth}
 
 We propose that these changes be treated as a Defect Report.
+
+
+\section*{Document history}
+
+\begin{itemize}
+\item \textbf{R0}, 2022-02-15: Initial version.
+\item \textbf{R1}, 2022-11-15: Removed wording for syntactic and semantic ignorability (now covered by \cite{CWG2538} and \cite{CWG2695}, respectively); added discussion of \tcode{__has_cpp_attribute}; for all three aspects of ignorability, listed options for EWG to consider.
+\item \textbf{R2}, 2023-05-19: Restructured paper; formulated the Three Rules of Ignorability as design guidelines (following options chosen by EWG); added wording for fixing \tcode{__has_cpp_attribute} as a DR.
+\item \textbf {R3}, 2023-06-14: Updated wording for fixing \tcode{__has_cpp_attribute} to reflect EWG and CWG feedback; added section about \tcode{carries_dependency} to rationale.
+\end{itemize}
 
 \section*{Acknowledgements}
 We would like to thank John Lakos for his thorough review of an earlier draft of the paper, and for contributing the idea of regions of program behaviour and the concept of \emph{mandated behaviour}; Corentin Jabot for contributing the code example where removing a \mbox{\tcode{[[no_unique_address]]}} attribute can cause a program to stop compiling; Aaron Ballman, Erich Keane, Jens Maurer, and Peter Brett for their valuable comments on earlier drafts of this paper; Daveed Vandevoorde for reviewing the wording for the Third Ignorability Rule; and Michael Spencer for clarifying the issues with \tcode{carries_dependency}.

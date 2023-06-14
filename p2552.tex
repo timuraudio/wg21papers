@@ -11,8 +11,8 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P2552R2 \\
-Date: & 2023-05-19\\
+Document \#: & D2552R3 \\
+Date: & 2023-06-14\\
 Project: & Programming Language C++ \\
 Audience: & Evolution Working Group, Core Working Group
 \end{tabular}
@@ -442,7 +442,7 @@ We propose option 1 as our third and final Ignorability Rule for standard attrib
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \textbf{The Third Ignorability Rule:}
 
-The feature test macro for a standard attribute shall return a positive value if and only if an implementation actually implements the optional semantics of the attribute, \emph{not} if it merely parses it and checks the syntax (as required by the First Ignorability Rule), , despite the fact that the latter would be a conforming implementation for any standard attribute (due to the Second Ignorability Rule).
+The feature test macro for a standard attribute should return a positive value if an implementation actually implements the optional semantics of the attribute, \emph{not} if it merely parses the attribute and checks the syntax (as required by the First Ignorability Rule), despite the fact that the latter would be a conforming implementation for any standard attribute (due to the Second Ignorability Rule).
 \end{adjustwidth}
 
 The motivation is as follows. For cross-platform development, partially-supported standard attributes are often wrapped in macros like the following:
@@ -479,51 +479,122 @@ Such macros are widespread in cross-platform C++ code bases. In all such macros,
 
 This issue is not unique to C++; C has a similar problem with \tcode{__has_c_attribute}. To our knowledge, the direction proposed here is in line with what WG14 intends to do for \tcode{__has_c_attribute}, and we should not end up in a world where the specifications of \tcode{__has_cpp_attribute} and \tcode{__has_c_attribute} contradict each other.
 
-We are happy to leave it up to quality of implementation to decide what constitutes ``implementing the optional semantics''. Often, this can not be precisely defined: for example, the compiler might decide to not perform any optimisations based on a particular instance of an optimisation-enabling attribute. This can be a perfectly valid decision, and does not mean that the semantics of the attribute are not supported. The intention is to let the implementation communicate through the positive value that it is making an ``honest attempt'' at doing something useful with a particular standard attribute, and it is \emph{not} merely parsing the syntax, checking for syntax and appertainment errors, and then semantically ignoring all instances of that attribute.
+In order to implement this change, we need to do two things:
 
-If we adopt the Third Ignorability Rule, the behaviour of \tcode{__has_cpp_attribute} on Clang, ICC, and MSVC for \tcode{carries_dependency} will constitute a compiler bug, while the behaviour on GCC for \mbox{\tcode{carries_dependency}} and on MSVC for \tcode{no_unique_address} will be considered conformant.
+\begin{enumerate} 
+\item Explicitly allow a conforming implementation to return \tcode{0} from \tcode{__has_cpp_attribute} if does not implement the optional semantics of the attribute, 
+\item Define what constitutes ``implementing the optional semantics''.
+\end{enumerate}
+
+The first one is a simple wording addition to [cpp.cond]/6 to make it implementation-defined whether the value returned from \tcode{__has_cpp_attribute} is \tcode{0} or the value in the table (which allows the former to be conforming). However, the second one is surprisingly tricky and cannot be done as a general statement for all standard attributes; we need to look at every standard attribute individually.
+
+For some attributes, the desired behaviour is clear: if the attribute is meant to trigger (or suppress) a warning, \tcode{__has_cpp_attribute} should return \tcode{0} if no such warning is triggered (or the warning is not suppressed). But for other attributes, what constitutes ``implementing the optional semantics'' is more vague. If an attribute is there to enable optimisations, what should happen if the compiler does not actually perform the optimisations? What should happen if the compiler only does so with a particular set of flags (such as \tcode{-O3}) but not others (such as \tcode{-O0})? Should the value be different depending on the build mode? What should happen if the ``compiler'' is only a frontend (such as EDG) and does not contain a backend?
+
+To arrive at an unambiguous and user-friendly specification for the Third Ignorability Rule, we need to look at the \emph{Recommended practice} section of every standard attribute's specification, and add wording to that specification giving a recommendation when the value of \tcode{__has_cpp_attribute} should be \tcode{0} in a way that gives compilers enough implementation freedom to ``do the right thing'' for that particular attribute so that the above macros behave as expected in cases where the answer is not clear-cut. A positive value should communicate to the user that it the implementation making an ``honest attempt'' at doing something useful with a particular standard attribute, and it is \emph{not} merely parsing the syntax, checking for syntax and appertainment errors, and then semantically ignoring all instances of that attribute.
+
+Regarding the currently existing implementation divergence, the current behaviour of \tcode{__has_cpp_attribute} on Clang, ICC, and MSVC for \tcode{carries_dependency} goes against the Third Ignorability Rule, while the current behaviour on GCC for \mbox{\tcode{carries_dependency}} and on MSVC for \tcode{no_unique_address} follows the Third Ignorability Rule.
+
+\subsection{The issue with \tcode{carries_dependency}}
+
+The current specification of \tcode{carries_dependency} is defective. The note where we would have to add wording for the Third Ignorability Rule for this attribute is [dcl.attr.depend] paragraph 3:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+[\emph{Note 1:} The \tcode{carries_dependency} attribute does not change the meaning of the program, but might result in generation of more efficient code. --- \emph{end note}]
+\end{adjustwidth}
+This note contains a false statement today because the attribute \emph{does} change the meaning of the program. It has been clarified by SG1 experts that adding \tcode{[[carries_dependency]]} to a parameter may add a \emph{dependency-ordered before} relationship that would not be present without the attribute. This relationship may make a program that would otherwise have undefined behaviour due to a violation of the ordering rules have defined behaviour. It is also the case that no implementation actually implements memory order Consume, and that WG21's current intent is to overhaul memory order Consume (see \cite{P0750R1}) and deprecate and remove the \tcode{carries_dependency} attribute.
+
+It would be desirable to include \tcode{carries_dependency} in our proposed specification for the Third Ignorability Rule, and to encourage implementations that do not use \tcode{carries_dependency} for optimisations (that is, \emph{all} existing implementations of C++) to return \tcode{0} from \tcode{__has_cpp_attribute(carries_dependency)}. However, considering the issues with the current state of this attribute, we decided to follow the EWG guidance and exclude this attribute from the wording proposed in this paper.
 
 \section{Summary: the Three Rules of Ignorability}
 
-In this paper, we have shown that ignorability of standard attributes is currently not well defined. We have considered three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \tcode{__has_cpp_attribute}. For each case, we highlighted where the current wording has ambiguities, surveyed current implementation practice in the latest versions of four major C++ compilers (MSVC, GCC, Clang, and ICC), and discussed different options to resolve the existing ambiguities. Considering the above, we propose the following Three Rules of Ignorability as a language design guideline for all current and future standard attributes going forward:
+In this paper, we have shown that ignorability of standard attributes in C++20 is not well defined. We have considered three aspects of ignorability: syntactic ignorability, semantic ignorability, and the behaviour of \tcode{__has_cpp_attribute}. For each case, we highlighted where the current wording has ambiguities, surveyed current implementation practice in the latest versions of four major C++ compilers (MSVC, GCC, Clang, and ICC), and discussed different options to resolve the existing ambiguities. Considering the above, we propose the following Three Rules of Ignorability as a language design guideline for all current and future standard attributes going forward:
 
 \begin{enumerate}
 \item Standard attributes cannot be syntactically ignored, but must be parsed; syntax errors in the argument clause, appertainment rules, and any additional syntactic requirements specified by a particular standard attribute must be diagnosed; and entities in the argument clause must be ODR-used.
 \item Given a well-formed program, removing all instances of a particular standard attribute is allowed to change the observable behaviour of the program, but only if the behaviour with the attribute removed would have been a conforming behaviour for the original program with the attribute present.
-\item The feature test macro for a standard attribute shall return a positive value if and only if an implementation actually implements the optional semantics of the attribute, \emph{not} if it merely parses it and checks the syntax, despite the fact that the latter would be a conforming implementation for any standard attribute.
+\item The feature test macro for a standard attribute should return a positive value if an implementation actually implements the optional semantics of the attribute, not if it merely parses the attribute and and checks the syntax, despite the fact that the latter would be a conforming implementation for any standard attribute.
 \end{enumerate}
 
-\section{Wording}
-\label{sec:wording}
+\section{Wording already adopted for C++23}
 
-\subsection{Adopted into C++23}
-
-Since the last revision of this paper, wording has been adopted into C++23 to describe both the First and the Second Ignorability Rule, insofar as they are not already covered by existing wording. This was done by adopting Core Issues \cite{CWG2538} and \cite{CWG2695}, respectively. The adopted changes are to modify [dcl.attr.grammar] paragraph 6 as follows:
+Wording for the First and the Second Ignorability Rule, fixing the ambiguities in C++20 around syntactic and semantic ignorability, has already been added for C++23 by way of adopting Core Issues \cite{CWG2538} and \cite{CWG2695}, respectively. The adopted changes modify [dcl.attr.grammar] paragraph 6 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 For an \emph{attribute-token} (including an \emph{attribute-scoped-token})  not specified in this document, the behavior is implementation-defined\removed{. Any}\added{; any such} \emph{attribute-token} that is not recognized by the implementation is ignored.
 
-\added{[\emph{Note:} A program is ill-formed if it contains an \emph{attribute} specified in [dcl.attr] that violates the rules to which entity or statement the attribute may apply or the syntax rules for the attribute's \emph{attribute-argument-clause}, if any. --- \emph{end note}]}
+\added{[\emph{Note 4:} A program is ill-formed if it contains an \emph{attribute} specified in [dcl.attr] that violates the rules to which entity or statement the attribute may apply or the syntax rules for the attribute's \emph{attribute-argument-clause}, if any. --- \emph{end note}]}
 
-\added{[\emph{Note:} The \emph{attribute}s specified in [dcl.attr] have optional semantics: given a well-formed program, removing all instances of any one of those \emph{attribute}s results in a program whose set of possible executions ([intro.abstract]) for a given input is a subset of those of the original program for the same input, absent implementation-defined guarantees with respect to that \emph{attribute}. --- \emph{end note}]}
+\added{[\emph{Note 5:} The \emph{attribute}s specified in [dcl.attr] have optional semantics: given a well-formed program, removing all instances of any one of those \emph{attribute}s results in a program whose set of possible executions ([intro.abstract]) for a given input is a subset of those of the original program for the same input, absent implementation-defined guarantees with respect to that \emph{attribute}. --- \emph{end note}]}
 \end{adjustwidth}
 
-\subsection{Not yet adopted}
+\section{Proposed Wording}
+\label{sec:wording}
 
-Wording for the Third Ignorability Rule, fixing the ambiguity of \tcode{__has_cpp_attribute}, has not yet been adopted into the C++ Standard. Our proposed changes relative to the Working Draft \cite{N4944} are to modify [cpp.cond] paragraphs 5 and 6 as follows:
+Wording for the Third Ignorability Rule, fixing the ambiguity of \tcode{__has_cpp_attribute}, has not yet been added to the C++ Standard, so this paper proposes to do so. Our proposed changes are relative to the Working Draft \cite{N4944}. Modify [cpp.cond] paragraphs 5 and 6 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 Each \emph{has-attribute-expression} is replaced by a non-zero \emph{pp-number} matching the form of an \emph{integer-literal} if the implementation supports an attribute with the name specified by interpreting the \emph{pp-tokens}, after macro expansion, as an \emph{attribute-token}, and by \tcode{0} otherwise. The program is ill-formed if the \emph{pp-token}s do not match the form of an \emph{attribute-token}.
 
-For an attribute specified in this document, the value of the \emph{has-attribute-expression} is given by Table 21\added{ if the implementation supports the  semantics of the attribute, and by \tcode{0} otherwise}. For other attributes recognized by the implementation, the value is implementation-defined.
+For an attribute specified in this document,\added{ it is implementation-defined whether} the value of the \emph{has-attribute-expression}\added{ is \tcode{0} or} is given by Table 21. For other attributes recognized by the implementation, the value is implementation-defined.
 
-[\emph{Note:} It is expected that the availability of an attribute can be detected by any non-zero result\added{; for an attribute specified in this document, it is expected that a conforming implementation supporting the syntax of such an attribute, but choosing not to support its optional semantics, gives the result \tcode{0}}. --- \emph{end note}] 
+[\emph{Note 1:} It is expected that the availability of an attribute can be detected by any non-zero result. --- \emph{end note}] 
+\end{adjustwidth}
+
+Modify [dcl.attr.assume] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+[\emph{Note 1:} The expression is potentially evaluated ([basic.def.odr]). The use of assumptions is intended to allow implementations to analyze the form of the expression and deduce information used to optimize the program. Implementations are not required to deduce any information from any particular assumption. \added{It is expected that the value of a \emph{has-attribute-expression} for the \tcode{assume} attribute is \tcode{0} if an implementation does not attempt to deduce any such information from assumptions.} --- \emph{end note}]
+\end{adjustwidth}
+
+Modify [dcl.attr.deprecated] paragraph 4 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{Recommended practice:} Implementations should use the \tcode{deprecated} attribute to produce a diagnostic message in case the program refers to a name or entity other than to declare it, after a declaration that specifies the attribute. The diagnostic message should include the text provided within the \emph{attribute-argument-clause} of any deprecated attribute applied to the name or entity. \added{The value of a \emph{has-attribute-expression} for the \tcode{deprecated} attribute should be \tcode{0} unless the implementation can issue such diagnostic messages.}
+\end{adjustwidth}
+
+Modify [dcl.attr.fallthrough] paragraph 2 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{Recommended practice:} The use of a fallthrough statement should suppress a warning that an implementation might otherwise issue for a case or default label that is reachable from another case or default label along some path of execution. \added{The value of a \emph{has-attribute-expression} for the \tcode{fallthrough} attribute should be \tcode{0} if the attribute does not cause suppression of such warnings.} Implementations should issue a warning if a fallthrough statement is not dynamically reachable.
+\end{adjustwidth}
+
+Modify [dcl.attr.likelihood] paragraph 2 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\removed{\emph{Recommended practice:} }\added{[\emph{Note 1:} }The use of the \tcode{likely} attribute is intended to allow implementations to optimize for the case where paths of execution including it are arbitrarily more likely than any alternative path of execution that does not include such an attribute on a statement or label. The use of the \tcode{unlikely} attribute is intended to allow implementations to optimize for the case where paths of execution including it are arbitrarily more unlikely than any alternative path of execution that does not include such an attribute on a statement or label. \added{It is expected that the value of a \emph{has-attribute-expression} for the \tcode{likely} and \tcode{unlikely} attributes is \tcode{0} if the implementation does not attempt to use these attributes for such optimizations.} A path of execution includes a label if and only if it contains a jump to that label.\added{ --- \emph{end note}]}
+\end{adjustwidth}
+
+Modify [dcl.attr.unused] paragraph 4 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{Recommended practice:} \added{}For an entity marked \tcode{maybe}_\tcode{unused}, implementations should not emit a warning that the entity or its structured bindings (if any) are used or unused. For a structured binding declaration not marked \tcode{maybe}_\tcode{unused}, implementations should not emit such a warning unless all of its structured bindings are unused. \added{The value of a \emph{has-attribute-expression} for the \tcode{maybe}_\tcode{unused} attribute should be \tcode{0} if the attribute does not cause suppression of such warnings.}
+\end{adjustwidth}
+
+Modify [dcl.attr.nodiscard] paragraph 4 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{Recommended practice:} Appearance of a \tcode{nodiscard} call as a potentially-evaluated discarded-value expression ([expr.prop]) is discouraged unless explicitly cast to \tcode{void}. Implementations should issue a warning in such cases. \added{The value of a \emph{has-attribute-expression} for the \tcode{nodiscard} attribute should be \tcode{0} unless the implementation can issue such warnings.}
+\end{adjustwidth}
+
+Modify [dcl.attr.noreturn] paragraph 3 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{Recommended practice:} Implementations should issue a warning if a function marked \tcode{[[noreturn]]} might return. \added{The value of a \emph{has-attribute-expression} for the \tcode{noreturn} attribute should be \tcode{0} unless the implementation can issue such warnings.}
+\end{adjustwidth}
+
+Modify [dcl.attr.nouniqueaddr] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The \emph{attribute-token} \tcode{no_unique_address} specifies that a non-static data member is a potentially-overlapping subobject ([intro.object]). No \emph{attribute-argument-clause} shall be present. The attribute may appertain to a non-static data member other than a bit-field.
+
+[\emph{Note 1:} The non-static data member can share the address of another non-static data member or that of a base class, and any padding that would normally be inserted at the end of the object can be reused as storage for other members. --- \emph{end note}]
+
+\added{\emph{Recommended practice:} The value of a \emph{has-attribute-expression} for the \tcode{no}_\tcode{unique}_\tcode{address} attribute should be \tcode{0} for a given implementation unless this attribute can cause a potentially- overlapping subobject to have zero size.}
 \end{adjustwidth}
 
 We propose that these changes be treated as a Defect Report.
 
 \section*{Acknowledgements}
-We would like to thank John Lakos for his thorough review of an earlier draft of the paper, and for contributing the idea of regions of program behaviour and the concept of \emph{mandated behaviour}; Corentin Jabot for contributing the code example where removing a \mbox{\tcode{[[no_unique_address]]}} attribute can cause a program to stop compiling; and Aaron Ballman, Erich Keane, Jens Maurer, and Peter Brett for their valuable comments on earlier drafts of this paper.
+We would like to thank John Lakos for his thorough review of an earlier draft of the paper, and for contributing the idea of regions of program behaviour and the concept of \emph{mandated behaviour}; Corentin Jabot for contributing the code example where removing a \mbox{\tcode{[[no_unique_address]]}} attribute can cause a program to stop compiling; Aaron Ballman, Erich Keane, Jens Maurer, and Peter Brett for their valuable comments on earlier drafts of this paper; Daveed Vandevoorde for reviewing the wording for the Third Ignorability Rule; and Michael Spencer for clarifying the issues with \tcode{carries_dependency}.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

@@ -1,0 +1,128 @@
+\input{wg21common}
+
+\begin{document}
+\title{Contracts on lambdas}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P2890R0 \\
+Date: &2023-08-10 \\
+Project: & Programming Language C++ \\
+Audience: & SG21
+\end{tabular}
+
+\begin{abstract}
+This paper proposes to allow contract-checking annotations (preconditions, postconditions, and assertions) on lambda expressions, and explains how name lookup and lambda captures in such annotations should work. The proposed semantics for both are straightforward and consistent with the rest of the language.\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+While the work on the Contracts MVP (see \cite{P2388R4}) has so far focused on ordinary functions, there is no a priori reason why we should not allow contract-checking annotations (CCAs) to appear also in lambda expressions. For example, the following code should be well-formed:
+\begin{codeblock}
+constexpr bool add_overflows(int a, int b) {
+  return (b > 0 && a > INT_MAX - b) || (b < 0 && a < INT_MIN - b);
+}
+
+std::vector<int> vec = { /* ... */ };
+
+auto sum = accumulate(vec.begin(), vec.end(), 0, [](int a, int b)
+  [[pre: !add_overflows(a, b)]] {
+    return a + b;
+  });
+\end{codeblock}
+
+Note that SG21 has not yet settled on a syntax for CCAs. In this paper, we use attribute-like syntax \cite{P2487R0}, however the proposal is independent of the choice of syntax and would work in the same way with lambda-based syntax \cite{P2461R1} or condition-centric syntax \cite{P2737R0}. For this reason, we do not specify the exact syntactic position of a CCA on a lambda in this paper; this should be specified in the to-be-adopted Contracts syntax proposal.
+
+\section{Name lookup}
+
+The most recent revision of the Contracts MVP paper \cite{P2388R4} says the following about CCAs for lambdas:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+These features are deferred due to unresolved issues: [...] a way to express preconditions and postconditions for lambdas: name lookup is already problematic in lambdas in the face of lambda captures. This problem is pursued in \cite{P2036R1}, and until it has been solved we see no point in delaying the minimum contract support proposal.
+\end{adjustwidth}
+
+\pagebreak
+
+However, since that paper was published, \cite{P2036R3} has been adopted for C++23, which resolved the name lookup issues cited above. We therefore no longer see a problem with allowing all three kinds of CCAs (\tcode{pre}, \tcode{post}, and \tcode{assert}) in lambda expressions. We propose that name lookup for entities inside these CCAs follow the same rules as for lambda trailing return types (see \cite{P2036R3}): name lookup in the CCAs in a lambda first consider that lambda’s captures before looking further outward. Consider:
+
+\begin{codeblock}
+int i = 0;
+double j = 42.0;
+// ...
+auto counter = [j=i]() mutable [[pre: j >= 0]] {
+  return j++;
+};
+\end{codeblock}
+
+In this code, the \tcode{j} in the CCA should refer to the \tcode{j} of type \tcode{int} introduced by the init-capture, not the \tcode{j} of type \tcode{double} declared outside. This rule is most consistent with the rest of the language, and least surprising to the user.
+
+\section{ODR-use and lambda captures}
+
+If we allow CCAs on lambdas, we need to consider how CCAs should interact with the rules for ODR-use and lambda captures.
+
+\subsection{Entities in a CCA are always ODR-used}
+
+ODR-use of an entity can be observable, both at compile time and at runtime, as it can trigger template instantiations and lambda captures. \cite{P2834R1} proposes the principle that the semantics of a CCA must not affect the proximate compile-time semantics surrounding that annotation. \cite{P2877R0}, which we adopted for the Contracts MVP, goes further by removing the notion of build modes and making the semantics of a CCA implementation-defined and in general unknowable at compile time.
+
+From this follows that entities in a CCA must always be ODR-used, even if the semantic of the CCA is \emph{ignore}, because whether an entity is ODR-used cannot depend on the contract semantic. The remainder of this paper therefore assumes that entities in a CCA are always ODR-used. If this principle does not hold, none of the discussion in this paper applies, and we would need to re-think the design.
+
+\subsection{ODR-use in a CCA can trigger a lambda capture}
+
+ODR-use can trigger lambda captures. It follows that a CCA on a lambda can trigger a lambda capture if it ODR-uses an entity not ODR-used anywhere else. For example, the following CCA will unconditionally trigger a lambda capture:
+
+\begin{codeblock}
+auto f(int i) {
+  return sizeof( [=] [[pre: i > 0]] {}); 
+}
+\end{codeblock}
+
+In this code, \tcode{f} will return \tcode{sizeof(int)} even if the semantic of the CCA is \emph{ignore}. With the CCA removed, \tcode{f} would return \tcode{1}.
+
+We believe that this behaviour is most straightforward, most consistent with the rest of the language, and least surprising to the user: it simply falls out of the current rules in C++ for ODR-use and lambda capture.
+
+\subsection{Alternative: make triggering a lambda capture from a CCA ill-formed}
+
+\cite{P2834R1} proposes to make the above case --- a CCA triggering a lambda capture of an entity not otherwise captured --- ill-formed. The paper argues that allowing this violates the ``zero overhead for ignored predicates'' principle. It gives some examples where such a capture can cause an expensive copy of a captured object, and cause a lambda to no longer fit into the small object optimisation of \tcode{std::function}. It is therefore possible to construct a program where the mere presence of a CCA, even if its semantic is \emph{ignore}, can cause runtime performance degradation. \cite{P2834R1} goes on to say that this is sufficient justification to make this case ill-formed. Note that, since the contract semantic is in general not observable at compile time, the code above would have to be \emph{unconditionally} ill-formed, regardless of contract semantic,
+
+We do not agree that introducing such a restriction is reasonable. Such cases are unlikely to appear in practice, and if they do, the user gets what they asked for. It is also easily avoidable (don't write the capture). Simply allowing the capture to happen is consistent with how captures work in all other parts of the lambda (the trailing return type and the body). It is also consistent with the rules for \tcode{[[assume(expr)]]}, which can cause the same kind of capture --- and we already discussed this exact case at length when we standardised \tcode{[[assume(expr)]]} (see \cite{P1774R8}). We should let these language features combine naturally, rather than artificially complicating the language rules to micromanage each special case where the user might have got it wrong --- we do not do it elsewhere in the Standard, either.
+
+If we were to make this case ill-formed, the user would get a highly non-obvious compiler error and would have to add an extra line ODR-using the entity in question inside the lambda body (for example, casting it to \tcode{void)}). Introducing such exceptions and special cases to the basic rules of the language  hurts the ergonomics and teachability of C++.
+
+If it turns out that this case is truly relevant, the appropriate solution is to implement a compiler warning for it as a matter of QoI, as is usually done in similar cases. Consider:
+
+\begin{codeblock}
+std::map<int, Widget> map = { /* ... */ };
+for (const std::pair<int, Widget>& elem : map)
+  // do something with \tcode{elem}
+\end{codeblock}
+
+In this case, the user got the element type of \tcode{std::map} wrong (which is \tcode{std::pair<const int, Widget>} rather than \tcode{std::pair<int, Widget>}); this generates an unintended implicit conversion, which in turn yields a temporary object that is lifetime-extended by the \tcode{const\&}. This code compiles and works, but has a silent performance degradation due to the unnecessary conversion and object creation on every iteration of the loop. This is unfortunate; however, we do not add special cases to basic language rules such as range-based \tcode{for} loops, implicit conversions, or reference semantics to make such cases ill-formed. Instead, the user gets what they get, and a quality compiler or static analysis tool will issue a warning.
+
+\section{Summary}
+
+We propose that the following be added to the Contracts MVP (wording to be provided after design approval by SG21):
+
+\begin{itemize}
+\item Clarify that all entities in a CCA are ODR-used,
+\item Allow CCAs on lambdas (exact syntactic position to be specified by the to-be-adopted Contracts syntax proposal),
+\item For CCAs on lambdas, follow the usual C++ rules for ODR-use and lambda captures, like \tcode{[[assume]]} does; do not introduce a special exception that entities ODR-used in a CCA but not otherwise should make the program ill-formed if this ODR-use triggers a lambda capture.
+\end{itemize}
+
+%\section*{Document history}
+
+%\begin{itemize}
+%\item \textbf{R0}, 2023-03-08: Initial version.
+%\item \textbf{R1}, 20XX-XX-XX: ??
+%\end{itemize}
+
+%\section*{Acknowledgements}
+
+%nothing yet
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

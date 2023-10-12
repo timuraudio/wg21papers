@@ -31,7 +31,7 @@ Jens Maurer \small(\href{mailto:jens.maurer@gmx.net}{jens.maurer@gmx.net})}
 
 \begin{tabular}{ll}
 Document \#: & P2961R1 \\
-Date: &2023-10-09 \\
+Date: &2023-10-10 \\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
@@ -612,13 +612,13 @@ Further down the list, there is \tcode{assertion_check}, which seems unnecessari
 \subsection{Viability for the C language}
 \label{subsec:clang}
 
-We consulted with SG22 (C/C++ Liaison Group) and requested their opinion on 1) whether there is interest in standardising Contracts for C in a way compatible with C++ and usable in code shared between C and C++; 2) whether they would prefer the syntax presented in this paper or the attribute-like syntax \cite{P2935R3} for this purpose; 3) whether there are C-specific technical concerns with the syntax presented in this paper.
+We consulted with SG22 (C/C++ Liaison Group) and requested their opinion on 1) whether there is interest in standardising Contracts for C in a way compatible with C++ and usable in code shared between C and C++; 2) whether they would prefer the syntax presented in this paper or the attribute-like syntax \cite{P2935R3} for this purpose; 3) whether there are C-specific technical concerns with the syntax presented in this paper. The discussion happened on the SG22 reflector and we received extensive feedback that we summarise in this section; however, no minuted SG22 meeting or official polls took place.
 
 Several SG22 members expressed a strong interest in standardising Contracts for C in a way compatible with C++. Five SG22 members stated that they would prefer the syntax proposed in this paper over the attribute-like syntax \cite{P2935R3}, while only one SG22 member stated that they would prefer the attribute-like syntax.
 
-The only technical concern raised by SG22 with regards to the syntax proposed here is that C does not have conditional keywords and they would like to avoid introducing them. At the same time, \tcode{pre} and \tcode{post} are too frequent in existing C code to be claimed as full keywords. However, there is a straightforward workaround. We could define the keywords in C as \tcode{_Pre} and \tcode{_Post}, respectively, and then provide convenience macros \tcode{pre} and \tcode{post}, respectively, in a new C header \tcode{<stdcontracts.h>} that expand to the C keywords. The same technique has been successfully used for numerous earlier keywords such as \tcode{_Bool}, \tcode{_Static_assert}, \tcode{_Alignas}, \tcode{_Thread_local}, etc.
+The only technical concern raised with regards to the syntax proposed here is that C does not have conditional keywords and they would like to avoid introducing them. At the same time, \tcode{pre} and \tcode{post} are too frequent in existing C code to be claimed as full keywords. However, there is a straightforward workaround. We could define the keywords in C as \tcode{_Pre} and \tcode{_Post}, respectively, and then provide convenience macros \tcode{pre} and \tcode{post}, respectively, in a new C header \tcode{<stdcontracts.h>} that expand to the C keywords. The same technique has been successfully used for numerous earlier keywords such as \tcode{_Bool}, \tcode{_Static_assert}, \tcode{_Alignas}, \tcode{_Thread_local}, etc.
 
-The discussion in SG22 revealed that \emph{backwards-compatibility}, i.e. the ability to add contract-checking annotations to existing code and to have this code still compile with an old compiler that does not know anything about Contracts, is a much more important concern in C than in C++\footnote{According to the SG21 electronic poll on syntax requirements in \cite{P2885R3}, such backwards-compatibility was deemed \emph{irrelevant} for Contracts in C++.}. Our paper provides such backwards-compatibility because it makes all contract-checking annotations syntactically compatible with function-like macros:
+The SG22 discussion revealed that \emph{backwards-compatibility}, i.e. the ability to add contract-checking annotations to existing code and to have this code still compile with an old compiler that does not know anything about Contracts, is a much more important concern in C than in C++\footnote{According to the SG21 electronic poll on syntax requirements in \cite{P2885R3}, such backwards-compatibility was deemed \emph{irrelevant} for Contracts in C++ by a majority of respondents.}. Our paper provides such backwards-compatibility because it makes all contract-checking annotations syntactically compatible with function-like macros:
 
 \begin{codeblock}
 #if COMPILER_UNDERSTANDS_CONTRACTS
@@ -629,11 +629,26 @@ The discussion in SG22 revealed that \emph{backwards-compatibility}, i.e. the ab
 // same for \tcode{post} and \tcode{assert-keyword}
 \end{codeblock}
 
-This property was stated as an important reason for supporting our paper over attribute-like syntax. However, it was noted the above technique will stop working when we introduce post-MVP extensions that add syntactic elements outside of the parentheses, such as closures and labels, which might also be relevant for C. It was further noted that many of the keywords starting with underscore + capital letter were later evolved to all lowercase keywords identical to C++ (\tcode{bool}, \tcode{static_assert}, etc.) which is desirable for Contracts too but is most likely not possible if we stick with the keywords \tcode{pre} and \tcode{post} given how common they are today as identifiers.
+This property was stated as an important reason for supporting our paper over attribute-like syntax. However, the above technique will stop working if we introduce post-MVP extensions that add syntactic elements outside of the parentheses, such as closures and labels,
+which might also be relevant for C. Adding such elements inside the top-level parentheses would keep this technique working, especially if such elements themselves look like plain function invocations. Essentially, instead of
+
+\lstset{emph={labels,captures,predicate}, emphstyle=\itshape}
+\begin{codeblock}
+pre <labels> [captures] (predicate)
+\end{codeblock}
+
+we would have to do something along the lines of
+
+\begin{codeblock}
+pre (labels, captures, predicate)
+\end{codeblock}
+\lstset{emph={}, emphstyle=\itshape}
+
+It was further noted that many of the keywords starting with underscore + capital letter were later evolved to all lowercase keywords identical to C++ (\tcode{bool}, \tcode{static_assert}, etc.) which is desirable for Contracts too but is most likely not possible if we stick with the keywords \tcode{pre} and \tcode{post} given how common they are today as identifiers.
 
 Regarding attribute-like syntax, an important difference between C and C++ is that the notion of ignorability of attributes is much stronger in C. In C++, attributes may be semantically optional but still need to be fully parsed, and syntax errors diagnosed (also known as the First Ignorability Rule for attributes, see \cite{P2552R3}). On the other hand, in C, everything inside the \tcode{[[...]]} of an attribute may be treated as balanced token soup and skipped entirely. Using attribute-like syntax for Contracts in C suggests that contract-checking annotations may also be token-ignored in the same way. Several people stated as an important reason for supporting our paper over attribute-like syntax that allowing or even suggesting ignorability in this way is \emph{not} a desirable property for contract-checking annotations. Simultaneously, one person stated as the reason for supporting attribute-like syntax over our paper that such ignorability \emph{is} a desirable property for contract-checking annotations.
 
-Note that unlike the function-like macro approach, the allowance in C to token-ignore attributes does not actually provide backwards-compatibility of Contracts with older compilers in practice: all major C compilers treat attribute-like contract-checking annotations as syntax errors today because of the colon. Note further that regardless of which syntax we choose for Contracts, backwards-compatibility with older compilers can always be achieved by wrapping the contract-checking annotations themselves into macros rather than the keywords used for them; however, SG22 indicated that it would be preferable to avoid this if possible.
+Note that unlike the function-like macro approach, the allowance in C to token-ignore attributes does not actually provide backwards-compatibility of Contracts with older compilers in practice: all major C compilers treat attribute-like contract-checking annotations as syntax errors today because of the colon. Note further that regardless of which syntax we choose for Contracts, backwards-compatibility with older compilers can always be achieved by wrapping the contract-checking annotations themselves into macros rather than the keywords used for them; however, it was noted that from the C perspective it might be preferable to avoid this.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -890,7 +905,9 @@ However, note that we cannot use a contextual keyword for the contract kind \tco
 struct invariant {
   invariant(int());   // Case 1: Constructor taking a function pointer
 };
-
+\end{codeblock}
+\pagebreak % MANUAL BREAK
+\begin{codeblock}
 bool b = true;
 struct X {
   invariant(b);   // Case 2: Member declarator with extra parentheses
@@ -964,6 +981,8 @@ In attribute-like syntax, an assertion at block scope takes the shape of an attr
 void f() {
   int i = get_i();
   [[ assert: i > 0 ]]
+  use(i);
+}
 \end{codeblock}
 \end{minipage}
 \begin{minipage}{8cm}
@@ -973,22 +992,26 @@ void f() {
 void f() {
   int i = get_i();
   assertexpr(i > 0);
-\end{codeblock}
-\end{minipage}
-
-
-\begin{minipage}{8cm}
-\begin{codeblock}
   use(i);
 }
 \end{codeblock}
 \end{minipage}
-\begin{minipage}{8cm}
-\begin{codeblock}
-  use(i);
-}
-\end{codeblock}
-\end{minipage}
+
+
+%\begin{minipage}{8cm}
+%\begin{codeblock}
+%  use(i);
+%}
+%\end{codeblock}
+%\end{minipage}
+%\begin{minipage}{8cm}
+%\begin{codeblock}
+%  use(i);
+%}
+%\end{codeblock}
+%\end{minipage}
+
+
 \subsubsection{Assertion as an expression}
 
 The left-hand side of the code example below is taken directly from \cite{P2935R3}. Note that in attribute-like syntax, this would require a novel grammar that does not exist for attributes today and that we do not have implementation experience with. Attributes today need to appertain to another entity such as a declaration or a statement, and cannot be used on their own as an expression. At the same time, if an assertion is not an expression, it cannot be a full drop-in replacement for C \tcode{assert} as there would be places where a C \tcode{assert} is legal but a contract assert is not. With our proposal, using an assertion as an expression just works:
@@ -1022,6 +1045,8 @@ struct S2 {
 \subsubsection{Position inside more complex function declarations}
 
 The left-hand side of the code example below is taken directly from \cite{P2935R3}. In attribute-like syntax, preconditions and postconditions are placed in the same location where attributes that would appertain to the function’s type would be located, i.e. before any trailing return type, virtual specifiers such as \tcode{override} and \tcode{final}, and a \tcode{requires} clause (see \cite{P2935R3}). This has the benefit that we can re-use the existing standard attribute grammar. However, the resulting position is awkward and goes against the natural reading order of a function declaration; it also requires delayed parsing of postconditions (as the predicate may depend on the trailing return type).
+
+\pagebreak %MANUAL
 
 By contrast, in our proposal, preconditions and postconditions are placed at the very end of a declaration, avoiding all of the above problems:
 \vspace{3mm}
@@ -1133,6 +1158,7 @@ void vector::push_back(const T& v)
     (size() == old_size + 1);
 \end{codeblock}
 \end{minipage}
+
 
 \subsubsection{Destructuring the return value}
 \label{subsubsec:struct}

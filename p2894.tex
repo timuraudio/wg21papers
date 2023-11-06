@@ -7,91 +7,37 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D2894R1 \\
-Date: &2023-08-24 \\
+Document \#: & P2894R1 \\
+Date: &2023-11-06 \\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
 
 \begin{abstract}
-This paper discusses the semantics of contract-checking annotations during constant evaluation. We investigate what needs to be specified, enumerate the possible choices, establish our design goals, and propose a solution that provides a reasonable tradeoff between these design goals. We propose that CCAs should be considered during constant evaluation; if the predicate of a CCA is not a core constant expression, or evaluates to \tcode{false}, it should be implementation-defined whether the program is ill-formed or the CCA is ODR-used but otherwise ignored during constant evaluation.
+This paper proposes semantics for contract checks during constant evaluation. We propose that during constant evaluation, contract checks should be evaluated with an implementation-defined choice of \emph{ignore}, \emph{enforce}, or \emph{observe} semantics, analogous to their runtime counterparts; in a manifestly constant-evaluated context, a contract check with a checked semantic and a predicate that is not a core constant expression renders the program ill-formed, while a contract check that evaluates to \tcode{false} emits a diagnostic (\emph{observe}) or renders the program ill-formed (\emph{enforce}). Special rules are needed for the case of evaluating contract checks in the initialiser of a non-\tcode{constexpr} variable usable in constant expressions; two different options are possible.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
 
-In order to deliver a Contracts facility that can be included in Standard C++ (see \cite{P2695R1}), we need to fully specify the compile-time and runtime behaviour of contract-checking annotations (CCAs) in all cases. The specification for some cases is still missing (see \cite{P2896R0}). One of these cases is the question of how CCAs should behave during constant evaluation. This paper proposes a solution.
+In order to deliver a Contracts facility for Standard C++ (see \cite{P2695R1}), we need to produce a complete specification for the behaviour of contract checks both at compile time and at runtime. The specification currently in development (see \cite{P2900R1}) still has some design holes (see \cite{P2896R0}). One of these design holes is the question of how contract checks should behave during constant evaluation. In this paper, we develop a solution to this question.
 
-The topic of constant evaluation of CCAs has been discussed before in the appendices of \cite{P2834R1}. That paper proposes the following:
+This question has first been discussed in the appendices of \cite{P2834R1}. The solution proposed there no longer applies, since it is tied to the notion of checked and unchecked build modes, which was removed with the adoption of \cite{P2877R0}. An updated solution is proposed in \cite{P2932R1} section 3.3, derived from the  principles proposed in \cite{P2932R1} section 2. In this paper, we instead derive a solution from practical considerations: how would C++ users expect contract checks to behave when evaluated at compile time, and how can we best meet their needs? As we will see, the specification we arrive at in this paper is mostly identical to the one proposed in \cite{P2932R1} section 3.3.
 
-\begin{adjustwidth}{0.5cm}{0.5cm}
-If an expression or conversion is manfiestly constant-evaluated, it is ill-formed if the evaluation of the predicate of a CCA with a runtime-checked semantic disqualifies that expression from being a core constant expression.
-\end{adjustwidth}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-However, we since adopted \cite{P2877R0} for the Contracts MVP. This paper removes the notion of build modes and makes the runtime semantics of a CCA implementation-defined and in general unknowable at compile time. The ideas from \cite{P2834R1} therefore no longer apply, as we can no longer make it dependent on the runtime contract semantic (whether the CCA is runtime-checked) whether a piece of C++ code is ill-formed. We need to start over.
+\section{Discussion}
 
-Note that SG21 has not yet settled on a syntax for CCAs. In this paper, we use attribute-like syntax \cite{P2487R0} for the code examples, however the proposal is independent of the choice of syntax and would work in the same way with lambda-based syntax \cite{P2461R1} or condition-centric syntax \cite{P2737R0}.
+\subsection{To consteval or to not consteval}
 
-\section{What do we actually need to specify?}
+The first question that arises is whether we should consider contract checks during constant evaluation at all.
 
-First of all, note that we do not need to specify anything for the ``happy case'': if a CCA is encountered during constant evaluation, the predicate of that CCA is a core constant expression, and that expression evaluates to \tcode{true}, then the semantics are simply that the CCA should have no semantic effect whatsoever apart from ODR-using the entities that appear in the predicate.
-
-The two interesting cases, which we still need to specify for the MVP, and which we discuss in this paper, are:
-
-\begin{itemize}
-\item \textbf{Case 1:} The predicate is not a core constant expression,
-\item \textbf{Case 2:} The predicate is a core constant expression but that expression does not evaluate to \tcode{true}.
-\end{itemize}
-
-Let us study both cases further.
-
-\subsection{Case 1: Not a core constant expression}
-
-First of all, note that since \cite{P2448R2} was adopted for C++23, we do not need to do anything about CCAs on a \tcode{constexpr} or \tcode{consteval} function if that function is not actually called during constant evaluation:
+On the one hand, for many users the answer will be ``yes''. While we may think of contract checks primarily as a tool to identify bugs at runtime, similarly to \tcode{assert} macros today, contract checks can undoubtedly be useful at compile time, too. Such checks provide immediate value for \tcode{constexpr} functions that can be evaluated either at compile time or during runtime: for program correctness it is desirable to identify bugs in such function calls at compile time where possible. Consider the following program:
 
 \begin{codeblock}
-bool pred();  // predicate not \tcode{constexpr}
-
-int f() constexpr [[ pre: pred() ]];  // OK; never called during constant evaluation
-int g() consteval [[ pre: pred() ]];  // OK: never called
-
-int main() {
-  return f();  // not constant evaluation of \tcode{f}
-}
-\end{codeblock}
-
-In these cases, the CCA is only ever checked during runtime, and therefore will have the same semantics as it always does.
-
-The interesting case is: what should happen if the compiler actually encounters the predicate above during constant evaluation (we do not have to distinguish between \tcode{constexpr} and \tcode{consteval} here)? For example, consider the following program:
-
-\begin{codeblock}
-bool pred();  // predicate not \tcode{constexpr}
-
-int f() constexpr [[ pre: pred() ]];  // ???
-
-int main() {
-  std::array<int, f()> a;  // constant evaluation of \tcode{f}
-  // ...
-}
-\end{codeblock}
-
-There are four options to choose from:
-
-\begin{itemize}
-\item Make the above code ill-formed;
-\item Make it ill-formed, no diagnostic required (IFNR);
-\item Ignore the CCA during constant evaluation;
-\item Ignore the CCA normatively, but recommend that a warning be issued.
-\end{itemize}
-
-In addition, we can choose to specify that it is implementation-defined whether one option or another should apply. Note also that even if we ignore the CCA during constant evaluation, entities inside the predicate will still be ODR-used and therefore can trigger template instantiations and lambda captures, and the CCA might still be checked at runtime as usual (depending on the implementation-defined runtime semantic).
-
-\subsection{Case 2: Does not evaluate to \tcode{true}}
-
-The other case that needs to be specified is: what should happen if a CCA is encountered during constant evaluation, the predicate \emph{can} be evaluated during compile time (therefore Case 1 does not apply), but that predicate does not evaluate to \tcode{true}? For example, how should the following program behave?
-
-\begin{codeblock}
-int f(int i) constexpr [[ pre: i > 0 ]];
+int f(int i) constexpr 
+  pre (i > 0);
 
 int main() {
   std::array<int, f(0)> a;  // out-of-contract call during constant evaluation
@@ -99,8 +45,107 @@ int main() {
 }
 \end{codeblock}
 
-At runtime, there are many ways in which a predicate can \emph{not} evaluate to \tcode{true}:
+Going beyond issuing compiler diagnostics in cases like the above, it is desirable to have a solid framework for contract checks at compile time if we wish to expand usage of Contracts in C++ to use cases like static analysis and formal program verification. 
 
+On the other hand, for many users the answer might be ``no''. Evaluating contract checks at compile time has the potential to significantly increase compile times, which is already a huge problem in many domains where C++ is used. Forcing compile-time contract checking on every user of C++ will likely result in many users wrapping their contract checks into macros to be able to ignore them at compile time, or even worse, not adopting Contracts in C++ at all.
+
+The answer is therefore that we must give the user both options. Whether contract checks are evaluated during constant evaluation should be implementation-defined, allowing implementations to offer both options, e.g. through compiler flags.
+
+\subsection{Contract semantics \emph{ignore} and \emph{enforce} at compile time}
+
+In a previous revision of this paper, we suggested that letting the user choose whether they want to evaluate their contract checks at compile time could be accomplished by making it implementation-defined whether contract checks in the program are checked during constant evaluation or not, essentially introducing a ``global switch'' for turning compile-time contract checking on or off. We since realised that this is insufficient, because this setting might be different from one translation unit (TU) to another. Moreover, for an inline function that has contract checks in a shared header, this setting might be different from one constant evaluation of a contract check to another constant evaluation of the same contract check; such cases must not be considered ODR violations.
+
+The answer is therefore that we should adopt the same approach for constant evaluation of any given contract check as we already do in the Contracts MVP \cite{P2900R1} for \emph{runtime} evaluation of any such contract check: that the \emph{contract semantic} of every contract check is implementation-defined and can vary from contract check to contract check and also from one evaluation of a contract check to another evaluation of the same contract check.
+
+At runtime, there are three possible contract semantics in the Contracts MVP: the \emph{unchecked} semantic, \emph{ignore}, and the \emph{checked} semantics, \emph{enforce} and \emph{observe}. The \emph{ignore} semantic can be extended to constant evaluation in a straightforward way: do nothing\footnote{Note that even though the \emph{ignore} semantic means that a contract is not evaluated (neither at compile time nor at runtime), its predicate is still parsed (so it must be a valid expression) and the entities in the predicate are still ODR-used.}. The same is true for the \emph{enforce} semantic:  we can say that an \emph{enforce}d contract check is checked during constant evaluation, and if this check fails, a compiler diagnostic is issued (which is the compile-time analogue of the default contract-violation handler printing a diagnostic message at runtime) and the program is ill-formed (which is the compile-time analogue of terminating the program after the contract-violation handler returns). The only difference is that constant evaluation has no compile-time analogue for installing a user-defined contract-violation handler: as a user-replaceable function that is added at link time, a user-defined contract-violation handler is inherently a runtime-only feature.
+
+\subsection{Contract semantic \emph{observe} at compile time}
+
+It turns out that the \emph{observe} semantic has a useful compile-time implementation as well: an \emph{observe}d contract check is checked during constant evaluation, and if this check fails, a compiler diagnostic is issued; however, unlike an \emph{enforce}d contract check, this does not render the program ill-formed, which means the compiler can keep going. This is useful for the same reason that the \emph{observe} contract semantic is useful at runtime: it allows to introduce new contract checks to an existing legacy codebase without that codebase immediately breaking if a contract violation is detected.
+
+We initially had concerns about enabling the \emph{observe} semantic for constant evaluation, because it seems to introduce a novelty: a normative diagnostic that does not render the program ill-formed, a ``standard warning''. However, after some discussion it turned out that we already have precedent for such a thing in the Standard since we introduced \tcode{\#warning} \cite{P2437R1} for C++23. The fact that the latter is a preprocessor directive rather than a ``proper'' language feature does not seem like a substantial difference.
+
+\subsection{Compile-time semantic is independent of runtime semantic}
+
+The approach proposed here can be described as essentially taking the block of pseudocode in \cite{P2900R1} section 2.4.10 which describes the mechanics of contract-violation handling, making both \tcode{__current_semantic()} and \tcode{__check_predicate()} compiler intrinsics \tcode{constexpr}-enabled, and then adding a \tcode{std::is_constant_evaluated() == true} branch to the algorithm.
+
+One important property of this approach is that since the contract semantic of any given contract check can vary from evaluation of that contract check to the next evaluation of the same contract check, it is also perfectly confirming to use one contract semantic for all constant evaluations and another contract semantic for all runtime evaluations of a given contract check. This can be very useful since there are plausible use cases for such a setup. For example, in a debug build of a large and slow-to-compile application, one might want to disable contract checks at compile time to speed up compilation (minimising turnaround time during development), while at the same time enabling contract checks at runtime. Our approach enables this and many other use cases by making the contract semantic implementation-defined both at compile time and at runtime, following the spirit of \cite{P2877R0}.
+
+\subsection{Possible outcomes of constant evaluation}
+
+When a contract check is evaluated during constant evaluation, there are three possible outcomes:
+\begin{itemize}
+\item The predicate is a core constant expression that evaluates to \tcode{true},
+\item The predicate is not a core constant expression,
+\item The predicate is a core constant expression that does not evaluate to \tcode{true}.
+\end{itemize}
+Our first observation is that we do not need to specify anything further for the first case, the ``happy path'': if a contract check is evaluated during constant evaluation, the predicate of that contract check is a core constant expression, and that expression evaluates to \tcode{true}, then the obvious semantics of such a contract check are that it simply has no semantic effect whatsoever. In the remainder of this paper, it is sufficient to study only the second and third case.
+
+\subsection{Contracts that cannot be checked at compile time}
+
+What should happen if a contract check with a checked semantic at compile time has a predicate that is not a core constant expression, i.e. cannot be evaluated at compile time?
+
+First of all, note that since \cite{P2448R2} was adopted for C++23, we do not need to do anything about contract checks on a \tcode{constexpr} or \tcode{consteval} function if that function is not actually called during constant evaluation:
+
+\begin{codeblock}
+bool pred();  // predicate not \tcode{constexpr}
+
+int f() constexpr
+  pre (pred());  // OK; never called during constant evaluation
+  
+int g() consteval
+  pre (pred());  // OK: never called
+
+int main() {
+  return f();  // not a constant evaluation of \tcode{f}
+  // \tcode{g} never called
+}
+\end{codeblock}
+
+For \tcode{f}, the contract check is only ever checked during runtime, and therefore will have the same semantics as it always does; for \tcode{g}, the contract check is never checked at all. This program is therefore well-formed.
+
+The only interesting case is: what should happen if the compiler actually encounters such a predicate during constant evaluation (we do not have to distinguish between \tcode{constexpr} and \tcode{consteval} here)? For example, consider the following program:
+
+\begin{codeblock}
+bool pred();  // predicate not \tcode{constexpr}
+
+int f() constexpr
+  pre (pred());  // ???
+
+int main() {
+  std::array<int, f()> a;  // constant evaluation of \tcode{f}
+  // ...
+}
+\end{codeblock}
+
+One possibility is to specify that if the predicate is not a core constant expression, the entire contract check is not a core constant expression. This would give a compiler error in the case above and many similar cases. However, it turns out that it is possible to SFINAE on whether an expression is a constant expression and therefore follow a different codepath depending on whether a contract is evaluated at compile time; \cite{P2932R1} section 3.3 has an example of such code. We do not believe that it makes any sense to allow such strange control flow. The answer is therefore to make this case ill-formed when using a checked contract semantic at compile time.
+
+Conceptually, this specification makes sense. Consider the following function:
+
+\begin{codeblock}
+int do_something(int i)
+  pre (i > 0)
+  pre (hardware_thingy_available());  // not \tcode{constexpr}
+\end{codeblock}
+
+Ignoring the precondition that is not checkable at compile time when using a checked contract semantic at compile time would be wrong, because if the precondition is not checkable at compile time it is also not \emph{satisfiable} at compile time: the ``hardware thingy'' is literally not available while compiling the code, therefore calling the function at compile time is a precondition violation. If the user wishes to say that it is still \emph{correct} to call the function at compile time, even though the ``hardware thingy'' does not become available until runtime, they need to express that in their preconditions:
+
+\begin{codeblock}
+constexpr bool can_do_something() {
+  if (!std::is_constant_evaluated())
+    return hardware_thingy_available();
+}
+
+int do_something(int i)
+  pre (i > 0)
+  pre (can_do_something());  // OK
+\end{codeblock}
+
+\subsection{Contract violation at compile time}
+
+What can happen if a contract check is evaluated during constant evaluation, the predicate of that contract check is a core constant expression, but that expression does not evaluate to \tcode{true}, i.e. we have identified a contract violation at compile time?
+
+At runtime, there are many ways in which a predicate can \emph{not} evaluate to \tcode{true}:
 \begin{itemize}
 \item It can evaluate to \tcode{false},
 \item It can throw an exception,
@@ -108,106 +153,96 @@ At runtime, there are many ways in which a predicate can \emph{not} evaluate to 
 \item It can terminate the program,
 \item It can be undefined behaviour.
 \end{itemize}
+In the Contracts MVP, at runtime, we treat the first two cases as a contract violation; in all remaining cases, the user ``gets what they get'' (the behaviour ``escapes'' the contract check).
 
-In the Contracts MVP, at runtime, we treat the first two as a contract violation; in all remaining cases, the user ``gets what they get'' (the behaviour ``escapes'' the CCA). In addition, at runtime, a CCA can have one of three semantics: \emph{ignore}, \emph{observe}, or \emph{enforce}. With the \emph{ignore} semantic, the predicate is ODR-used but otherwise not checked at all. The other two are runtime-checked semantics that evaluate the predicate and call the violation handler if it does not evaluate to \tcode{true}. They only differ in what happens after the violation handler is invoked: with the \emph{observe} semantic, execution resumes; with the \emph{enforce} semantic, the program terminates in an implementation-defined manner (see \cite{P2811R7}).
+During constant evaluation, the situation is actually much simpler. You cannot throw an exception, you cannot \tcode{longjmp}, you cannot terminate the program, and there cannot be undefined behaviour; an expression that would do any of these things at runtime is not a core constant expression and therefore, as we already discussed above, for a checked contract semantic at compile time the program would be ill-formed in all these cases.
 
-During constant evaluation, things look very differently. First of all, as we already established, it is unknowable during constant evaluation whether any given CCA will have \emph{ignore}, \emph{observe}, or \emph{enforce} semantics at runtime; we need to specify the semantics for constant evaluation completely separately. Further, during constant evaluation there is no violation handling, therefore it makes no sense to distinguish between \emph{observe} or \emph{enforce}; instead, the CCA is simply either ignored during constant evaluation or it is not.
+Therefore, the only way in which we could get a contract violation at compile time is if the predicate evaluates to \tcode{false}. As we already discussed above, in this case the compiler should issue a diagnostic, containing some information about the contract violation; in addition, if the semantic is \emph{enforce}, the program is ill-formed.
 
-Further, if the CCA is not ignored during constant evaluation, and it does not evaluate to \tcode{true}, the only other option is that it evaluates to \tcode{false}, so this is the only other case we need to consider here. During constant evaluation, you cannot throw an exception, you cannot \tcode{longjmp}, you cannot terminate the program, and there cannot be undefined behaviour; an expression that would do any of these things at runtime is not a core constant expression and therefore its semantics during constant evaluation are defined by \mbox{Case 1}.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-Therefore, to specify Case 2, we only need to define what should happen if a contract predicate is a core constant expression and that expression evaluates to \tcode{false} (as in the code example at the beginning of this section). Again, there are the same four options to choose from:
+\subsection{Trial constant evaluation}
 
-\begin{itemize}
-\item Make the above code ill-formed;
-\item Make it ill-formed, no diagnostic required (IFNR);
-\item Ignore the CCA during constant evaluation;
-\item Ignore the CCA normatively, but recommend that a warning be issued.
-\end{itemize}
+Certain variables, despite not being \tcode{constexpr}, can be initialised statically (at compile time), in particular variables with static storage duration and \tcode{const} integers. However, the initialisation of such a variable will be relegated to \emph{dynamic} initialisation (at runtime) if the initialiser is not a core constant expression. The compiler may perform so-called \emph{trial} constant evaluation to determine whether to perform static or dynamic initialisation; see \href{https://eel.is/c++draft/expr.const#19.5}{[expr.const] 19.5} and \href{https://eel.is/c++draft/expr.const#footnote-73}{[expr.const] footnote 73}. Consider:
 
-In addition, we can again choose to specify that it is implementation-defined whether one option or another should apply.
+\begin{codeblock}
+constexpr int f() { return 42; }
+int g() { return 43; }  // not \tcode{constexpr}
 
-\section{Design goals}
+static int j = f();     // static initialisation
+static int i = g();     // dynamic initialisation
 
-Before proposing a solution, we should first agree on the \emph{design goals} that our proposal should satisfy. The following goals seem to be the most relevant for deciding on the correct solution for constant evaluation of Contracts:
+\end{codeblock}
 
-\begin{enumerate}
-\item \textbf{Correctness.} Contracts are first and foremost a tool for reasoning about the correctness of a program. Constant evaluation of Contracts should support this primary goal. 
-\item \textbf{Flexibility.} There is a multitude of different use cases (see \cite{P1995R1}) that a Contracts facility should be able to support. Constant evaluation of Contracts should be usable for the ``multiverse'' and not just a single use case.
-\item \textbf{Teachability.} Constant evaluation of Contracts should be designed such that the rules are easy to learn and teach, intuitive to the user, and free of unnecessary complexity.
-\item \textbf{Compile times}. Constant evaluation of Contracts should not significantly increase compile times for real-world code.
-\end{enumerate}
+This case contrasts with the \emph{manifestly constant-evaluated} contexts we have been discussing in this paper so far: contexts where the contract check would unambiguously happen at compile time (for example, if the contract check is on a function whose return value is used as a non-type template argument).
 
-No possible design will satisfy all four design goals above. Picking the correct semantics therefore involves picking the right tradeoff between different, potentially conflicting goals. This will involve prioritising the goals relative to each other. This relative priority should reflect the needs of our users.
+So far, this is nothing new. However, what should happen if the relegation from static initialisation to dynamic initialisation happens to be triggered by a contract check with a predicate that is not a core constant expression? Consider:
 
-\section{Possible solutions}
+\begin{codeblock}
+bool whatever();     // not \tcode{constexpr}
 
-Given the above design goals, we can move on to discussing concrete solutions.
+constexpr int f()
+  pre(whatever()) {  // contract check not evaluable at compile time
+  return 42;
+}
 
-\subsection{Option A: make both cases ill-formed}
+static int i = f();  // ???
+\end{codeblock}
 
-The first possible solution is to make both Case 1 and Case 2 ill-formed. This solution prioritises \emph{correctness} above the other design goals. With this specification, whenever the user did something wrong, the compiler is required to tell them. For correctness, it is best to not allow predicates that cannot be checked (Case 1), and if a predicate can be checked, it is better to check such a predicate and diagnose a failing check at compile time than to do so at runtime (Case 2), following the general principle that catching a bug at compile time is better than running into the bug at runtime.
+On the one hand, if we just let these language features compose naturally, which is presumably what (at least some) users would expect, we just get the same result we would get if we added a call to \tcode{whatever} in the body of \tcode{f}: the contract check turns the static initialisation of \tcode{i} into dynamic initialisation.
 
-This solution is also very good for \emph{teachability} as this set of rules is simple, intuitive, and easy to remember. However, we are trading off \emph{flexibility} as well as \emph{compile times}: the compiler is forced to fully evaluate all CCAs at compile time. According to some participants of SG21, the resulting increases in compile times will be unacceptable for some code bases, which will force these users to wrap CCAs into macros in order to make their compiler ignore them.
+On the other hand, just like with other similar cases such as a contract check triggering a lambda capture \cite{P2890R1} or a contract check triggering the deduction of a potentially-throwing exception specification \cite{P2969R0}, letting these language features compose naturally leads to violations of the \emph{zero overhead principle} from \cite{P2932R1}: the mere addition of a contract check causes the program to take a different branch at compile time, which in turn can cause ``heisenbugs'' (a program contains a bug, we add a contract check to find the bug, but the contract check causes the program to take another branch where the bug does not exist) and measurable performance degradations.
 
-\subsection{Option B: make both cases ignored}
+Just like with these other cases, there are two possible approaches to this problem. One approach is that if your contract check caused the variable to be initialised at runtime, causing runtime overhead, then you get what you get because you wrote what you wrote; if you care about the variable being initialised statically in all cases, there is a straightforward way to achieve this by using \tcode{constexpr} or \tcode{constinit}. The other approach is that any possible violation of the zero overhead principle, no matter how contrived, must be avoided at all costs, because the existence of any cases where the introduction of contract checks can introduce performance degradations would be a major disincentive for the adoption of Contracts in C++.
 
-The opposite solution is to always ignore all CCAs for both Case 1 and Case 2 during constant evaluation (other than for ODR-use), and only check them at runtime (if using a runtime-checked contract semantic). This solution prioritises compile times above the other design goals. By evaluating contract predicates only at runtime, but not during constant evaluation, we avoid the (potentially huge) increase in compile times due to constant evaluation of predicates.
+Just like in our other papers, we do not advocate for the latter approach here, because we believe that carving out all these exceptions to the language rules to satisfy the zero overhead principle at all costs adds complexity to the C++ language and hurts its teachability, which is damaging to C++ in the long term. However, we do note that if SG21 decides to obey by the zero overhead principle in all cases, it follows that the above code needs to be ill-formed.
 
-This solution has good teachability as well. However, we are trading off flexibility and correctness: this solution would outright prohibit compilers from diagnosing errors in CCAs during constant evaluation, even if the compiler in question can do it and the user considers it useful.
+The algorithm for achieving the latter would need to look as follows. First, we conduct a trial constant evaluation \emph{discarding} any contract checks that might otherwise be evaluated during that evaluation; if this trial constant evaluation fails and we relegate to dynamic initialisation, then the contract checks will end up being evaluated at runtime anyhow (or ignored, depending on contract semantic) and it therefore does not matter whether any of these contract predicates are core constant expressions. If however, the trial constant evaluation succeeds, we statically initialise the variable in question for real, this time \emph{including} constant evaluation of the contract checks we discarded earlier; if any of these contract predicates are not core constant expressions at this point, the program is ill-formed.
 
-\subsection{Option C: make both cases implementation-defined}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-The compromise solution is to make it implementation-defined whether the CCA is ill-formed or ignored for constant evaluation (other than for ODR-use), for both Case 1 and Case 2. This solution prioritises flexibility and seeks a compromise between correctness and compile times by allowing the compiler to prioritise either, and give the choice to the user. However, we are trading off \emph{teachability} as we are making the rules more complex, and placing another aspect of Contracts outside of the realm of the C++ Standard and into the hands of compiler vendors.
+\subsection{Non-evaluation}
 
-With this specification, compilers can offer their own compiler flags or implementation-defined ``build modes'' to let the user choose whether they prefer to check their CCAs during constant evaluation (correctness) or ignore them (compile time). The compilers could choose to tie this choice to the choice of runtime semantic, which is also implementation-defined, such that in an \emph{ignore} build mode, CCAs would be ignored also during constant evaluation, but in the other (checked) build modes, they would be checked also during constant evaluation. They could also choose to make the choice of compile-time semantic independent of the choice of runtime semantic, so you could for example have a ``fast to compile'' configuration that nevertheless checks contracts at runtime. A hostile compiler implementation could also choose to only implement Option A or Option B and still be conformant.
+There is one final variation on the theme of constant evaluation that is worth analysing. Let us consider a \tcode{constexpr} function that either is or is not a core constant expression, depending on which arguments are being passed in:
 
-\subsection{Other options}
+\begin{codeblock}
+constexpr int divide(int n, int d) {
+  return n / d;   // not a core constant expression if \tcode{d == 0}
+}
+\end{codeblock}
 
-We believe that Options A, B, and C above are the only ones worth considering. We do not believe that making Cases 1 or 2 IFNDR makes sense, because this would be somewhere in between making them outright ill-formed and making the semantic implementation-defined, but without the requirement that the implementation documents how to determine which semantic is being applied. From a usability perspective, this is strictly worse than Option C without any additional benefit.
+Now, we might want to add a contract check to prevent running into this case:
 
-Similarly, we do not believe that the option of ``ignore but recommend a warning'' makes sense, because it is essentially the same as making it implementation-defined, but again without the requirement that the implementation documents the behaviour and so strictly worse without any additional benefit.
+\begin{codeblock}
+constexpr int divide(int n, int d)
+  pre (d != 0) {  // contract predicate is always a core constant expression!
+  return n / d; 
+}
+\end{codeblock}
 
-Finally, we also do not believe that choosing one option for Case 1 but another for Case 2 makes sense, as it would be detrimental to the design goal of teachability (by making the rules very complex), with no apparent overall benefit for meeting the other design goals.
+Everything seems fine. If \tcode{divide} is called at compile time, we can enable compile-time checking of contracts and get a nice compiler diagnostic instead of a cryptic error that \tcode{n / d} is not a core constant expression. If \tcode{divide} is called at runtime, we can enable runtime checking of contracts to avoid the undefined behaviour.
 
-\section{Proposed solution}
+However, what happens if we call \tcode{divide} while initialising one of those variables that may be initialised statically or dynamically?
 
-Option A is desirable in principle, as correctness is the most important design goal. However, it could hurt the adoption of Contracts if they make compile times unacceptably slow for some users. These users will either avoid Contracts altogether, or start wrapping CCAs into macros to be able to ignore them at compile time. The worst part about this is that they would then necessarily also be ignored at runtime as well, throwing correctness checks over board, as Option A does not allow any universe in which CCAs are ignored for constant evaluation but still considered at runtime (which is certainly more important than considering them during constant evaluation!)
+\begin{codeblock}
+int main() {
+  const int i = divide(17,0);   // ???
+}
+\end{codeblock}
 
-Option B is also not great. Shorter compile times are good, but they are of no use if the resulting program is \emph{incorrect} and has potential undefined behaviour because it does not meet its contracts, or because its contracts are not written correctly. If we want Contracts to be seen as a feature targeting correctness, the C++ Standard should at least allow a mode where such cases are diagnosed.
+If we take the second of the options we discussed in the previous section and make it ill-formed for the addition of a contract check to trigger relegation of static initialisation to dynamic initialisation to satisfy the zero overhead principle, we end up in an odd situation. Trial evaluation to determine whether \tcode{divide(17,0)} is a core constant expression happens with the contract check discarded; this trial evaluation determines that the call is not a core constant expression (because of \tcode{n / d}) and delegates the call to runtime. As a result, the contract is never checked at compile time, \emph{even if we choose the enforce semantic for compile time}, and we instead run into a contract violation at runtime. This is a rather unfortunate example of the complexity introduced by sticking to the zero overhead principle in all cases: we end up with code that is extremely difficult to reason about, and in addition we end up failing to diagnose the error at compile time even though the compiler would be clearly capable of doing so. This result is somewhat explainable (trial evaluation is not \emph{actual} evaluation, so we cannot rely on the contract check being evaluated at compile time even when using a checked semantic at compile time) but that does not make it any less unfortunate.
 
-We therefore propose Option C (implementation-defined). We believe that this option provides the best tradeoffs. Introducing yet another compiler switch is somewhat unfortunate, but is necessary in this case to give all potential users of Contracts the possibility to use them effectively.
-
-\section{Consistency with P2834R1}
-
-\cite{P2834R1} was proposing that the compile-time semantic of a CCA follows its runtime semantic: in a build mode where all CCAs are ignored at runtime, they should be ignored at compile time as well; in a build mode where all CCAs are checked at runtime, Cases 1 and 2 should be ill-formed.
-
-\cite{P2877R0} did away with build modes; the runtime semantic of a CCA is no longer known at compile time and therefore the proposed solution in \cite{P2834R1} no longer possible. However, arguably the solution proposed in this paper is consistent with the design direction of both of these earlier papers. \cite{P2877R0} replaced build modes with the notion that the runtime semantics are implementation-defined; in this paper, we perform the same transformation with the compile-time semantics, which are now implementation-defined in the same manner.
-
-\section{Comparison with \tcode{[[assume]]}}
-
-When specifying portable assumptions (see \cite{P1774R8}), we faced the exact same problem: how should assumptions behave during constant evaluation? The same two cases exist for assumptions as for CCAs. For \tcode{[[assume(expr)]]}, the following solution was chosen:
-
-\begin{itemize}
-\item Case 1: If \tcode{expr} is not a core constant expression, the assumption is ignored during constant evaluation;
-\item Case 2: If \tcode{expr} is a core constant expression that does not evaluate to \tcode{true} during constant evaluation, it is implementation-defined whether the assumption is ill-formed.
-\end{itemize}
-
-Note that for Case 2, the semantic is the same as the one proposed here for Contracts, but for Case 1, it is different. We believe that this seeming inconsistency is totally fine, because the design goals for \tcode{[[assume]]} are entirely different than the ones for Contracts.
-
-As discussed above, Contracts are a feature primarily intended for reasoning about the correctness of a program. On the other hand, \tcode{[[assume]]} is an inherently unsafe feature whose sole purpose it is to improve \emph{performance}. Correctness has meaning both during constant evaluation and at runtime, whereas performance only has any significance at runtime. Since assumptions serve no useful purpose at compile time, it makes sense to simply ignore assumptions that cannot be evaluated at compile time (which is not the case for Contracts).
-
-At the same time, if an assumption \emph{can} be evaluated at compile time, we should allow (but not force) the compiler to diagnose if this assumption does not hold (same as for Contracts) as this is an opportunity to detect a bug that could lead to undefined behaviour if undetected.
+However, if we instead take the first option, i.e. treating contract checks just like any other expression for the purposes of trial evaluation instead of discarding them, we get the desired result: a contract violation at compile time (when using a checked semantic at compile time).
 
 \section{Summary}
 
-We propose that the following be added to the Contracts MVP (formal wording to be provided after design approval by SG21):
+In this paper, we have explored the design space of evaluating contract checks at compile time, one of the remaining design holes in the Contracts MVP \cite{P2900R1}. After having analysed how C++ users might expect contract checks to behave when evaluated at compile time, and how can we best meet their needs, we propose the following specification.
 
-\begin{itemize}
-\item CCAs are considered during constant evaluation;
-\item If the predicate of a CCA is not a core constant expression, it is implementation-defined whether the CCA is a core constant expression;
-\item If the predicate of a CCA is a core constant expression that evaluates to \tcode{false}, it is implementation-defined whether the CCA is a core constant expression.
-\end{itemize}
+In a manifestly constant-evaluated context, contract checks should be evaluated with one of the three semantics, \emph{ignore}, \emph{enforce}, or \emph{observe}, analogous to their runtime counterparts. \emph{Observe} evaluates the predicate at compile time and issues a diagnostic in case a contract predicate evaluates to \tcode{false}; \emph{enforce} additionally makes the program ill-formed in this case. In a manifestly constant-evaluated context, either of the two checked semantics (\emph{enforce} or \emph{observe}) renders the program ill-formed if the contract predicate is not a core constant expression. Just like at runtime, it is implementation-defined (and thus left to the compiler to provide a selection mechanism for) which contract semantic is used for any given evaluation of a contract check.
 
+Special rules are needed for the case of evaluating contract checks in the initialiser of a non-\tcode{constexpr} variable usable in constant expressions which might be statically or dynamically initialised depending on whether the initialiser is a core constant expression (which might be determined via a trial evaluation). Two different options are possible for specifying this case. The straightforward specification is to treat contract checks like any other expression for the purposes of trial  evaluation: if the contract predicate is not a core constant expression, initialisation of the variable is delegated to runtime.
+
+This specification is straightforward but violates the zero overhead principle from \cite{P2932R1}: the addition of a contract check can in itself cause a variable to be initialised dynamically rather than statically. While there is a straightforward workaround for those who consider this a problem (just use \tcode{constexpr} or \tcode{constinit} if you need static initialisation), SG21 might end up deciding that the zero overhead principle must be satisfied in all possible cases without further code changes. If we go down that route, then we must discard contract checks for the purposes of trial evaluation, which satisfies the zero overhead principle, but adds significant complexity to the language and leads to strange and hard-to-reason-about cases where a contract violation that would get caught at compile time with the straightforward specification is instead only caught at runtime.
 
 %\section*{Document history}
 
@@ -218,7 +253,7 @@ We propose that the following be added to the Contracts MVP (formal wording to b
 
 \section*{Acknowledgements}
 
-Thanks to Oliver Rosten and Ga\v sper A\v zman for their very helpful feedback.
+Thanks to Oliver Rosten and Ga\v sper A\v zman for their helpful feedback on an earlier version of this paper; thanks to Ville Voutilainen, Joshua Berne, Tom Honermann, Jason Merrill, and Jens Maurer for their helpful comments on the SG21 reflector thread that led to the current revision of this paper.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

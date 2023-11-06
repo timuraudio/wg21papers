@@ -31,7 +31,7 @@ Jens Maurer \small(\href{mailto:jens.maurer@gmx.net}{jens.maurer@gmx.net})}
 
 \begin{tabular}{ll}
 Document \#: & P2961R2 \\
-Date: &2023-11-04\\
+Date: &2023-11-05\\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
@@ -45,12 +45,15 @@ We propose a syntax for Contracts that naturally fits into existing C++, does no
 
 \tableofcontents*
 
+%\vspace{5mm}
+
 \section*{Revision history}
 \addcontentsline{toc}{section}{\protect\numberline{}Revision history}
 \addtocontents{toc}{\protect\numberline{}} % Blank line in ToC
-\textbf{Revision 2}, 2023-10-31:
+\textbf{Revision 2}, 2023-11-05:
 \begin{itemize}
 \item Chose keyword \tcode{contract_assert} for assertions
+\item Added section about implementation experience
 \item Updated discussion of viability for the C language with results from SG22 meeting
 \end{itemize}
 \textbf{Revision 1}, 2023-10-09: 
@@ -60,7 +63,7 @@ We propose a syntax for Contracts that naturally fits into existing C++, does no
 \item Added discussion of keyword alternatives to \tcode{assert}; changed proposed keyword alternative from \tcode{assrt} to a shortlist with two candidates: \tcode{contract_assert} and \tcode{assertexpr}
 \item Added discussion of viability for the C language
 \item Added discussion of a possible post-MVP syntax for class invariants
-\item Added discussion of three new (post-electronic poll) syntax requirements from \cite{P2885R3}
+\item Added discussion of three new syntax requirements from \cite{P2885R3} raised after the SG21 electronic poll on syntax requirements was conducted
 \end{itemize}
 \textbf{Revision 0}, 2023-09-17: 
 \begin{itemize}
@@ -74,7 +77,7 @@ We propose a syntax for Contracts that naturally fits into existing C++, does no
 \section{The issues with attribute-like syntax}
 \label{sec:motivation}
 
-SG21 is currently working on standardising a first version of a Contracts facility --- the so-called \emph{Contracts MVP} (see \cite{P2900R0}). According to our roadmap \cite{P2695R1}, the last remaining major design decision is the choice of syntax (see \cite{P2885R3}). The longest-standing proposal for a Contracts syntax is the so-called attribute-like syntax (\cite{P2935R3}). While attribute-like syntax has its strengths --- existing implementation experience in GCC (see \cite{P1680R0}) and the possibility to lean on existing standard attribute grammar rather than inventing new grammar --- it also has considerable weaknesses.
+SG21 is currently working on standardising a first version of a Contracts facility --- the so-called \emph{Contracts MVP} (see \cite{P2900R0}). According to our roadmap \cite{P2695R1}, the last remaining major design decision is the choice of syntax (see \cite{P2885R3}). The longest-standing proposal for a Contracts syntax is the so-called attribute-like syntax (\cite{P2935R3}). While attribute-like syntax has its strengths --- longer implementation experience (see \cite{P1680R0}) and the possibility to lean on existing standard attribute grammar rather than inventing new grammar --- it also has considerable weaknesses.
 
 Attribute-like syntax uses \tcode{[[...]]} delimiter tokens around every contract check. This has been called a ``heavy'' syntax and is  perceived as ``ugly'' by some users. The \tcode{[[...]]} syntax was designed for attributes so that they can appertain to many different kinds of entities (functions, classes, variables, types, statements, etc.) in many different contexts. Contracts, on the other hand, have a well-defined syntactic place and completely different design requirements. Further, attributes are intended to be used sparingly, while we expect that Contracts will be used widely, and in particular in many public-facing APIs, which calls for a more lightweight, natural-looking syntax. Finally, preconditions and postconditions are an integral part of a function declaration and therefore should have a syntax consistent with other parts of such a declaration, such as \tcode{requires}, \tcode{noexcept}, etc., all of which are introduced via a proper C++ keyword rather than delimiter tokens.
 
@@ -156,7 +159,7 @@ In this paper, we improve upon both closure-based and condition-centric syntax. 
 
 Building on these ideas, we developed a complete syntax proposal that is fit for purpose in the Contracts MVP and accommodates all relevant post-MVP extensions such as captures, \tcode{requires} clauses, and labels on contract checks.
 
-The author of the closure-based syntax has reviewed our proposal and decided to discontinue the closure-based syntax in favour of our proposal as it subsumes the ideas of the closure-based syntax and improves upon it. We are therefore left with attribute-like syntax and our proposal as the only two still active proposals for a Contracts syntax.
+The author of the closure-based syntax has reviewed our proposal and decided to discontinue the closure-based syntax in favour of the natural syntax as it subsumes the ideas of the closure-based syntax and improves upon it. We are therefore left with attribute-like syntax and the natural syntax as the only two still active proposals for a Contracts syntax.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -355,7 +358,7 @@ Therefore, contract assertions as proposed here can act as full drop-in replacem
 \subsection{No parsing ambiguities with \tcode{pre} and \tcode{post}}
 \label{subsec:noambig}
 
-It has been suggested that the syntax proposed here for preconditions and postconditions might create parsing ambiguities with the other parts of a function declaration, such as a trailing return type or \tcode{requires} clause, if \tcode{pre} or \tcode{post} are used as identifiers for variables, functions, or types; but this is not actually the case.
+It has been suggested that the natural syntax for preconditions and postconditions might create parsing ambiguities with the other parts of a function declaration, such as a trailing return type or \tcode{requires} clause, if \tcode{pre} or \tcode{post} are used as identifiers for variables, functions, or types; but this is not actually the case.
 
 The grammar for a trailing return type is \tcode{->} \emph{type-id}, and we can unambiguously tell when that \emph{type-id} ends and a \emph{pre-or-postcondition} begins:
 
@@ -420,8 +423,6 @@ void f(bool pre, bool post)
 With the syntax we propose here, the best possible keyword for assertions would be \tcode{assert}. This is the keyword used in virtually all contracts-related proposals so far, including attribute-like syntax; the keyword that most users would intuitively expect; and the keyword used in the vast majority of programming languages (Python, Rust, Scala, Swift, Kotlin, etc.) for this purpose. In short, the keyword \tcode{assert} is well-established practice and superior to any keyword that is not \tcode{assert}.
 
 Unfortunately, it also creates a name clash with the existing \tcode{assert} macro from header \tcode{cassert}:
-
-\pagebreak % MANUAL %%%%%%%
 
 %\vspace{2mm}
 \begin{codeblock}
@@ -497,7 +498,7 @@ A large number of alternative keywords have been suggested since the initial ver
 \item The keyword should not look too much like a typo of a common English word.
 \item The keyword should also work for the C language.
 \end{enumerate}
-Note that these design goals are not absolute; they can be broken if there is a good engineering reason for it. Examples of existing keywords that go against some of these goals are: \tcode{requires}, claimed as a full keyword in C++20 that broke existing code; \tcode{alignas}, commonly treated as a typo for ``aligns'' by spell checkers; and \tcode{reinterpret_cast}, a long and ugly keyword. The latter is well-motivated:\tcode{reinterpret_cast} is an unsafe feature that should be used sparingly and therefore should be hard to type. Conversely, contracts exist to improve safety and correctness and their use should be encouraged. We therefore expect the new keyword to be typed frequently, therefore it should be easy to type.
+Note that these design goals are not absolute; they can be broken if there is a good engineering reason for it. Examples of existing keywords that go against some of these goals are: \tcode{requires}, claimed as a full keyword in C++20 that broke existing code; \tcode{alignas}, commonly treated as a typo for ``aligns'' by spell checkers; and \tcode{reinterpret_cast}, a long and ugly keyword. The latter is well-motivated:\tcode{reinterpret_cast} is an unsafe feature that should be used sparingly and therefore should be hard to type. Conversely, contracts exist to improve safety and correctness and their use should be encouraged. We therefore expect the new keyword to be typed frequently, so it should be easy to type.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -578,6 +579,8 @@ With the results in Table \ref{table:codesearch}, we can narrow down our pool of
 
 With that in mind, we can go through all candidate keywords from top to bottom and evaluate how well they satisfy our design goals formulated in \ref{subsubsec:keyword_goals}.
 
+\pagebreak % MANUAL %%%%%%%%%%%%%
+
 The first keyword candidate, \tcode{contractassert}, is arguably harder to read than the spelling variant \mbox{\tcode{contract_assert}}.
 
 The next candidate, \tcode{mustexpr} as well as other similar candidates not derived from the word ``assert'' such as \tcode{musthold}, \tcode{truexpr}, etc. are arguably not consistent with the existing community knowledge about Contracts. The terminology ``assert'' and the contract kind ``assertion'' are established terms of art and the keyword should show at least some connection to this terminology. Having a keyword not derived from ``assert'' also suffers from another problem: how should we name the corresponding enum value in \mbox{\tcode{std::contracts::contract_kind}}? Should we leave it at \tcode{assert}, thereby having a keyword completely inconsistent with the enum, or should we change it to match the keyword, thereby having an enum that is likewise inconsistent with established terminology? Note also that if we choose the latter, we cannot use the exact spelling of the keyword (a full keyword cannot be used as a name for an enum value), but need to come up with some alternative spelling of that keyword. None of these options seem particularly appealing.
@@ -594,9 +597,15 @@ Candidates such as \tcode{dyn_assert}, or any other keyword that contains variat
 
 \tcode{contract_assert} and \tcode{assertexpr} do not seem to violate any of our design goals. Neither of them are perfect: \tcode{contract_assert} is a bit too long, but only two characters longer than the common keyword \tcode{static_assert} and therefore still seems viable; and \tcode{assertexpr} has the \tcode{expr} suffix which currently is only used for \tcode{constexpr}, a keyword used for declarations, which might be seen as a slight inconsistency. However, none of these properties are serious problems, and both keywords also have important advantages: \mbox{\tcode{contract_assert}} is extremely clear and descriptive, while \tcode{assertexpr} emphasises that a contract assertion is, in fact, an expression (and not a macro, a statement, or an attribute-like thing appertaining to a statement) and can be used everywhere an expression can be used. \tcode{assertexpr} is also nicely consistent with the corresponding grammar term \emph{assert-expression} (see section \ref{subsec:grammar}). All things considered, we believe that \tcode{contract_assert} and \tcode{assertexpr} are the two least bad options and therefore we would like to propose these two as our two preferred candidates.
 
-Further down the list, there is \tcode{assertion_check}, which seems unnecessarily verbose; \tcode{_Assert} and \tcode{__assert}, which are reserved for implementations of the C++ Standard Library (and used in multiple such implementations); and various candidates that are very similar to the ones already rejected and suffer from the same problems. At this point in the list, the number of existing usages as a user-defined identifier quickly starts to increase to an unacceptable level. We therefore did not include any further keyword candidates to the shortlist besides \tcode{contract_assert} and \tcode{assertexpr}.
+Further down the list, there is \tcode{assertion_check}, which seems unnecessarily verbose; \tcode{_Assert} and \tcode{__assert}, which are reserved for implementations of the C++ Standard Library (and used in multiple such implementations); and various candidates that are very similar to the ones already rejected and suffer from the same problems.
+
+At this point in the list, the number of existing usages as a user-defined identifier quickly starts to increase to an unacceptable level. We therefore did not include any further keyword candidates to the shortlist besides \tcode{contract_assert} and \tcode{assertexpr}.
+
+\pagebreak % MANUAL %%%%%%%%%%%%%
 
 The choice between these two candidates was made by poll at the SG21 telecon on 2023-10-26. The results were very clear:
+
+
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \textbf{Poll 1:} In case we choose to adopt the ``natural syntax'' for Contracts as proposed in 
@@ -630,14 +639,21 @@ The decisive argument was as follows. It was acknowledged that \tcode{assertexpr
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\subsection{Implementation experience}
+\label{subsec:implxp}
+
+A fully-functional experimental implementation of the natural syntax proposed here has been developed in GCC by Ville Voutilainen. It is currently publicly available on Compiler Explorer (\href{https://godbolt.org}{https://godbolt.org}) by selecting ``"x86-64 gcc (contracts natural syntax)`` from the compiler selection drop-down menu and passing the flags \tcode{-fcontracts -fcontracts-nonattr} to it. The first enables contracts in general, the second enables the natural syntax.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \subsection{Viability for the C language}
 \label{subsec:clang}
 
-We consulted with SG22 (C/C++ Liaison Group) and requested their opinion on 1) whether there is interest in standardising Contracts for C in a way compatible with C++ and usable in code shared between C and C++; 2) whether they would prefer the syntax presented in this paper or the attribute-like syntax \cite{P2935R3} for this purpose; 3) whether there are C-specific technical concerns with either syntax. We received extensive feedback both on the SG22 reflector discussion and at a formal SG22 meeting that was convened for this purpose. In this section we summarise the feedback we received.
+We consulted with SG22 (C/C++ Liaison Group) and requested their opinion on 1) whether there is interest in standardising Contracts for C in a way compatible with C++ and usable in code shared between C and C++; 2) whether they would prefer the natural syntax presented in this paper or the attribute-like syntax \cite{P2935R3} for this purpose; 3) whether there are C-specific technical concerns with either syntax. We received extensive feedback both on the SG22 reflector discussion and at a formal SG22 meeting that was convened for this purpose. In this section we summarise the feedback we received.
 
 Regarding the first question, SG22 expressed interest in standardising Contracts for C in a way compatible with C++, and noted that it is possible they will end up standardising just a subset of the C++ facility.
 
-Regarding the second question, SG22 expressed a preference for the syntax we propose in this paper over attribute-like syntax. The poll results were as follows:
+Regarding the second question, SG22 expressed a preference for the natural syntax we propose in this paper over attribute-like syntax. The poll results were as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \textbf{Poll 1:} Would SG22 find it acceptable if SG21 adopts the attribute-like syntax as proposed in P2935 for Contracts in C++?
@@ -661,9 +677,9 @@ WG21 members: & 3 & 6 & 1 & 0 & 0
 \end{tabular}
 \end{adjustwidth}
 
-Regarding the third question, the only technical concern raised with the syntax proposed in this paper is that C does not have conditional keywords and they would like to avoid introducing them. At the same time, \tcode{pre} and \tcode{post} are too frequent in existing C code to be claimed as full keywords. However, there is a straightforward workaround. We could define the keywords in C as \tcode{_Pre} and \tcode{_Post}, respectively, and then provide convenience macros \tcode{pre} and \tcode{post}, respectively, in a new C header \tcode{<stdcontracts.h>} that expand to the C keywords. The same technique has been successfully used for numerous earlier keywords such as \tcode{_Bool}, \tcode{_Static_assert}, \tcode{_Alignas}, \tcode{_Thread_local}, etc.
+Regarding the third question, the only technical concern raised with the natural syntax is that C does not have conditional keywords and they would like to avoid introducing them. At the same time, \tcode{pre} and \tcode{post} are too frequent in existing C code to be claimed as full keywords. However, there is a straightforward workaround. We could define the keywords in C as \tcode{_Pre} and \tcode{_Post}, respectively, and then provide convenience macros \tcode{pre} and \tcode{post}, respectively, in a new C header \tcode{<stdcontracts.h>} that expand to the C keywords. The same technique has been successfully used for numerous earlier keywords such as \tcode{_Bool}, \tcode{_Static_assert}, \tcode{_Alignas}, \tcode{_Thread_local}, etc.
 
-The SG22 discussion revealed that \emph{backwards-compatibility}, i.e. the ability to add contract checks to existing code and to have this code still compile with an old compiler that does not know anything about Contracts, is a much more important concern in C than in C++\footnote{According to the SG21 electronic poll on syntax requirements in \cite{P2885R3}, such backwards-compatibility was deemed \emph{irrelevant} for Contracts in C++ by a majority of respondents.}. Our paper provides such backwards-compatibility because it makes all contract checks syntactically compatible with function-like macros:
+The SG22 discussion revealed that \emph{backwards-compatibility}, i.e. the ability to add contract checks to existing code and to have this code still compile with an old compiler that does not know anything about Contracts, is a much more important concern in C than in C++\footnote{According to the SG21 electronic poll on syntax requirements in \cite{P2885R3}, such backwards-compatibility was deemed \emph{irrelevant} for Contracts in C++ by a majority of respondents.}. The natural syntax provides such backwards-compatibility because it makes all contract checks syntactically compatible with function-like macros:
 
 \begin{codeblock}
 #if COMPILER_UNDERSTANDS_CONTRACTS
@@ -674,7 +690,7 @@ The SG22 discussion revealed that \emph{backwards-compatibility}, i.e. the abili
 // same for \tcode{post} and \tcode{assert}
 \end{codeblock}
 
-This property was stated as an important reason for supporting our paper over attribute-like syntax. However, the above technique will stop working if we introduce post-MVP extensions that add syntactic elements outside of the parentheses, such as captures and labels,
+This property was stated as an important reason for supporting natural syntax over attribute-like syntax. However, the above technique will stop working if we introduce post-MVP extensions that add syntactic elements outside of the parentheses, such as captures and labels,
 which might also be relevant for C. Adding such elements inside the top-level parentheses would keep this technique working, especially if such elements themselves look like plain function invocations. Essentially, instead of
 
 \lstset{emph={labels,captures,predicate}, emphstyle=\itshape}
@@ -701,12 +717,12 @@ Note that unlike the function-like macro approach, the allowance in C to token-i
 
 \section{Post-MVP extensions}
 
-Our proposed syntax provides a natural path for evolution into all of the post-MVP directions that have been suggested so far. In this section, we discuss several possible post-MVP extensions that are of interest to SG21 according to the electronic poll results in \cite{P2885R3} or that have been brought up in discussion since the poll results were published.
+The natural syntax proposal provides a natural path for evolution into all of the post-MVP directions that have been suggested so far. In this section, we discuss several possible post-MVP extensions that are of interest to SG21 according to the electronic poll results in \cite{P2885R3} or that have been brought up in discussion since the poll results were published.
 
 \subsection{Captures}
 \label{subsec:captures}
 
-The contracts grammar proposed here can be extended as follows to allow captures on contract checks:
+The grammar of the natural syntax can be extended as follows to allow captures on contract checks:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 
@@ -734,14 +750,14 @@ void vector::push_back(const T& v)
 \end{codeblock}
 %\vspace{2mm}
 
-Note that with our syntax, a contract check with a capture looks very similar to closure-based syntax, except that the predicate is in parentheses instead of braces. This is the natural choice and avoids making the contract check look like a lambda (an entirely different construct). Instead, the syntax looks exactly like the thing that it is: a capture followed by a predicate using that capture. It is a new syntax for a new type of construct, yet it immediately looks familiar and intuitive.
+Note that with natural syntax, a contract check with a capture looks very similar to closure-based syntax, except that the predicate is in parentheses instead of braces. This is the natural choice and avoids making the contract check look like a lambda (an entirely different construct). Instead, the syntax looks exactly like the thing that it is: a capture followed by a predicate using that capture. It is a new syntax for a new type of construct, yet it immediately looks familiar and intuitive.
 
-Note further that with our syntax, we have the same design freedom as closure-based syntax \cite{P2461R1} to allow the full capture syntax from lambdas, including default-captures:
+Note further that with natural syntax, we have the same design freedom as closure-based syntax \cite{P2461R1} to allow the full capture syntax from lambdas, including default-captures:
 
 %\vspace{2mm}
 \begin{codeblock}
 int min(int x, int y)
-  post [x, y] (r: r <= x && r <= y );   // possible with our proposal
+  post [x, y] (r: r <= x && r <= y );   // possible with natural syntax
 \end{codeblock}
 %\vspace{2mm}
 
@@ -752,7 +768,7 @@ Of course we could also choose to restrict ourselves to init-captures as \cite{P
 \subsection{Destructuring the return value}
 \label{subsec:struct}
 
-We can easily and naturally extend the syntax proposed here to add support for destructing the return value of a function with a structured binding when specifying a name for that value:
+We can easily and naturally extend the natural syntax to add support for destructing the return value of a function with a structured binding when specifying a name for that value:
 
 \emph{contract-condition:} \\
 \phantom{~~~}\tcode{(} \emph{return-name}$_{opt}$ \emph{conditional-expression} \tcode{)}
@@ -776,7 +792,7 @@ std::tuple<int, int, int> f()
 \subsection{\tcode{requires}-clauses on contracts}
 \label{subsec:requires}
 
-The contracts grammar proposed here can be extended to allow a \tcode{requires} clause that appertains to an individual contract check. There are at least two possible syntactic positions for such a \tcode{requires} clause. We could place it at the end, after the predicate:
+The grammar of the natural syntax can be extended to allow a \tcode{requires} clause that appertains to an individual contract check. There are at least two possible syntactic positions for such a \tcode{requires} clause. We could place it at the end, after the predicate:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \emph{contract:} \\
@@ -842,7 +858,7 @@ void f(T x)
 
 Although not covered in \cite{P2885R3}, it has been argued that any new syntactic construct in C++, including contract checks, should allow for the possibility of standard attributes appertaining to it. Some meta-annotations that might be added to contracts post MVP could potentially be expressed as attributes appertaining to a contract check.
 
-Support for attributes appertaining to a contract check is easy to accommodate with our proposed syntax. Since attributes are optional, ignorable information and are thus not part of a contract's primary information, we believe that it makes most sense to place them at the end of the contract check:
+Support for attributes appertaining to a contract check is easy to accommodate with natural syntax. Since attributes are optional, ignorable information and are thus not part of a contract's primary information, we believe that it makes most sense to place them at the end of the contract check:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 
@@ -885,7 +901,7 @@ Note that in either case, there is no grammar ambiguity with the \emph{attribute
 \subsection{Labels}
 \label{subsec:labels}
 
-It has been suggested that post-MVP, we will need meta-annotations on a contract, so-called \emph{labels}, that should not be spelled as attributes because they are not ignorable. The only currently known use case for this is to specify or constrain the possible contract semantic (observe, ignore, enforce) for a given contract; other use cases might be discovered in the future. There are many ways in which our proposed syntax could be extended to accommodate such labels.
+It has been suggested that post-MVP, we will need meta-annotations on a contract, so-called \emph{labels}, that should not be spelled as attributes because they are not ignorable. The only currently known use case for this is to specify or constrain the possible contract semantic (observe, ignore, enforce) for a given contract; other use cases might be discovered in the future. There are many ways in which the natural syntax could be extended to accommodate such labels.
 
 If we want to consider such labels secondary information, we can place them at the end of the contract check. In order to keep the grammar unambiguous, we need to surround the sequence of labels with delimiter tokens. We cannot use \tcode{[[ ... ]]} because these are reserved for attributes (see section \ref{subsec:attr}), but we can use pretty much any other set of delimiter tokens, such as \mbox{\tcode{[ ...]}}, \mbox{\tcode{<...>}}, \mbox{\tcode{\{...\}}}, and so forth, or mark the labels by special characters such as \tcode{@}, depending on SG21's preference:
 
@@ -905,7 +921,7 @@ void f(int x)
 \end{codeblock}
 %\vspace{2mm}
 
-We could also allow both the leading and the trailing position. Our syntax places no restrictions on the internal grammar for these labels. They can be specified to be any kind of token sequence, depending on the design direction we choose post MVP.
+We could also allow both the leading and the trailing position. The natural syntax places no restrictions on the internal grammar for these labels. They can be specified to be any kind of token sequence, depending on the design direction we choose post MVP.
 
 One interesting possibility is to specify that the label, or set of labels, shall be a constant expression that evaluates to a compile-time value defining the desired per-contract configuration, perhaps to a value of some new type \tcode{std::contract_traits} similar to \tcode{std::coroutine_traits}. Such a grammar opens up the power of constant expressions (i.e. almost the full language) for abstracting the computation of the per-contract configuration. The syntax with labels in leading position, right after \tcode{pre} or \tcode{post} and delimited by \mbox{\tcode{<...>}}, seems appealing for this design direction, as the contract check will resemble a template that is ``templated'' on its configuration (which acts as a non-type template parameter), and the constant expression acts as a template argument that ``instantiates'' (configures) the contract check. The grammar for this could look as follows:
 
@@ -919,9 +935,9 @@ One interesting possibility is to specify that the label, or set of labels, shal
 
 \end{adjustwidth}
 
-However, this is only one possible direction. With our proposal, we are not cutting off any other directions. The main difference to labels in attribute-like syntax is that in our syntax, the label sequence goes between delimiter tokens, whereas in attribute-like syntax it goes between the \tcode{pre} or \tcode{post} keyword and the colon. Arguably, our proposal actually leaves more syntactic freedom for labels than attribute-like syntax does. In attribute-like syntax, the label sequence can syntactically clash with anything else that goes between the \tcode{pre} or \tcode{post} keyword and the colon, such as the name for the return value. On the other hand, in our syntax, labels are guaranteed to not clash with anything else because they are separated from all other parts of the contract check by their own delimiter tokens.
+However, this is only one possible direction. With the natural syntax proposal, we are not cutting off any other directions. The main difference to labels in attribute-like syntax is that in the natural syntax, the label sequence goes between delimiter tokens, whereas in attribute-like syntax it goes between the \tcode{pre} or \tcode{post} keyword and the colon. Arguably, the natural syntax actually leaves more syntactic freedom for labels than attribute-like syntax does. In attribute-like syntax, the label sequence can syntactically clash with anything else that goes between the \tcode{pre} or \tcode{post} keyword and the colon, such as the name for the return value. On the other hand, in natural syntax, labels are guaranteed to not clash with anything else because they are separated from all other parts of the contract check by their own delimiter tokens.
 
-Note also that with our proposal, we can support both standard attributes and non-attribute labels appertaining to the same contract check simultaneously, for example:
+Note also that with natural syntax, we can support both standard attributes and non-attribute labels appertaining to the same contract check simultaneously, for example:
 
 %\vspace{2mm}
 \begin{codeblock}
@@ -964,7 +980,7 @@ We could attempt to fix the first case by introducing a new type of vexing parse
 
 With procedural interfaces, we can express a much richer set of contracts than with preconditions and postconditions alone. The idea was first published by Lisa Lippincott in her paper \cite{P0465R0}. More recently, \cite{P2885R3} and \cite{P2935R3} mentioned the idea of integrating such procedural interfaces into a Contracts facility post-MVP.
 
-With our proposal, we can support procedural interfaces with an interface block delimited by curly braces. This is the natural syntax in C++ for a block containing a list of statements, and very close to Lisa Lippincott's original notation in \cite{P0465R0}. Here is a code example in this syntax --- a procedural interface expressing the contract that a function should not throw an exception:
+With the natural syntax, we can support procedural interfaces with an interface block delimited by curly braces. This is the natural syntax in C++ for a block containing a list of statements, and very close to Lisa Lippincott's original notation in \cite{P0465R0}. Here is a code example in this syntax --- a procedural interface expressing the contract that a function should not throw an exception:
 
 %\vspace{2mm}
 \begin{codeblock}
@@ -984,7 +1000,7 @@ interface {
 
 \section{Comparison with attribute-like syntax}
 
-In this section we compare different Contracts MVP and post-MVP code examples written in attribute-like syntax as proposed in \cite{P2935R3}, side-by-side with the syntax proposed in this paper, and discuss the different tradeoffs. Where appropriate, we mention different possible alternatives.
+In this section we compare different Contracts MVP and post-MVP code examples written in attribute-like syntax as proposed in \cite{P2935R3}, side-by-side with the natural syntax proposed in this paper, and discuss the different tradeoffs. Where appropriate, we mention different possible alternatives.
 
 \subsection{MVP functionality}
 
@@ -1012,8 +1028,8 @@ int f(int x)
 
 \subsubsection{Assertion as a statement}
 
-In attribute-like syntax, an assertion at block scope takes the shape of an attribute appertaining to a null statement; in our proposal, it looks like a regular statement, resembling a function call or the invocation of an assert macro:
-\vspace{5mm}
+In attribute-like syntax, an assertion at block scope takes the shape of an attribute appertaining to a null statement; in natural syntax, it looks like a regular statement, resembling a function call or the invocation of an assert macro:
+%\vspace{5mm}
 
 \begin{minipage}{8cm}
 \begin{codeblock}
@@ -1055,8 +1071,8 @@ void f() {
 
 \subsubsection{Assertion as an expression}
 
-The left-hand side of the code example below is taken directly from \cite{P2935R3}. Note that in attribute-like syntax, this would require a novel grammar that does not exist for attributes today and that we do not have implementation experience with. Attributes today need to appertain to another entity such as a declaration or a statement, and cannot be used on their own as an expression. At the same time, if an assertion is not an expression, it cannot be a full drop-in replacement for C \tcode{assert} as there would be places where a C \tcode{assert} is legal but a contract assert is not. With our proposal, using an assertion as an expression just works:
-\vspace{5mm}
+The left-hand side of the code example below is taken directly from \cite{P2935R3}. Note that in attribute-like syntax, this would require a novel grammar that does not exist for attributes today and that we do not have implementation experience with. Attributes today need to appertain to another entity such as a declaration or a statement, and cannot be used on their own as an expression. At the same time, if an assertion is not an expression, it cannot be a full drop-in replacement for C \tcode{assert} as there would be places where a C \tcode{assert} is legal but a contract assert is not. With natural syntax, using an assertion as an expression just works:
+%\vspace{5mm}
 
 \begin{minipage}{8cm}
 \begin{codeblock}
@@ -1087,8 +1103,8 @@ struct S2 {
 
 The left-hand side of the code example below is taken directly from \cite{P2935R3}. In attribute-like syntax, preconditions and postconditions are placed in the same location where attributes that would appertain to the function’s type would be located, i.e. before any trailing return type, virtual specifiers such as \tcode{override} and \tcode{final}, and a \tcode{requires} clause (see \cite{P2935R3}). This has the benefit that we can re-use the existing standard attribute grammar. However, the resulting position is awkward and goes against the natural reading order of a function declaration; it also requires delayed parsing of postconditions (as the predicate may depend on the trailing return type).
 
-By contrast, in our proposal, preconditions and postconditions are placed at the very end of a declaration, avoiding all of the above problems:
-\vspace{3mm}
+By contrast, in natural syntax, preconditions and postconditions are placed at the very end of a declaration, avoiding all of the above problems:
+%\vspace{3mm}
 
 \begin{minipage}{8cm}
 \begin{codeblock}
@@ -1098,21 +1114,7 @@ struct S1
 {
   auto f() const & noexcept
     [[ pre : true ]] -> int;
-\end{codeblock}
-\end{minipage}
-\begin{minipage}{8cm}
-\begin{codeblock}
-// This paper:
-
-struct S1
-{
-  auto f() const & noexcept -> int
-    pre(true);
-\end{codeblock}
-\end{minipage}
-
-\begin{minipage}{8cm}
-\begin{codeblock}
+    
   virtual void g()
     [[ pre : true ]] override = 0;
   
@@ -1124,6 +1126,13 @@ struct S1
 \end{minipage}
 \begin{minipage}{8cm}
 \begin{codeblock}
+// This paper:
+
+struct S1
+{
+  auto f() const & noexcept -> int
+    pre(true);
+    
   virtual void g() override = 0
     pre(true);
 
@@ -1133,13 +1142,15 @@ struct S1
 };
 \end{codeblock}
 \end{minipage}
-\vspace{3mm}
 
-Placing preconditions and postconditions at the very end of a declaration, as in this paper, is in principle also possible with attribute-like syntax, and this is mentioned explicitly as an alternative in \cite{P2935R3}. But this is not covered by existing standard attribute-grammar, thus requiring a novel grammar that we do not have implementation experience with, throwing away two major advantages of attribute-like syntax and creating several new problems (listed in \cite{P2935R3} section 4.2).
+%\vspace{3mm}
+
+Placing preconditions and postconditions at the very end of a declaration is in principle also possible with attribute-like syntax, and this is mentioned explicitly as an alternative in \cite{P2935R3}. But this is not covered by existing standard attribute-grammar, requiring a novel grammar that we do not have implementation experience with, throwing away two major advantages of attribute-like syntax and creating several new problems (listed in \cite{P2935R3} section 4.2).
 
 \subsubsection{Lambda with trailing return type}
 The same issue with the syntactic order also exists for lambdas, aggravated by the fact that a trailing return type is even more common here:
-\vspace{3mm}
+
+%\vspace{3mm}
 
 \begin{minipage}{8cm}
 \begin{codeblock}
@@ -1169,7 +1180,7 @@ The side-by-side comparison in this chapter is speculative as none of the featur
 \subsubsection{Captures}
 \label{subsubsec:comp_captures}
 
-In attribute-like syntax, captures look awkward as they involve square brackets inside double square brackets. Additionally, in attribute-like syntax they are ambiguous with square brackets for a structured binding (see \ref{subsubsec:struct}). \cite{P2935R3} suggests to only allow init-captures and to surround structured bindings with an additional pair of parentheses for disambiguation. In our syntax, neither is necessary as the two features have different syntactic positions that arise naturally from our proposed grammar:
+In attribute-like syntax, captures look awkward as they involve square brackets inside double square brackets. Additionally, in attribute-like syntax they are ambiguous with square brackets for a structured binding (see \ref{subsubsec:struct}). \cite{P2935R3} suggests to only allow init-captures and to surround structured bindings with an additional pair of parentheses for disambiguation. In natural syntax, neither is necessary as the two features have different syntactic positions that arise naturally from our proposed grammar:
 %\vspace{5mm}
 
 \begin{minipage}[t]{8cm}
@@ -1202,7 +1213,7 @@ void vector::push_back(const T& v)
 \subsubsection{Destructuring the return value}
 \label{subsubsec:struct}
 
-As mentioned above, in attribute-like syntax a structured binding is ambiguous with a capture unless we disallow default captures or require an extra pair of parens; with our syntax, it is not:
+As mentioned above, in attribute-like syntax a structured binding is ambiguous with a capture unless we disallow default captures or require an extra pair of parens; with natural syntax, it is not:
 
 \begin{minipage}[t]{8cm}
 \begin{codeblock}
@@ -1228,7 +1239,7 @@ std::tuple<int, int, int> f()
 
 \subsubsection{\tcode{requires} clause on the contract check}
 
-In attribute-like syntax, the only possible syntactic position for a  \tcode{requires} clause appertaining to the contract check is the same as for all other extensions: immediately preceding the colon. In our syntax, we can choose a much more natural position: either at the end of the contract check, or immediately after the \tcode{pre} or \tcode{post} keyword, depending on what SG21 prefers.
+In attribute-like syntax, the only possible syntactic position for a  \tcode{requires} clause appertaining to the contract check is the same as for all other extensions: immediately preceding the colon. In natural syntax, we can choose a much more natural position: either at the end of the contract check, or immediately after the \tcode{pre} or \tcode{post} keyword, depending on what SG21 prefers.
 
 
 \begin{minipage}[t]{8.7cm}
@@ -1266,7 +1277,7 @@ void f(T x)
 
 \subsubsection{\tcode{requires} clauses on both the contract and the function itself}
 
-In \cite{P2935R3}, if we wish to re-use the existing standard attribute syntax, the \tcode{requires} clause appertaining to the function itself comes after the contract check, whereas in our syntax it comes before, making the declaration more readable.
+In \cite{P2935R3}, if we wish to re-use the existing standard attribute syntax, the \tcode{requires} clause appertaining to the function itself comes after the contract check, whereas in natural syntax it comes before, making the declaration more readable.
 
 \begin{minipage}[t]{8.7cm}
 \begin{codeblock}
@@ -1305,7 +1316,9 @@ void f(T x)
 
 \subsubsection{Attributes appertaining to contracts}
 
-In attribute-like syntax, a standard attribute appertaining to a contract check (which is itself attribute-like) inevitably leads to nested double square brackets, which looks awkward, is hard to read, and requires a novel attribute grammar that we do not have implementation experience with (attributes appertaining to other attributes are not possible in existing C++ grammar).  \cite{P2935R3} clarifies that the only possible syntactic place for such attributes is --- as you can perhaps guess by now --- between the contract type and the colon. On the other hand, in our proposal, a standard attribute appertaining to a contract check looks as natural as a standard attribute appertaining to any other declaration:
+In attribute-like syntax, a standard attribute appertaining to a contract check (which is itself attribute-like) inevitably leads to nested double square brackets, which looks awkward, is hard to read, and requires a novel attribute grammar that we do not have implementation experience with (attributes appertaining to other attributes are not possible in existing C++ grammar).  \cite{P2935R3} clarifies that the only possible syntactic place for such attributes is --- as you can perhaps guess by now --- between the contract type and the colon.
+
+On the other hand, in natural syntax, a standard attribute appertaining to a contract check looks as natural as a standard attribute appertaining to any other declaration:
 
 \begin{minipage}[t]{8cm}
 \begin{codeblock}
@@ -1328,13 +1341,13 @@ int f(int x)
   pre [[deprecated]] (x > 0);
 \end{codeblock}
 \end{minipage}
-\vspace{5mm}
+%\vspace{5mm}
 
-Note that with our proposal, a standard attribute appertaining to a contract check is never ambiguous with a standard attribute appertaining to the function itself, the function type, or the trailing return type (see section \ref{subsec:attr}).
+Note that with the natural syntax, a standard attribute appertaining to a contract check is never ambiguous with a standard attribute appertaining to the function itself, the function type, or the trailing return type (see section \ref{subsec:attr}).
 
 \subsubsection{Labels}
 
-As discussed in section \ref{subsec:labels}, with the syntax proposed here we can choose to place labels either at the beginning or at the end of a contract check; the choice will depend on whether we consider these labels primary or secondary information. We can also choose between different delimiter tokens or special characters to separate them from the rest of the contract check:
+As discussed in section \ref{subsec:labels}, with the natural syntax we can choose to place labels either at the beginning or at the end of a contract check; the choice will depend on whether we consider these labels primary or secondary information. We can also choose between different delimiter tokens or special characters to separate them from the rest of the contract check:
 
 \begin{minipage}[t]{8cm}
 \begin{codeblock}
@@ -1355,9 +1368,9 @@ void search(range rg)
   pre <audit> (is_sorted(rg));
 \end{codeblock}
 \end{minipage}
-\vspace{3mm}
+%\vspace{3mm}
 
-Attribute-like syntax suffers from parsing ambiguities between labels and the name for the return value that require awkward workarounds. In our syntax, no such issues arise: the label, return value, and other parts of the contract all have their own unambiguous syntactic place:
+Attribute-like syntax suffers from parsing ambiguities between labels and the name for the return value that require awkward workarounds. In natural syntax, no such issues arise: the label, return value, and other parts of the contract all have their own unambiguous syntactic place:
 
 \begin{minipage}[t]{8cm}
 \begin{codeblock}
@@ -1413,6 +1426,10 @@ void f(int x)
     try {
       implementation;
     }
+    catch (...) {
+      [[assert: false]];
+    }
+  ]];
 \end{codeblock}
 \end{minipage}
 \begin{minipage}{8cm}
@@ -1424,19 +1441,6 @@ interface {
   try {
     implementation;
   }
-\end{codeblock}
-\end{minipage}
-
-\begin{minipage}{8cm}
-\begin{codeblock}
-    catch (...) {
-      [[assert: false]];
-    }
-  ]];
-\end{codeblock}
-\end{minipage}
-\begin{minipage}{8cm}
-\begin{codeblock}
   catch (...) {
     contract_assert(false);
   }
@@ -1452,19 +1456,17 @@ interface {
 \section{Requirements from P2885}
 \label{sec:requirements}
 
-Our proposal satisfies all relevant requirements for a Contracts syntax from \cite{P2885R3} except the requirement for implementation experience. If this proposal generates interest, we hope that someone will be able to help us with implementing this syntax in a C++ compiler to satisfy this requirement as well.
-
-Below we list all these requirements and discuss how our syntax satisfies them.
+Our proposed natural syntax satisfies all relevant requirements for a Contracts syntax from \cite{P2885R3}. Below we list all these requirements and discuss how the natural syntax satisfies them.
 
 \subsection{Basic requirements}
 
 \subsubsection{Aesthetics  [basic.aesthetic]}
 
-We believe that our syntax is more elegant and readable than either attribute-like or closure-based syntax.
+We believe that the natural syntax is more elegant and readable than either attribute-like or closure-based syntax.
 
 \subsubsection{Brevity  [basic.brief]}
 
-Our syntax uses the least amount of tokens and characters possible.
+The natural syntax uses the least amount of tokens and characters possible.
 
 \subsubsection{Teachability  [basic.teach]}
 
@@ -1482,23 +1484,23 @@ We believe that this syntax is more consistent with the rest of the C++ language
 
 \subsubsection{No breaking changes  [compat.break]}
 
-As long as we use a keyword other than \tcode{assert} for assertions (see discussion in section \ref{subsec:assrt}), our syntax does not break or alter the meaning of any existing C++ code.
+As long as we use a keyword other than \tcode{assert} for assertions (see discussion in section \ref{subsec:assrt}), the natural syntax does not break or alter the meaning of any existing C++ code.
 
 \subsubsection{No macros  [compat.macro]}
 
-Our syntax does not require the use of macros or the preprocessor to be used effectively.
+The natural syntax does not require the use of macros or the preprocessor to be used effectively.
 
 \subsubsection{Parsability  [compat.parse]}
 
-To our best knowledge the syntax we propose does not introduce any parsing ambiguities; see detailed discussion in section \ref{subsec:noambig}.
+To our best knowledge the syntax we propose does not introduce any parsing ambiguities; see detailed discussion in section \ref{subsec:noambig}. This has been confirmed by the experimental implementation of the natural syntax in GCC; see section \ref{subsec:implxp}.
 
 \subsubsection{Implementation experience  [compat.impl]}
 
-Unfortunately, we do not yet have any implementation experience with the syntax proposed here in a C++ compiler.
+Requirement satisfied; see section \ref{subsec:implxp}.
 
 \subsubsection{Backwards-compatibility  [compat.back]}
 
-Our syntax provides full backwards-compatibility with older compilers because it is compatible with wrapping contract checks into function-like macros, at least within the feature scope of the MVP (see discussion section \ref{subsec:clang}). Attribute-like syntax does not provide such compatibility because even if attributes that are not recognised by an implementation are ignored, attribute-like contract checks are not attributes because of the colon, and are diagnosed as a syntax error by all major compilers today.
+The natural syntax provides full backwards-compatibility with older compilers because it is compatible with wrapping contract checks into function-like macros, at least within the feature scope of the MVP (see discussion section \ref{subsec:clang}). Attribute-like syntax does not provide such compatibility because even if attributes that are not recognised by an implementation are ignored, attribute-like contract checks are not attributes because of the colon, and are diagnosed as a syntax error by all major compilers today.
 
 \subsubsection{Toolability [compat.tools]}
 
@@ -1506,7 +1508,7 @@ In order for a C++ tool to implement meaningful functionality for Contracts, the
 
 \subsubsection{C compatibility  [compat.c]}
 
-We asked SG22 (C/C++ Liaison Group) to review this paper and confirm that the syntax proposed here is viable for C; the discussion is summarised in section \ref{subsec:clang}.
+We asked SG22 (C/C++ Liaison Group) to review this paper and confirm that the natural syntax is viable for C; the discussion is summarised in section \ref{subsec:clang}.
 
 \subsection{Functional requirements}
 
@@ -1558,11 +1560,11 @@ Requirement satisfied via captures.
 
 \subsubsection{Captures  [future.captures]}
 
-The syntax proposed here can naturally be extended to support captures; see section \ref{subsec:captures} for discussion.
+The natural syntax can naturally be extended to support captures; see section \ref{subsec:captures} for discussion.
 
 \subsubsection{Structured binding return value  [future.struct]}
 
-The syntax proposed here can naturally be extended to support destructuring the return value; see discussion in section \ref{subsec:struct} and comparison with attribute-like syntax in \ref{subsubsec:struct}.
+The natural syntax can naturally be extended to support destructuring the return value; see discussion in section \ref{subsec:struct} and comparison with attribute-like syntax in \ref{subsubsec:struct}.
 
 \subsubsection{Contract reuse  [future.reuse]}
 
@@ -1570,39 +1572,39 @@ According to the SG21 electronic poll in \cite{P2885R3}, this is a \emph{questio
 
 \subsubsection{Meta-annotations  [future.meta]}
 
-The syntax proposed here can naturally be extended to support labels and meta-annotations, offering the same syntactic freedom as attribute-like syntax; see section \ref{subsec:labels} for discussion.
+The natural syntax can naturally be extended to support labels and meta-annotations, offering the same syntactic freedom as attribute-like syntax; see section \ref{subsec:labels} for discussion.
 
 \subsubsection{Parametrised meta-annotations  [future.meta.param]}
 
-There is nothing specific to the syntax proposed here that precludes this direction.
+There is nothing specific to the natural syntax that precludes this direction.
 
 \subsubsection{User-defined meta-annotations  [future.meta.user]}
 
-There is nothing specific to the syntax proposed here that precludes this direction.
+There is nothing specific to the natural syntax that precludes this direction.
 
 \subsubsection{Meta-annotations re-using existing keywords  [future.meta.keyword]}
 
-There is nothing specific to the syntax proposed here that precludes this direction.
+There is nothing specific to the natural syntax that precludes this direction.
 
 \subsubsection{Non-ignorable meta-annotations  [future.meta.noignore]}
 
-There is nothing specific to the syntax proposed here that precludes this direction.
+There is nothing specific to the natural syntax that precludes this direction.
 
 \subsubsection{Primary vs. secondary information  [future.prim]}
 
-We believe that our syntax satisfies this requirement much better than attribute-like syntax.
+We believe that the natural syntax satisfies this requirement much better than attribute-like syntax.
 
 \subsubsection{Invariants  [future.invar]}
 
-The syntax proposed here can be extended to support invariants at class scope; see section \ref{subsec:invariants} for discussion.
+The natural syntax can be extended to support invariants at class scope; see section \ref{subsec:invariants} for discussion.
 
 \subsubsection{Procedural interfaces  [future.interface]}
 
-The syntax proposed here can be naturally extended to support procedural interfaces as proposed in \cite{P0465R0}; see discussion in section \ref{subsec:interfaces} and comparison with attribute-like syntax in \ref{subsubsec:comp_interfaces}.
+The natural syntax can be naturally extended to support procedural interfaces as proposed in \cite{P0465R0}; see discussion in section \ref{subsec:interfaces} and comparison with attribute-like syntax in \ref{subsubsec:comp_interfaces}.
 
 \subsubsection{\tcode{requires} clauses  [future.requires]}
 
-The syntax proposed here can be naturally extended to support \tcode{requires} clauses on individual contract checks; see discussion in section \ref{subsec:requires}.
+The natural syntax can be naturally extended to support \tcode{requires} clauses on individual contract checks; see discussion in section \ref{subsec:requires}.
 
 \subsubsection{Abbreviated syntax on parameter declarations  [future.abbrev]}
 
@@ -1610,7 +1612,7 @@ According to the SG21 electronic poll in \cite{P2885R3}, this is the lowest-rank
 
 \subsubsection{General extensibility  [future.general]}
 
-As we have shown above, the syntax proposed here can be naturally extended to a wide range of known ideas for future features. We therefore believe that it offers a high degree of extensibility also for future features not yet discussed.
+As we have shown above, the natural syntax can be naturally extended to a wide range of known ideas for future features. We therefore believe that it offers a high degree of extensibility also for future features not yet discussed.
 
 \label{subsec:future}
 
@@ -1622,17 +1624,24 @@ Requirement satisfied; see section \ref{subsec:attr}.
 
 \subsubsection{ Forward-declaration of Contract labels  [app.fwddecl]}
 
-There is nothing specific to the syntax proposed here that precludes this direction. For example, we could express forward-declared labels with \tcode{...} in the same syntactic place where we would normally place the labels themselves.
+There is nothing specific to the natural syntax that precludes this direction. For example, we could express forward-declared labels with \tcode{...} in the same syntactic place where we would normally place the labels themselves.
 
 \subsubsection{Contracts on function types  [app.functype]}
 
-There is nothing specific to the syntax proposed here that precludes this direction. Although no proposals have been made yet demonstrating how this idea could work (regardless of syntax), we imagine it would be possible to have, for example, some kind of \tcode{using}-declaration naming a function type that can have contract checks attached to it. There might be some overlap with the idea of declaring reusable Contracts (see [future.reuse]).
+There is nothing specific to the natural syntax that precludes this direction. Although no proposals have been made yet demonstrating how this idea could work (regardless of syntax), we imagine it would be possible to have, for example, some kind of \tcode{using}-declaration naming a function type that can have contract checks attached to it. There might be some overlap with the idea of declaring reusable Contracts (see [future.reuse]).
 
 \section*{Acknowledgements}
 \addtocontents{toc}{\protect\numberline{}} % Blank line in ToC
 \addcontentsline{toc}{section}{\protect\numberline{}Acknowledgements}
 
-We would like to thank Ville Voutilainen, Joshua Berne, Peter Brett, Ga\v sper A\v zman, and Andrzej Krzemie\' nski for reviewing this paper and providing helpful feedback; Ran Regev, Jose Daniel Garc\' ia S\' anchez, Barry Revzin, John Lakos, Aaron Ballman, Mark Gillard, and Alisdair Meredith for suggesting keyword alternatives to \tcode{assert}; and all members of SG22 who participated in the discussion for their helpful feedback on the viability of the syntax proposed here for the C language.
+We would like to thank Ville Voutilainen, Joshua Berne, Peter Brett, Ga\v sper A\v zman, and Andrzej Krzemie\' nski for reviewing this paper and providing helpful feedback;
+Ran Regev, Jose Daniel Garc\' ia S\' anchez, Barry Revzin, John Lakos, Aaron Ballman, Mark Gillard, and Alisdair Meredith for suggesting keyword alternatives to \tcode{assert}; 
+Robert Seacord, Aaron Ballman, Niall Douglas, Martin Uecker, Jens Gustedt, JeanHeyd Meneide, and Joshua Cranmer for providing feedback on the viability of the natural syntax for the C language; and
+Nina Ranns for convening an SG22 meeting for this purpose.
+A special thanks goes to Ville Voutilainen for his implementation of the natural syntax in GCC.
+
+%\pagebreak % MANUAL %%%%%%% %%%%%%% %%%%%%% %%%%%%%
+
 
 % Replace ToC entry for bibliography by custom one
 %\addtocontents{toc}{\protect\numberline{}} % Blank line in ToC

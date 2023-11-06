@@ -15,7 +15,7 @@ Tom Honermann \small(\href{mailto:tom@honermann.net}{tom@honermann.net})
 
 \begin{tabular}{ll}
 Document \#: & P2969R0 \\
-Date: &2023-11-04 \\
+Date: &2023-11-06 \\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
@@ -171,7 +171,17 @@ If we go down this route, the same logic must apply to all contexts where an exc
 
 \subsection{Relying on guidelines and diagnostics?}
 
-Rather than making code ill-formed where a potentially-throwing contract check changes the exception specification, a possible alternative is to rely on guidelines and diagnostics. This is what we do in other parts of the language where using a certain feature in the wrong way can unintentionally change the program semantics and introduce performance regressions (for example, unintended copies due to using the wrong iterator type for \tcode{std::map} in a loop). We could teach that one should stop and think before adding contract checks to move constructors or swap definitions. Such additions can be treated as a code smell and compilers can issue diagnostics. Note that such diagnostics could be issued for any function that has a deduced potentially-throwing exception specification due to the presence of a contract check but would have a deduced non-throwing exception specification otherwise.
+Rather than making code ill-formed where a potentially-throwing contract check changes the exception specification, a possible alternative is to rely on guidelines and diagnostics. This is what we do in other parts of the language where using a certain feature in the wrong way can unintentionally change the program semantics and introduce performance regressions. Consider:
+
+\begin{codeblock}
+std::map<int, Widget> map = { /* ... */ };
+for (const std::pair<int, Widget>& elem : map)
+  // do something with \tcode{elem}
+\end{codeblock}
+
+In this case, the user got the element type of \tcode{std::map} wrong (which is \tcode{std::pair<const int, Widget>} rather than \tcode{std::pair<int, Widget>}); this generates an unintended implicit conversion, which in turn yields a temporary object that is lifetime-extended by the \tcode{const\&}. This code compiles and works, but has a silent performance degradation due to the unnecessary conversion and object creation on every iteration of the loop. Such inefficiency is unfortunate; however, we do not add special cases to basic language rules such as range-based \tcode{for} loops, implicit conversions, or reference semantics to make these cases ill-formed. Instead, the user gets what they get, a quality compiler or static analysis tool will issue a warning, and several straightforward fixes are available (use the correct type, or just use \tcode{auto}).
+
+In the same spirit, we could teach that one should stop and think before adding contract checks to move constructors or swap definitions. Such additions can be treated as a code smell and compilers can issue diagnostics. Note that such diagnostics could be issued for any function that has a deduced potentially-throwing exception specification due to the presence of a contract check but would have a deduced non-throwing exception specification otherwise. The straightforward fix in this case would be to add \tcode{noexcept} to avoid the performance degradation.
 
 This option would make contract checks somewhat harder to teach and use, but would avoid having a \tcode{noexcept} operator that gives a factually incorrect result while also avoiding making valid code unnecessarily ill-formed.
 

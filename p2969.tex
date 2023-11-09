@@ -15,13 +15,13 @@ Tom Honermann \small(\href{mailto:tom@honermann.net}{tom@honermann.net})
 
 \begin{tabular}{ll}
 Document \#: & P2969R0 \\
-Date: &2023-11-06 \\
+Date: &2023-11-08 \\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
 
 \begin{abstract}
-Contract-violation handlers in the Contracts MVP can throw; contract checks are therefore potentially-throwing constructs. This has interesting consequences for the interaction of such contract checks with other C++ features, in particular the \tcode{noexcept} operator and special member functions with deduced exception specifications. It also reveals some design holes in those areas in the Contracts MVP. In this paper, we discuss several alternatives for plugging these holes.
+Contract-violation handlers in the Contracts MVP can throw; contract checks are therefore potentially-throwing constructs. This has interesting consequences for the interaction of such contract checks with other C++ features, in particular the \tcode{noexcept} operator and special member functions with deduced exception specifications. It also reveals some unanswered design questions in those areas in the Contracts MVP. In this paper, we mention different alternatives for answering these design questions and discuss the associated tradeoffs.
 \end{abstract}
 
 %\vspace{5mm} %MANUAL
@@ -45,7 +45,7 @@ SG21 agreed on the following set of semantics for throwing contract-violation ha
 \item Whether a contract-checking annotation is checked or unchecked shall never change the result of the \tcode{noexcept} operator or the type of a function pointer to which the contract annotation is attached;
 \item Preconditions, postconditions, and assertions shall all behave the same way with respect to throwing an exception from the predicate or the violation handler.
 \end{itemize}
-From this follows that a contract check (whether it is a precondition, a postcondition, or an assertion) is a potentially-throwing construct regardless of whether the violation handler actually throws exceptions. In the following complete, well-formed, and well-defined C++ program, an exception is being thrown from a contract check:
+From this follows that a contract check (whether it is a precondition, a postcondition, or an assertion) is a potentially-throwing construct, regardless of whether the violation handler actually throws an exception. In the following complete, well-formed, and well-defined C++ program, an exception is being thrown from a contract check:
 
 \begin{codeblock}
 #include <contracts>
@@ -60,19 +60,18 @@ int main() {
 }
 \end{codeblock}
 
-\section{Contract checks and deduced exception specifications}
+\section{Open questions}
+\subsection{Interaction with existing C++ features}
 
-\subsection{Existing C++ features}
+There are currently several situations in the C++ language where the compile-time semantics of a program depend on whether a particular expression is potentially-throwing (see \href{https://eel.is/c++draft/except.spec#3}{[except.spec] p3}). The Contracts MVP does not currently define how contract checks are supposed to behave in these situations, so we need to define it. There are several options for how to do that which we will discuss in this paper.
 
-There are currently several situations in the C++ language where the compile-time semantics of a program depend on whether a particular expression is potentially-throwing (see \href{https://eel.is/c++draft/except.spec#3}{[except.spec] p3}). The Contracts MVP does not currently define how contract checks are supposed to behave in these situations, so we need to define it.
+%%%%%
 
 The first such case is the result of the \tcode{noexcept} operator when applied directly to a contract check, or an expression that contains a contract check as a subexpression. Note that this only affects assertions, not preconditions or postconditions, as only assertions can be used directly as expressions:
 
 \begin{codeblock}
 noexcept(contract_assert(false));   // true or false?
 \end{codeblock}
-
-Since contract checks are potentially-throwing, it follows that the result should be \tcode{false}.
 
 The second case concerns special member functions (such as constructors) that are defaulted on their first declaration and have a deduced exception specification. Unlike elsewhere in the language, in this case the exception specification is deduced as \tcode{noexcept(true)} by default, unless the constructor involves some potentially-throwing construct, in which case it is deduced as \tcode{noexcept(false)}. Here is an example with a default constructor:
 
@@ -95,20 +94,25 @@ struct S {
 };
 \end{codeblock}
 
-In both examples, since the contract checks are potentially-throwing, the exception specification of the defaulted constructor should be deduced as \tcode{noexcept(false)}, whereas without the contract check it would be deduced as \tcode{noexcept(true)}.
+Note that special member functions auto-compose recursively and a deduced exception specification impact can be viral. Changing the deduced exception specification of a move constructor of one type might change the deduced exception specification for the move constructors of all classes that contain a data member of that type.
 
-Note that special member functions auto-compose recursively and a deduced exception specification impact can be viral. Adding a contract check to a move constructor of one type might change the deduced exception specification for the move constructors of all classes that contain a data member of that type.
+Note further that regardless of what we decide should happen for deduced exception specification, the addition of a contract check can never change an explicitly specified exception specification. If a function is explicitly declared \tcode{noexcept}, throwing from a violation handler will run into the \tcode{noexcept} barrier and call \tcode{std::terminate}.
 
-Note further that the addition of a contract check can never change the exception specification of a function explicitly declared \tcode{noexcept}: in this case, throwing from a violation handler will run into the \tcode{noexcept} barrier and call \tcode{std::terminate}.
+\subsection{Interaction with potential future C++ features}
 
-\subsection{Potential future C++ features}
+While the result of the \tcode{noexcept} operator and deduced exception specifications on defaulted special member functions are the only two features in the language today where the potentially-throwing nature of contract checks manifests itself, it is possible that more such features will be proposed for a future C++ Standard. In particular, we could get a feature like \tcode{noexcept(auto)} (see \cite{N4473} and \cite{P0133R0}) that can deduce the exception specification for any user-defined function without an explicit exception specification, depending on whether the function contains any potentially-throwing constructs. We need to consider how such a feature would interact with contract checks. Since contract checks are potentially-throwing, does this mean that \tcode{noexcept(auto)} would deduce to \tcode{noexcept(false)} if the function in question contains any contract checks?
 
-While the result of the \tcode{noexcept} operator and deduced exception specifications on defaulted special member functions are the only two features in the language today where the potentially-throwing nature of contract checks manifests itself, it is possible that more such features will be proposed for a future C++ Standard. In particular, we could get a feature like \tcode{noexcept(auto)} (see \cite{N4473} and \cite{P0133R0}) that can deduce the exception specification for any user-defined function without an explicit exception specification, depending on whether the function contains any potentially-throwing constructs. We need to consider how such a feature would interact with contract checks. Since contract checks are potentially-throwing, it would mean that \tcode{noexcept(auto)} would deduce to \tcode{noexcept(false)} if the function in question contains any contract checks.
+\section{Possible solutions}
 
-\section{Alternatives}
-\subsection{Pretend that contract checks are non-throwing?}
+\subsection{Treat contract checks as potentially-throwing?}
 
-The above semantics seem straightforward; contract checks behave the same way as any other potentially-throwing constructs. However, they run afoul of the so-called zero overhead principle, formulated in \cite{P2932R1}: the addition of a contract check causes algorithms that branch on the exception specification a function (e.g. a move constructor), such as \mbox{\tcode{std::vector::push_back}}, to take the other branch. This is undesirable for two reasons. First, it can lead to ``heisenbugs'': a program contains a bug, we add a contract check to find the bug, but the contract check causes the program to take another branch where the bug does not exist. Second, adding a contract check can in itself cause a significant performance degradation, even if the contract check itself has the \emph{ignore} semantic and is not evaluated, because the \tcode{noexcept(false)} path of such algorithms is typically significantly slower. Consider the following case where the presence of a postcondition check renders the move constructor potentially-thowing, causing \tcode{push_back} to call the more expensive copy constructor instead:
+The most straightforward approach to this problem is to say that, since contract checks can throw an exception, we should treat them as potentially-throwing in the language. This would mean that the \tcode{noexcept} operator, when applied directly to an assertion expression, or an expression that contains an assertion expression as a subexpression, would return \tcode{false}. It would also mean that if a special member function defaulted on its first declaration contains a contract check, its exception specification would be deduced as \tcode{noexcept(false)}, whereas without the contract check it might be deduced as \tcode{noexcept(true)}. Finally, it would mean that if we ever get a feature like \tcode{noexcept(auto)} that lets us deduce the exception specification of a function in more cases, adding contract checks to such a function would also lead to the exception specification of the function to be deduced as \tcode{noexcept(false)}.
+
+The above semantics seem straightforward; contract checks behave the same way as any other potentially-throwing constructs. However, they run afoul of the so-called zero overhead principle, formulated in \cite{P2932R1}: the addition of a contract check causes algorithms that branch on the exception specification a function (e.g. a move constructor), such as \mbox{\tcode{std::vector::push_back}}, to take the other branch. This is undesirable for two reasons.
+
+First, it can lead to ``heisenbugs'': a program contains a bug, we add a contract check to find the bug, but the contract check causes the program to take another branch where the bug does not exist. The contract check therefore fail to prove the correctness of the original program that they have been added to; instead, their addition altered the program and now prove the correctness of another program. This arguably defeats the purpose of contract checks.
+
+Second, adding a contract check can in itself cause a significant performance degradation, even if the contract check itself has the \emph{ignore} semantic and is not evaluated, because the \tcode{noexcept(false)} path of such algorithms is typically significantly slower. Consider the following case where the presence of a postcondition check renders the move constructor potentially-thowing, causing \tcode{push_back} to call the more expensive copy constructor instead:
 
 \begin{codeblock}
 class S_impl { /*...*/ };
@@ -129,19 +133,23 @@ public:
 
 It has been suggested that if contract checks can introduce such performance degradations, it would be a major disincentive for the adoption of Contracts in C++.
 
-The alternative is therefore to treat contract checks as non-throwing constructs in the language, even though they are in fact potentially-throwing because the user can install a throwing violation handler. This would make sure that adding a contract check can never lead to a different branch being taken at compile time.
+\subsection{Treat contract checks as non-throwing?}
 
-We believe that treating contract checks as non-throwing constructs in the language would be a mistake. First, it would mean that the \tcode{noexcept} operator gives a factually incorrect result: \mbox{\tcode{noexcept(contract_assert(false))}} would report that the operand cannot throw whereas in reality it can. This is misleading and inconsistent at best.
+One alternative is to treat contract checks as non-throwing constructs in the language, even though they are in fact potentially-throwing because the user can install a throwing violation handler. This would make sure that adding a contract check can never lead to a different branch being taken at compile time.
 
-Second, it would be actively hostile to throwing violation handlers: they are meant to enable violation handling without termination, but if contract checks are treated as non-throwing, and do not deduce to \tcode{noexcept(false)}, throwing from such a violation handler would run into an unintended \tcode{noexcept} barrier and call \tcode{std::terminate} --- the exact thing that throwing violation handlers are designed to avoid.
+This would mean that if the \tcode{noexcept} operator answers the question ``can this construct throw?'', it gives us a factually incorrect answer to this question in the presence of contract checks: \mbox{\tcode{noexcept(contract_assert(false))}} would report that the operand cannot throw whereas in reality it can, and deduced exception specifications of special member functions defaulted on their first declaration would report that the function cannot throw whereas in reality it can. This seems rather confusing.
+
+One way to mitigate the confusion would be to change the meaning of the \tcode{noexcept} operator. Instead of teaching that the \tcode{noexcept} operator answers the question  ``can this construct throw?'', we would have to teach that it answers the question ``can this construct throw \emph{if no contracts are violated}?''. Exceptions escaping a throwing violation handler would be treated differently from exceptions thrown elsewhere in the language: we would consider them \emph{erroneously thrown exceptions}, i.e. exceptions that are only thrown if the program is incorrect, and we would define the \tcode{noexcept} operator and deduced exception specifications to ignore the possibility of erroneously thrown exceptions.
+
+One downside of such an approach is that it would make it somewhat more difficult to work with throwing violation handlers: they are meant to enable violation handling without termination, but if contract checks are treated as non-throwing, and do not deduce to \tcode{noexcept(false)}, throwing from such a violation handler would run into an unintended \tcode{noexcept} barrier and call \tcode{std::terminate} --- the exact thing that throwing violation handlers are designed to avoid. In order to use throwing violation handlers, one would have to not only \emph{not} declare any functions between the point where the exception is thrown and the point where it is caught \tcode{noexcept} (which you have to do anyway), but also declare some of those functions explicitly \tcode{noexcept(false)} if they previously had a deduced exception specification.
 
 Furthermore, when handling an exception thrown from a violation handler, you actually \emph{have} to be in the slow path of an algorithm like \tcode{push_back}, because the fast path assumes that there can be no exceptions in flight. The change in compile-time semantics is therefore desired in this case. If the author of the code in question is not interested in supporting throwing violation handlers, forcing the fast path and ensuring the zero overhead principle is always possible by explicitly adding a non-throwing exception specifier (\tcode{noexcept}) when the contract annotation is added.
 
 For certain kinds of asynchronous code in particular, this is not just a ``fast path'' vs. ``slow path'' optimisation. In code like the generic algorithm code seen at \href{https://github.com/NVIDIA/stdexec}{https://github.com/NVIDIA/stdexec}, a generic algorithm will need to catch exceptions that may be thrown, and transform or translate those onto an error channel. The code using such  exception-neutral generic algorithms will need to do that translation, because exceptions can’t be allowed to just escape into the calling context, which isn’t a thread of execution that the user can write \tcode{catch}-clauses in --- but the code can’t terminate either, because that would fail to allow the ultimate user to decide how to handle errors. This is a fundamental property of such asynchronous frameworks: silently swallowing exceptions loses information, and disallows custom error handling. Terminating does the same thing. The framework is written to be generic, and applicable to multiple different domains. That is why it thus translates exceptions onto an error channel of a completion mechanism, so that e.g. termination isn’t just imposed on users, they get to choose. The costs of that can be avoided when exceptions can be guaranteed not to be thrown, but that requires that \tcode{noexcept} operators give the correct answer.
 
-And this is where future extensions with new and better rationale for something like \tcode{noexcept(auto)} come in. It is much simpler to write such code if exception specifications don’t have to be repeated transformations of what is in the function body, for functions that need to be exception-neutral. And being exception-neutral in such code means that if a contract check throws, and the user writing the whole program wants to deal with contract violations as exceptions, the framework works together with that, being fully exception-neutral. The violation handler throws, the framework catches such exceptions, and translates them onto the error completion channel --- even in code that runs in different contexts, like different threads or different schedulers, like event loops. Making the \tcode{noexcept} operator pretend that contract checks do not throw where in reality they can makes this approach impossible.
+And this is where future extensions with new and better rationale for something like \tcode{noexcept(auto)} come in. It is much simpler to write such code if exception specifications don’t have to be repeated transformations of what is in the function body, for functions that need to be exception-neutral. And being exception-neutral in such code means that if a contract check throws, and the user writing the whole program wants to deal with contract violations as exceptions, the framework works together with that, being fully exception-neutral. The violation handler throws, the framework catches such exceptions, and translates them onto the error completion channel --- even in code that runs in different contexts, like different threads or different schedulers, like event loops. Making the \tcode{noexcept} operator pretend that contract checks do not throw where in reality they can make this approach impossible.
 
-\subsection{Allowing both options?}
+\subsection{Allow both options?}
 
 We could contemplate allowing both options: giving the user the choice between throwing and non-throwing contract checks. This could happen either in code:
 
@@ -156,7 +164,13 @@ or as a build mode (\tcode{-fnoexcept-contracts}) which switches all contract ch
 
 However, this does not seem like a great direction. If the user needs to annotate a contract check with a \tcode{noexcept} label to make it non-throwing and thus to satisfy the zero overhead principle, they might as well simply annotate the whole function with \tcode{noexcept}, which works today and does not require the introduction of a new feature. The idea of the zero overhead principle is that the addition of a contract check should \emph{never} cause a different code path to be taken, not just in cases where the user remembered to add an extra annotation. Introducing a build mode would give users the option to globally opt into the zero overhead behaviour if they wish, but it would also introduce a language dialect: the same C++ code would have different meaning depending on the build mode. Such language dialects are widely considered undesirable and bad for the C++ ecosystem.
 
-\subsection{Making the question ill-formed?}
+\subsection{Allow erroneously thrown exceptions to escape deduced non-throwing exception specifications?}
+
+Another possible solution is to say that contract checks are treated as non-throwing constructs in the language, but exceptions that have been thrown from a contract-violation handler (i.e. \emph{erroneously} thrown exceptions) are allowed to throw through a deduced non-throwing exception specification without causing \tcode{std::terminate} to be called.
+
+This approach would partially mitigate the negative impact on throwing violation handlers that treating contract checks as non-throwing would otherwise have, while simultaneously not violating the zero overhead principle. However, it would not completely solve the problem for throwing violation handlers: there would still be cases where control flow ends up in the wrong branch of a \tcode{noexcept}-sensitive algorithm (the one that assumes that no exceptions are being thrown), preventing the program from recovering to some reasonable state after catching the exception. It would also complicate our mental model of exception specifications and add specification and implementation burden.
+
+\subsection{Make the question ill-formed?}
 
 If the straightforward and intuitive behaviour of treating contract checks as potentially-throwing is not acceptable because we must adhere to the zero overhead principle in all possible cases, one possible compromise is to make any code ill-formed where a deduced exception specification or the result of the \tcode{noexcept} operator may depend on the presence of a contract check. This means that:
 \begin{itemize}
@@ -165,11 +179,13 @@ If the straightforward and intuitive behaviour of treating contract checks as po
 \end{itemize}
 Optionally, the second point can be relaxed to say that such code is only ill-formed if a non-throwing exception specification would have been deduced without the contract check, but adding the contract check is allowed if a potentially-throwing construct is already present. This option would make less code ill-formed at the cost of higher specification and implementation complexity.
 
-While this solution is not ideal, it seems like a reasonable compromise. It is also conceptually sound: whether or not the violation handler is \tcode{noexcept} is not known until link time, therefore the question whether a contract check can throw cannot be answered at compile time and will instead result in a compile error. The user is forced to state their intent --- whether they want to allow their contract checks to throw --- by explicitly specifying the exception specification for the function in question as \tcode{noexcept(true)} or \tcode{noexcept(false)}. This is more work for the user, but it avoids having a \tcode{noexcept} operator that gives a factually incorrect result while simultaneously satisfying the zero overhead principle in all cases.
+This solution seems like a reasonable compromise. It is also conceptually sound: whether or not the violation handler is \tcode{noexcept} is not known until link time, therefore the question whether a contract check can throw cannot be answered at compile time and will instead result in a compile error. The user is forced to state their intent --- whether they want to allow their contract checks to throw --- by explicitly specifying the exception specification for the function in question as \tcode{noexcept(true)} or \tcode{noexcept(false)}. This is more work for the user, but it avoids having a \tcode{noexcept} operator that gives a factually incorrect answer --- or having to change the \tcode{noexcept} operator to only consider non-erroneously thrown exceptions --- while simultaneously satisfying the zero overhead principle in all cases.
 
 If we go down this route, the same logic must apply to all contexts where an exception specification is being deduced. This means that if we ever standardise \tcode{noexcept(auto)}, such a feature would be essentially mutually exclusive with contract checks.
 
-\subsection{Relying on guidelines and diagnostics?}
+However, this solution has a significant downside. It would mean that \tcode{contract_assert} can no longer act as a drop-in replacement for existing \tcode{assert} macros in all cases, because there would now be contexts where the latter is allowed but the former is ill-formed. This can be a significant obstacle for transitioning large codebases with a high amount of assertions from macros to Contracts.
+
+\subsection{Rely on guidelines and diagnostics?}
 
 Rather than making code ill-formed where a potentially-throwing contract check changes the exception specification, a possible alternative is to rely on guidelines and diagnostics. This is what we do in other parts of the language where using a certain feature in the wrong way can unintentionally change the program semantics and introduce performance regressions. Consider:
 
@@ -183,9 +199,10 @@ In this case, the user got the element type of \tcode{std::map} wrong (which is 
 
 In the same spirit, we could teach that one should stop and think before adding contract checks to move constructors or swap definitions. Such additions can be treated as a code smell and compilers can issue diagnostics. Note that such diagnostics could be issued for any function that has a deduced potentially-throwing exception specification due to the presence of a contract check but would have a deduced non-throwing exception specification otherwise. The straightforward fix in this case would be to add \tcode{noexcept} to avoid the performance degradation.
 
-This option would make contract checks somewhat harder to teach and use, but would avoid having a \tcode{noexcept} operator that gives a factually incorrect result while also avoiding making valid code unnecessarily ill-formed.
+This option would make contract checks somewhat harder to teach and use, and would not completely avoid violating the zero overhead principle. However, it would alert users through warnings if the zero overhead principle has been violated, giving them a chance to determine whether this has been done intentionally or accidentally. This direction would avoid the confusion that could result from having a \tcode{noexcept} operator that returns \tcode{true} for constructs that can throw if a throwing violation handler is installed, and would also avoid making any assertions ill-formed in places where an \tcode{assert} macro would be allowed.
 
-\subsection{Removing support for throwing violation handlers?}
+
+\subsection{Remove support for throwing violation handlers?}
 
 Throwing violation handlers have limitations in practice. In order to use them, the codebase must:
 \begin{itemize}
@@ -194,15 +211,15 @@ Throwing violation handlers have limitations in practice. In order to use them, 
 \end{itemize}
 It has therefore been suggested that it may be impractical to use throwing violation handlers; that we should instead specify that violation handlers shall be \tcode{noexcept}; and that we should replace throwing violation handlers by some other not-yet-specified mechanism to enable non-terminating contract violation handling in a way not based on exceptions.
 
-On the one hand, removing throwing violation handlers from the language would also remove all the issues discussed here, as contract checks would then become unambiguously non-throwing. On the other hand, once we ship a Contracts facility specified in this way, it would be near impossible to retrofit throwing violation handlers afterwards if we change our mind. Throwing violation handlers might not be a panacea, but when the codebase is written accordingly they can be used very effectively, we do have implementation experience with this approach (see \cite{P2698R0}), and we currently do not have an established alternative mechanism to enable non-terminating contract violation handling. Therefore, we should not consider removing throwing violation handers from the Contracts MVP unless a convincing rationale for a concrete alternative mechanism materialises in time. We can however encourage work on developing such an alternative mechanism.
+On the one hand, removing throwing violation handlers from the language would also remove all the issues discussed here, as contract checks would then become unambiguously non-throwing. On the other hand, once we ship a Contracts facility specified in this way, it might turn out to be very difficult to retrofit throwing violation handlers afterwards if we change our mind. Throwing violation handlers might not be a panacea, but when the codebase is written accordingly they can be used very effectively, we do have implementation experience with this approach (see \cite{P2698R0}), and we currently do not have an established alternative mechanism to enable non-terminating contract violation handling. Therefore, we should not consider removing throwing violation handers from the Contracts MVP unless a convincing rationale for a concrete alternative mechanism materialises in time. We can however encourage work on developing such an alternative mechanism.
 
 \section{Summary}
 
-Contract-violation handlers in the Contracts MVP can throw; contract checks are therefore potentially-throwing constructs. This means that they interact with the \tcode{noexcept} operator and with deduced exception specifications on defaulted special member functions. Treating them as what they are --- potentially-throwing --- for these interactions is straightforward and intuitive, but violates the zero overhead principle: the addition of a contract check to a program can lead to a different branch being taken at compile time. This is considered an undesirable property by some because it means that the addition of contract checks can cause ``heisenbugs'' and performance degradations even if the contract check has the \emph{ignore} semantic.
+Contract-violation handlers in the Contracts MVP can throw; contract checks are therefore potentially-throwing constructs. This means that they interact with the \tcode{noexcept} operator and with deduced exception specifications on defaulted special member functions. Treating them as what they are --- potentially-throwing --- for these interactions is straightforward and intuitive, but violates the zero overhead principle: the addition of a contract check to a program can lead to a different branch being taken at compile time. This is considered an undesirable property because it means that the addition of contract checks can cause ``heisenbugs'' and performance degradations even if the contract check has the \emph{ignore} semantic.
 
-However, the alternative, treating contract checks as non-throwing in the language even though they are actually potentially-throwing, seems even worse: it would mean that the \tcode{noexcept} operator would return a factually wrong result (reporting that an expression cannot throw whereas in reality it can), and is hostile to throwing violation handlers and exception-neutral generic algorithms such as sender/receiver.
+The alternative, treating contract checks as non-throwing in the language even though they are actually potentially-throwing, avoids violations of the zero overhead principle, but would require us to change the meaning of the \tcode{noexcept} operator and deduced exception specifications: instead of answering the question ``can this construct throw?'', they would answer the question ``can this construct throw \emph{if no contracts are violated}?''. This approach would make these features arguably less intuitive, and is hostile to throwing violation handlers and exception-neutral generic algorithms such as sender/receiver.
 
-We can consider other possible directions, such as giving the user the option to switch between these two behaviours, or removing throwing violation handlers entirely, but at this point these directions do not seem wise. Therefore, if the straightforward and intuitive behaviour of treating contract checks as potentially-throwing is not acceptable because we must adhere to the zero overhead principle in all possible cases, the only remaining solution is to make any code ill-formed where the result of the \tcode{noexcept} operator or a deduced exception specification may depend on the presence of a contract check.
+There are other possible directions but they all have negative tradeoffs as well. We could give the user the option to switch between the two behaviours (contract checks being potentially-throwing or nonthrowing), either through code annotations (which would still allow for contract checks that violate the zero overhead principle) or through different build modes (which would effectively create a language dialect). We could allow exceptions thrown from contract-violation handlers to escape deduced non-throwing exception specifications (which would significantly complicate the mental model while only partially mitigate the negative effect on violation handlers). We could  make any code ill-formed where the result of the \tcode{noexcept} operator or a deduced exception specification may depend on the presence of a contract check (which would mean that \tcode{contract_assert} can no longer be a full drop-in replacement for \tcode{assert} macros as there would be contexts where the latter are allowed but the former are ill-formed). We could rely on guidelines and diagnostics (which would put more burden on the user while not completely avoid violating the zero overhead principle). Finally, we could remove support for throwing violation handlers (which would leave us without any mechanism for non-terminating contract-violation handling until we can develop an alternative mechanism for this purpose, a highly non-trivial task).
 
 
 %\section*{Document history}
@@ -213,7 +230,7 @@ We can consider other possible directions, such as giving the user the option to
 %\end{itemize}
 
 \section*{Acknowledgements}
-We would like to thank Lewis Baker for starting the discussion that led to this paper, as well as Joshua Berne and Jens Maurer for their insightful comments.
+We would like to thank Lewis Baker for starting the discussion that led to this paper, as well as Joshua Berne, Jens Maurer, and Lisa Lippincott for their insightful comments.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

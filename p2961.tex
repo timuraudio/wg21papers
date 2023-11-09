@@ -31,7 +31,7 @@ Jens Maurer \small(\href{mailto:jens.maurer@gmx.net}{jens.maurer@gmx.net})}
 
 \begin{tabular}{ll}
 Document \#: & P2961R2 \\
-Date: &2023-11-06\\
+Date: &2023-11-08\\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
@@ -53,6 +53,7 @@ We propose a syntax for Contracts that naturally fits into existing C++, does no
 \textbf{Revision 2}, 2023-11-05:
 \begin{itemize}
 \item Chose keyword \tcode{contract_assert} for assertions
+\item Added more rationale why using keyword \tcode{assert} for contract assertions is not viable
 \item Added section about implementation experience
 \item Updated discussion of viability for the C language with results from SG22 meeting
 \end{itemize}
@@ -440,6 +441,7 @@ There are in principle three ways to resolve this name clash while keeping the n
 \begin{enumerate}
 \item Remove support for header \tcode{cassert} from C++ entirely, making it ill-formed to \tcode{\#include} it;
 \item Do not make \tcode{\#include <cassert>} ill-formed (perhaps deprecate it), but make \tcode{assert} a keyword rather than a macro, and silently change the behaviour to being a contract assertion instead of an invocation of the macro;
+\item Let \tcode{assert} be the macro from header \tcode{cassert} when that header is included, and a contract assertion otherwise;
 \item Use a keyword other than \tcode{assert} for contract assertions to avoid the name clash.
 \end{enumerate}
 Option 1 seems too draconian as it would break huge amounts of existing code, including code shared between C and C++.
@@ -463,7 +465,9 @@ On the one hand, this would lead to an unacceptably high amount of breakage in e
 
 The situation is complicated further by the fact that the meaning of the \tcode{assert} macro depends not only on whether \tcode{NDEBUG} is defined or not, but also on whether --- and where --- the \tcode{cassert} header is included or re-included after \tcode{NDEBUG} is defined, undefined, or redefined --- all of which can happen at any arbitrary point in the code.
 
-Considering all of the above, we consider Option 3 to be the only possible path forward. This direction was confirmed during the SG21 teleconference on 2023-09-21:
+Option 3 has been suggested as another way out of this dilemma. Unlike Options 1 or 2, it would not break any existing code, as \tcode{assert} would not change its meaning if the \tcode{cassert} header is included. However, this approach is not viable either, for several reasons. First, it would render contract assertions unusable anywhere the \tcode{cassert} header is included, which would limit their use; second, it would require special rules as header \tcode{cassert} would effectively redefine a reserved keyword, which is undefined behaviour under the current rules; third, and most importantly, the same expression --- \tcode{assert(x)} --- would mean different things depending on whether the \tcode{cassert} header is included somewhere in the program, making it impossible to tell in general which one of the two possible meanings it has (consider, for example, writing code in a library header, not knowing whether someone might \tcode{\#include <cassert>} before including that library header).
+
+Considering all of the above, we consider Option 4 to be the only possible path forward. This direction was confirmed during the SG21 teleconference on 2023-09-21:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \textbf{Poll:} If we adopt the syntax in P2961R0 for the Contracts MVP, we should use the keyword \tcode{assert} for contract assertions, replacing macro \tcode{assert}.
@@ -498,7 +502,7 @@ A large number of alternative keywords have been suggested since the initial ver
 \item The keyword should not look too much like a typo of a common English word.
 \item The keyword should also work for the C language.
 \end{enumerate}
-Note that these design goals are not absolute; they can be broken if there is a good engineering reason for it. Examples of existing keywords that go against some of these goals are: \tcode{requires}, claimed as a full keyword in C++20 that broke existing code; \tcode{alignas}, commonly treated as a typo for ``aligns'' by spell checkers; and \tcode{reinterpret_cast}, a long and ugly keyword. The latter is well-motivated:\tcode{reinterpret_cast} is an unsafe feature that should be used sparingly and therefore should be hard to type. Conversely, contracts exist to improve safety and correctness and their use should be encouraged. We therefore expect the new keyword to be typed frequently, so it should be easy to type.
+Note that these design goals are not absolute; they can be broken if there is a good engineering reason for it. Examples of existing keywords that go against some of these goals are: \tcode{requires}, claimed as a full keyword in C++20 that broke existing code; \tcode{alignas}, commonly treated as a typo for ``aligns'' by spell checkers; and \tcode{reinterpret_cast}, a long and ugly keyword. The latter is well-motivated: \tcode{reinterpret_cast} is an unsafe feature that should be used sparingly and therefore should be hard to type. Conversely, contracts exist to improve safety and correctness and their use should be encouraged. We therefore expect the new keyword to be typed frequently, so it should be easy to type.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -579,8 +583,6 @@ With the results in Table \ref{table:codesearch}, we can narrow down our pool of
 
 With that in mind, we can go through all candidate keywords from top to bottom and evaluate how well they satisfy our design goals formulated in \ref{subsubsec:keyword_goals}.
 
-\pagebreak % MANUAL %%%%%%%%%%%%%
-
 The first keyword candidate, \tcode{contractassert}, is arguably harder to read than the spelling variant \mbox{\tcode{contract_assert}}.
 
 The next candidate, \tcode{mustexpr} as well as other similar candidates not derived from the word ``assert'' such as \tcode{musthold}, \tcode{truexpr}, etc. are arguably not consistent with the existing community knowledge about Contracts. The terminology ``assert'' and the contract kind ``assertion'' are established terms of art and the keyword should show at least some connection to this terminology. Having a keyword not derived from ``assert'' also suffers from another problem: how should we name the corresponding enum value in \mbox{\tcode{std::contracts::contract_kind}}? Should we leave it at \tcode{assert}, thereby having a keyword completely inconsistent with the enum, or should we change it to match the keyword, thereby having an enum that is likewise inconsistent with established terminology? Note also that if we choose the latter, we cannot use the exact spelling of the keyword (a full keyword cannot be used as a name for an enum value), but need to come up with some alternative spelling of that keyword. None of these options seem particularly appealing.
@@ -600,8 +602,6 @@ Candidates such as \tcode{dyn_assert}, or any other keyword that contains variat
 Further down the list, there is \tcode{assertion_check}, which seems unnecessarily verbose; \tcode{_Assert} and \tcode{__assert}, which are reserved for implementations of the C++ Standard Library (and used in multiple such implementations); and various candidates that are very similar to the ones already rejected and suffer from the same problems.
 
 At this point in the list, the number of existing usages as a user-defined identifier quickly starts to increase to an unacceptable level. We therefore did not include any further keyword candidates to the shortlist besides \tcode{contract_assert} and \tcode{assertexpr}.
-
-\pagebreak % MANUAL %%%%%%%%%%%%%
 
 The choice between these two candidates was made by poll at the SG21 telecon on 2023-10-26. The results were very clear:
 
@@ -643,6 +643,11 @@ The decisive argument was as follows. It was acknowledged that \tcode{assertexpr
 \label{subsec:implxp}
 
 A fully-functional experimental implementation of the natural syntax proposed here has been developed in GCC by Ville Voutilainen. It is currently publicly available on Compiler Explorer (\href{https://godbolt.org}{https://godbolt.org}) by selecting ``"x86-64 gcc (contracts natural syntax)`` from the compiler selection drop-down menu and passing the flags \tcode{-fcontracts -fcontracts-nonattr} to it. The first enables contracts in general, the second enables the natural syntax. A working test suite can be found at \href{https://godbolt.org/z/qPKharqqv}{https://godbolt.org/z/qPKharqqv}.
+
+
+In addition, an implementation of the natural syntax proposed here has been developed in the cppfront compiler by Herb Sutter. Herb reported that this took him under an hour to convert his existing Contracts implementation from the attribute-like syntax to this paper’s syntax, with some post-MVP extra features such as labels (aka ``contract_group names''), including to update the uses of Contracts in the tests and the compiler itself to the new syntax. cppfront is also available on Compiler Explorer.
+
+Neither of the two have reported significant challenges with implementing the natural syntax.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1000,12 +1005,13 @@ interface {
 
 \section{Comparison with attribute-like syntax}
 
-In this section we compare different Contracts MVP and post-MVP code examples written in attribute-like syntax as proposed in \cite{P2935R3}, side-by-side with the natural syntax proposed in this paper, and discuss the different tradeoffs. Where appropriate, we mention different possible alternatives.
+In this section, we compare different Contracts MVP and post-MVP code examples written in attribute-like syntax as proposed in \cite{P2935R3}, side-by-side with the natural syntax proposed here, and discuss the different tradeoffs. Where appropriate, we mention different possible alternatives.
 
 \subsection{MVP functionality}
 
 \subsubsection{Basic preconditions and postconditions}
-Shown below is a comparison of the two syntaxes for the most basic usage of preconditions and postconditions:
+Here is a comparison of the two syntaxes for the most basic usage of preconditions and postconditions:
+
 
 \begin{minipage}{8cm}
 \begin{codeblock}
@@ -1071,7 +1077,9 @@ void f() {
 
 \subsubsection{Assertion as an expression}
 
-The left-hand side of the code example below is taken directly from \cite{P2935R3}. Note that in attribute-like syntax, this would require a novel grammar that does not exist for attributes today and that we do not have implementation experience with. Attributes today need to appertain to another entity such as a declaration or a statement, and cannot be used on their own as an expression. At the same time, if an assertion is not an expression, it cannot be a full drop-in replacement for C \tcode{assert} as there would be places where a C \tcode{assert} is legal but a contract assert is not. With natural syntax, using an assertion as an expression just works:
+The left-hand side of the code example below is taken directly from \cite{P2935R3}. Note that in attribute-like syntax, this would require a novel grammar that does not exist for attributes today and that we do not have implementation experience with. Attributes today need to appertain to another entity such as a declaration or a statement, and cannot be used on their own as an expression. At the same time, if an assertion is not an expression, it cannot be a full drop-in replacement for C \tcode{assert} as there would be places where a C \tcode{assert} is legal but a contract assert is not.
+
+With natural syntax, using an assertion as an expression just works:
 %\vspace{5mm}
 
 \begin{minipage}{8cm}
@@ -1383,11 +1391,6 @@ int f(int x)
 int f(int x)
   [[ post (foo): x > foo]];  
   // using extra parens; \tcode{foo} is return value
-
-int f(int x)
-  [[ post foo (bar): x > bar ]];  
-  // using extra parens; is \tcode{bar} return value
-  // or label argument?
 \end{codeblock}
 \end{minipage}
 \begin{minipage}[t]{8cm}
@@ -1401,7 +1404,19 @@ int f(int x)
 int f(int x)
   post (foo: x > foo);
   // \tcode{foo} is return value
+\end{codeblock}
+\end{minipage}
 
+\begin{minipage}[t]{8cm}
+\begin{codeblock}
+int f(int x)
+  [[ post foo (bar): x > bar ]];  
+  // using extra parens; is \tcode{bar} return value
+  // or label argument?
+\end{codeblock}
+\end{minipage}
+\begin{minipage}[t]{8cm}
+\begin{codeblock}
 int f(int x)
   post <foo> (bar: x > bar); 
   //  \tcode{bar} is return value
@@ -1636,9 +1651,8 @@ There is nothing specific to the natural syntax that precludes this direction. A
 
 We would like to thank Ville Voutilainen, Joshua Berne, Peter Brett, Ga\v sper A\v zman, and Andrzej Krzemie\' nski for reviewing this paper and providing helpful feedback;
 Ran Regev, Jose Daniel Garc\' ia S\' anchez, Barry Revzin, John Lakos, Aaron Ballman, Mark Gillard, and Alisdair Meredith for suggesting keyword alternatives to \tcode{assert}; 
-Robert Seacord, Aaron Ballman, Niall Douglas, Martin Uecker, Jens Gustedt, JeanHeyd Meneide, and Joshua Cranmer for providing feedback on the viability of the natural syntax for the C language; and
-Nina Ranns for convening an SG22 meeting for this purpose.
-A special thanks goes to Ville Voutilainen for his implementation of the natural syntax in GCC.
+Robert Seacord, Aaron Ballman, Niall Douglas, Martin Uecker, Jens Gustedt, JeanHeyd Meneide, and Joshua Cranmer for providing feedback on the viability of the natural syntax for the C language; 
+Nina Ranns for convening an SG22 meeting for this purpose; Ville Voutilainen and Herb Sutter for their efforts with implementing the natural syntax in GCC and CppFront, respectively.
 
 %\pagebreak % MANUAL %%%%%%% %%%%%%% %%%%%%% %%%%%%%
 

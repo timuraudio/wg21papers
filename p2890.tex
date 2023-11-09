@@ -8,7 +8,7 @@
 
 \begin{tabular}{ll}
 Document \#: & P2890R1 \\
-Date: &2023-11-06 \\
+Date: &2023-11-08 \\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
@@ -121,13 +121,41 @@ In this case, the user got the element type of \tcode{std::map} wrong (which is 
 
 However, if SG21 decides that addressing the issue via warnings is not sufficient, and the zero overhead principle needs to be enforced in all cases, then a contract check triggering a lambda capture of an entity not otherwise captured needs to be ill-formed. If we were to go down that path, we propose to at least make this behaviour consistent with \tcode{[[assume]]} by making the same case ill-formed for \tcode{[[assume]]}, which can be accomplished via a Defect Report. Consistency with \tcode{[[assume]]} is important because assumptions are closely related to contract checks.
 
+We would also like to point out that triggering lambda captures is not the only way in which the ODR-use of an entity in a contract check can violate the zero overhead principle. Another way is through triggering a template instantiation, which in turn can change observable state via friend injection. This case might be negligible because it is an obscure wart of the C++ language that we would like to make ill-formed (see \cite{CWG2118}). But there is a third and much more plausible case where ODR-use can violate the zero overhead principle: a template instantiation can trigger dynamic initialisation of a static class member, which in turn can have arbitrary observable effects:
+
+\begin{codeblock}
+struct X {
+  X() { std::cout << "This is a bug!\n"; }
+  operator bool() const;
+};
+
+template <typename T>
+struct Y {
+  static const X x;
+};
+
+template <typename T>
+const X Y<T>::x = X{};
+
+void f()
+  pre(Y<int>::x);  // the addition of this contract check triggers the bug!
+
+int main() {
+  f(); 
+}
+\end{codeblock}
+
+Therefore, making it ill-formed for a contract check to trigger a lambda capture would not actually be a comprehensive fix that ensures ODR-use of entities inside a contract check never violate the zero overhead principle.
+
+It has been pointed out that one possible such comprehensive fix would be to not allow contract checks to ODR-use any entities not otherwise ODR-used. However, such a fix would be impractical, as it would prohibit the user from e.g. using STL algorithms like \tcode{std::for_each} in a contract check unless the exact same instantiation of \tcode{std::for_each} is already used somewhere else in the program.
+
 \section{Summary}
 
 We propose to allow add precondition and postconditon checks on lambda expressions in the Contracts MVP \cite{P2900R1}.
 
 We propose that name lookup for entities inside precondition and postcondition checks on lambdas follow the same rules as they do for lambda trailing return types: name lookup first considers the captures of the lambda before looking further outward.
 
-We further propose that contract checks on lambdas should follow the usual C++ rules for ODR-use and lambda captures, like \tcode{[[assume]]} does. If, however, SG21 decides to introduce a special exception that a contract check triggering a lambda capture of an entity not otherwise captured should make the program ill-formed, in order to adhere to the zero overhead principle from \cite{P2932R1} in all possible cases, we propose that we should at least submit a Defect Report to make the same case ill-formed for an \tcode{[[assume]]} inside a lambda for consistency.
+We further propose that contract checks on lambdas should follow the usual C++ rules for ODR-use and lambda captures, like \tcode{[[assume]]} does. If, however, SG21 decides to introduce a special exception to the rules that a contract check triggering a lambda capture of an entity not otherwise captured should make the program ill-formed, in order to adhere to the zero overhead principle from \cite{P2932R1}, we propose that we should at least submit a Defect Report to make the same case ill-formed for an \tcode{[[assume]]} inside a lambda for consistency. We would also like to point out that there are other cases where ODR-use inside a contract check can trigger violations of the zero overhead principle that would not be addressed by such a fix.
 
 %\section*{Document history}
 

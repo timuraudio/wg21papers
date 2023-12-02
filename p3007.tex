@@ -1,0 +1,216 @@
+\input{wg21common}
+
+\begin{document}
+\title{Return object semantics in postcondition specifiers}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Andrzej Krzemie\' nski \small(\href{mailto:akrzemi1@gmail.com}{akrzemi1@gmail.com}) \\
+Joshua Berne \small(\href{jberne4@bloomberg.net}{jberne4@bloomberg.net})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3007R0 \\
+Date: &2023-12-02 \\
+Project: & Programming Language C++ \\
+Audience: & SG21
+\end{tabular}
+
+\begin{abstract}
+In this paper, we propose a set of semantics for the named return object in a postcondition specifier in the Contracts MVP. We consider its value category, type, and address. It remains to be decided whether this object should be implicitly \tcode{const} to make modifying the return value of a function in its precondition predicate ill-formed.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+The Contracts MVP (\cite{P2900R2}), which is currently in development and targeting C++26, provides syntax to name the return object in a postcondition specifier so it can be used in the postcondition predicate:
+\begin{codeblock}
+// This function returns a positive integer
+int f()
+  post (r: r > 0);
+\end{codeblock}
+However, the exact semantics of the identifier \tcode{r} in the above declaration --- which we will call the \emph{return-name}, following the grammar term introduced in \cite{P2932R2} --- were never specified. The only piece of wording that talks about it can be found in the C++20 proposal \cite{P0542R5}, and later in the Contracts MVP wording in \cite{P2388R4}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A postcondition may introduce an identifier to represent the glvalue result or the prvalue result object of the function.
+\end{adjustwidth}
+
+This wording is very vague. It does not actually say what value category \tcode{r} has: is it a prvalue, an xvalue, or an lvalue? It also does not say what type it has: is it a reference to the return object? If it is not a reference, what exactly is it, given that the return object itself is never declared and has no name, and what should be its \tcode{decltype}? What guarantees can we provide about the address of this object?
+And should we add any provisions to make it ill-formed to modify this object in the postconditions? If so, how?  The goal of this paper is to answer all of these questions.
+
+\section{Discussion}
+
+\subsection{Value category}
+
+In order to specify how the name for the return object behaves, we first need to specify what value category it has. Is it a prvalue, an xvalue, or an lvalue?
+
+\pagebreak %MANUAL
+
+The first option is to make the return name a prvalue, similar to \tcode{this}, which is also a magic name for a special object available only in a certain context (the pointer to the object that a member function is called on) and is also a prvalue. However, upon closer inspection, this does not work. We need to be able to do useful things with the return name, for example to call member functions on it:
+
+\begin{codeblock}
+X f()
+  post(r: r.is_valid());
+\end{codeblock}
+
+However, a prvalue does not represent an actual object, rather it represents a potential object --- a value that can be used to initialise an object. As such, you cannot call a member function on a prvalue; you first have to materialise it into a temporary object, which is a glvalue, and then call a member function on that. This implicit materialisation works for \tcode{this} (and typically compiles down to a no-op) because a pointer is trivially copyable. However, it does not work for noncopyable types such as \tcode{std::unique_ptr}:
+
+\begin{codeblock}
+// This function returns a non-null pointer
+std::unique_ptr<T> f()
+  post (r: r);
+\end{codeblock}
+
+If \tcode{r} was an rvalue here, it would be used to materialise a \tcode{std::unique_ptr} object in the predicate, thus using up the value and making it unavailable to actually be returned from the function.
+
+Making the return name an xvalue is not an adequate choice either. When we refer to the return object in the postcondition, it is not immediately expiring like an object returned from a function call or cast returning an rvalue reference.  We do not want overload resolution to choose a move constructor as it would for an rvalue reference as this may result in unintended and unintuitive behaviour.
+
+It therefore follows that the return name in the postcondition predicate must be a glvalue.
+
+\subsection{Type}
+
+First of all, note that the \emph{return-name} cannot be a copy of the actual return value, because the function's return type might be non-copyable. Furthermore, it has to work for a function relying on guaranteed copy elision:
+
+\begin{codeblock}
+struct M {
+  M(M&&) = delete; // non-copyable, non-movable
+  M(int _i) : i{_i}  {}
+  int i;
+};
+
+M getM()
+  post(r: r.i > 0)
+{
+  return M{3}; // no \tcode{M} moved or copied
+}
+\end{codeblock}
+
+We could make \emph{return-name} a reference (or possibly a \tcode{const} reference) to the return object, but that would make the type of \tcode{r} a reference type and therefore very different from the actual return type of the function (which might be a non-reference). This would be observable through \tcode{decltype} and through different overloads being chosen and might be surprising for the user, especially given that this reference was never declared anywhere.
+
+Therefore, it seems like the correct mental model is to say that the \emph{return-name} is not actually a variable, nor a reference, but just a name, similar to the identifiers in structured bindings. Formally, we would say that the \emph{return-name} introduces an identifier that is the name of an lvalue that refers to the unnamed return object of the function, similar to how we specify in \href{https://eel.is/c++draft/dcl.struct.bind}{[dcl.struct.bind]} that the $i$-th identifier in a structured binding's \emph{identifier-list} is the name of an lvalue that refers to the element $i$ of the unnamed object or array introduced by the structured binding.
+
+For a \emph{return-name} \tcode{r}, \tcode{decltype(r)} should therefore behave in the same way as it does for structured bindings: for a function returning a value of type \tcode{T}, it should just be \tcode{T}, which is the least surprising to the user; \tcode{decltype((r))} would be \tcode{T\&}, following the usual rules for \tcode{decltype} of expressions.
+
+If the return type of the function is of reference type, then the type of \tcode{r} should of course also match that type.
+
+\subsection{Address}
+
+An interesting subtlety arises for trivially copyable types, values of which may be returned in registers. For such types, if the \emph{return-name} referred directly to the return object of the function, adding a postcondition to a function might be an ABI breaking change: the \emph{return-name} is a glvalue, which means you can take its address, which an object in registers does not have, therefore the object could no longer be returned in registers.
+
+This would be an unfortunate outcome. However, there is a workaround. To allow passing return objects of trivially copyable types in registers, there is a provision in \href{https://eel.is/c++draft/class.temporary#3}{[class.temporary] p. 3} that implementations are permitted to create a temporary object to hold the result object. We can therefore specify that for a function returning an object of trivially copyable type, \emph{return-name} may refer to this temporary object instead of referring to the actual return object.
+
+The only user-observable consequence of this workaround is that in code that uses the address of the \emph{return-name}, for example,
+
+\begin{codeblock}
+int f(int* p)
+  post(r: &r == p)
+{
+  return 42;
+}
+
+int main() {
+  int i = f(&i);
+}
+\end{codeblock}
+
+if the return type is trivially copyable, like \tcode{int} here, then there would be no guarantee that the address of \tcode{r} matches the address of the object being initialised by the return value, and therefore the postcondition check above may fail. Conversely, if we change the return type to a user-defined type that is not trivially copyable, the above postcondition check is guaranteed to succeed.
+
+To make this work correctly, we need to be rather precise in our specification. Postconditions must be evaluated after a normal return from a function, after \emph{some} object \tcode{o} is initialised with the result of the function, after local variables and temporaries are destroyed, but before function parameters are destroyed; the \emph{return-name} is the name of an lvalue that refers to that object \tcode{o}; and finally, that \tcode{o} may be the return object or, for trivially copyable types, a temporary created by the implementation to hold the result, and may have been initialised prior to evaluation of the return statement (to account for the guaranteed copy elision case).
+
+The above also implies that even if \tcode{o} is not the actual return object, there must be a guarantee that the actual return object will be initialised from \tcode{o}, such that, if \tcode{o} is being modified from the postcondition, those modifications will be seen after control has been returned to the call site. This is important because, while an implementation may elide any side effects of a checked contract predicate (see \cite{P2751R1}), it can only elide all such side effects or none of them. If a postcondition modifies the return value and simultaneously something else in the same predicate, eliding the first but not the second could break invariants and would make it very hard to reason about the code.
+
+\subsection{\tcode{const}-ness}
+
+There are some rare cases where the user might want to modify the return object in a postcondition, for example there are some cases where changing a value and then changing it back can save an allocation. That said, modifying the return object in a postcondition will almost always be an unintentional bug, and sometimes such bugs can be hard to find. We could therefore consider statically preventing the modification of the return object in a postcondition.
+
+First, note that in general the compiler cannot actually prove whether any particular predicate will modify the return object, as function definitions may not be available, and even if they are, doing so would be equivalent to solving the Halting problem:
+
+\begin{codeblock}
+void f(int& i); 
+
+int g()
+  post(i: f(i)); // will \tcode{f(i)} actually modify \tcode{i}?
+\end{codeblock}
+ 
+Therefore, the only way to statically prevent modification of the return object in a postcondition is via the type system. Instead of saying that \emph{return-name} is a glvalue that refers to the return object, we can say that it is a \tcode{const} glvalue. The effect would be that inside a postcondition, the \emph{return-name} would behave like a non-\tcode{const} data member of type \tcode{T} in a \tcode{const} member function, or like a captured object of type \tcode{T} in a non-\emph{mutable} lambda expression. The actual type of the object is still \tcode{T}; for a \emph{return-name} \tcode{r} referring to it, \tcode{decltype(r)} is \tcode{T} --- this would be the most consistent choice --- but \tcode{r} is otherwise treated as an object of type \tcode{const T}, and \tcode{decltype((r))} is \tcode{const T\&}. This means that \tcode{const} overloads will be called, and modifying non-\tcode{mutable} members or calling non-\tcode{const} member functions on the return object or passing non-\tcode{const} references to it to other functions from the postcondition predicate are ill-formed.
+
+This approach would be very effective at preventing accidental modification of the return object in a postcondition. Intentional modification would still be possible --- albeit more verbose --- via a \tcode{const_cast}, which would not be undefined behaviour if the return type of the function is not \tcode{const}. Likewise, modification of \tcode{mutable} data members of the return object would still be possible when calling \tcode{const} member functions on the object.
+
+There is no consensus between the authors of this paper whether we should pursue this direction. Therefore, we limit ourselves to presenting some arguments both for and against this direction, and leave it up to SG21 to make the decision of whether the benefits of catching bugs due to unintended modifications of the return value outweigh the drawbacks of this direction.
+
+\subsubsection{Breaking the symmetry between \tcode{pre} and \tcode{post}}
+
+The first argument against this approach is that the return value in postconditions would behave differently from the actual return type of the function, which is observable through \tcode{const} overloads being taken instead of non-\tcode{const} overloads. Even more surprisingly, the behaviour of the return value in postconditions would become inconsistent with the behaviour of parameters in preconditions:
+
+\begin{codeblock}
+struct X {};
+
+bool p(X& x)       { return true; }
+bool p(const X& x) { return false; } 
+
+X f(X x)
+  pre(p(x))        // returns \tcode{true}
+  post(r : p(r));  // returns \tcode{false}
+\end{codeblock}
+
+Breaking this symmetry seems unpalatable conceptually and from a consistency perspective. It might also make it harder for static analysis of chained function calls to reason about the postcondition of a function call being equivalent to the precondition of a subsequent function call. On the other hand, one might argue that the \emph{return-name} is a new and different kind of object, using new syntax; unlike the function parameters, it is not declared by the user (neither to be \tcode{const} nor to be non-\tcode{const}), and therefore there is no real need for the return object in \tcode{post} to be consistent with parameters in \tcode{pre}, and we can pick the safer semantics for it. One might further argue that overload sets where the \tcode{const} version of a predicate gives a different answer to the non-\tcode{const} version, such as the above, are highly dubious and will not appear in practice.
+
+\subsubsection{Interfacing with legacy code}
+
+Another argument against the approach of making the \emph{return-name} \tcode{const} is that it makes it harder to interface with legacy code. Consider:
+
+\begin{codeblock}
+struct X {
+  bool is_valid();
+};
+
+X f()
+  post(r: r.is_valid());
+\end{codeblock}
+
+In the code above, the author of \tcode{struct X} forgot to make \tcode{is_valid()} a \tcode{const} function (or perhaps, it is an old C API that takes a non-\tcode{const} raw pointer to \tcode{X}, etc.), and we do not own that code so we cannot modify it. Yet we \emph{know} that \tcode{is_valid()} will not modify the object, so we should be able to tell the compiler to trust us and compile the code above.
+
+The counterargument here is that if we made \tcode{r} implicitly \tcode{const}, you can still achieve the above by writing
+
+ \begin{codeblock}
+X f()
+  post(r: const_cast<X&>(r).is_valid());
+\end{codeblock}
+
+and the extra verbosity needed for such cases does not outweigh the benefits of catching bugs due to unintended \emph{actual} modifications of \tcode{r}.
+
+\subsubsection{Making other entities in contract annotations implicitly \tcode{const}}
+
+Finally, we could consider fixing the consistency issues between \tcode{pre} and \tcode{post} by making function parameters inside \tcode{pre} also implicitly \tcode{const}. Arguably, this would catch even more bugs because modifications of function parameters inside preconditions will also almost always be bugs.
+
+However, it is then not clear why function parameters should be implicitly \tcode{const} inside \tcode{pre}, but not inside \tcode{contract_assert}; it would be surprising if a contract predicate would behave substantially different in a \tcode{pre} on the function declaration than in a \tcode{contract_assert} as the first statement in the function body.
+
+But if function parameters are implicitly \tcode{const} inside \tcode{contract_assert}, why should local variables not also be implicitly \tcode{const} inside \tcode{contract_assert}? Presumably, a correct predicate would not want to modify those either. And if local variables are implicitly \tcode{const} inside \tcode{contract_assert}, why should global variables behave differently in that context?
+
+The logical conclusion is that, if we want to make the return object inside \tcode{post} implicitly \tcode{const}, and simultaneously preserve consistency between the different kinds of contract annotations (which some of us consider a goal and others consider a non-goal), we would have to essentially treat all glvalues inside a contract predicate as implicitly \tcode{const}, thereby statically enforcing that contract predicates cannot mutate them\footnote{...with the caveat that this \tcode{const} is necessarily shallow and can be cast away, unless we go for an even more drastic solution: the one proposed in \cite{P2680R1}, which statically enforces that contract predicates do not have any side effects at all. This direction has already been considered, and twice rejected, by SG21.}. This would be a rather drastic design change of the current Contracts MVP, and we are not proposing such a design change.
+
+\section{Summary}
+
+In this paper, we have presented a set of semantics for the named return object \tcode{r} in a postcondition specifier \tcode{post (r: ...)} which we propose for the Contracts MVP, where this is currently underspecified. We propose that \tcode{r} should be a glvalue naming the return object of a function, similar to how the identifiers introduced by a structured bindings are names, not references; \tcode{decltype(r)} should be the return type of the function.
+
+If the return type is trivially copyable, and thus an object can be returned in registers, we need to introduce a special rule so that adding a postcondition specifier does not break ABI; the observable effect of this rule that in these cases, the address of \tcode{r} might not be equal to the address of the object being initialised by the return value.
+
+One open question remains: whether the return object \tcode{r} in a postcondition specifier should be implicitly \tcode{const} to prevent bugs due to unintended modification of \tcode{r}. There is no consensus between the authors of this paper whether the benefits of this direction outweigh the drawbacks; we have presented some arguments for and against and are leaving the decision up to SG21.
+
+%\section*{Document history}
+
+%\begin{itemize}
+%\item \textbf{R0}, 2023-03-08: Initial version.
+%\item \textbf{R1}, 20XX-XX-XX: ??
+%\end{itemize}
+
+%\section*{Acknowledgements}
+
+%nothing yet
+
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

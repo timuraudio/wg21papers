@@ -23,13 +23,13 @@ In this paper, we propose a set of semantics for the named return object in a po
 \section{Introduction}
 \label{sec:intro}
 
-The Contracts MVP (\cite{P2900R2}), which is currently in development and targeting C++26, provides syntax to name the return object in a postcondition specifier so it can be used in the postcondition predicate:
+The Contracts MVP (\cite{P2900R2}), which is currently in development and targeting C++26 (as per SG21's roadmap in \cite{P2695R1}), provides syntax to name the return object in a postcondition specifier so it can be used in the postcondition predicate:
 \begin{codeblock}
 // This function returns a positive integer
 int f()
   post (r: r > 0);
 \end{codeblock}
-However, the exact semantics of the identifier \tcode{r} in the above declaration --- which we will call the \emph{return-name}, following the grammar term introduced in \cite{P2932R2} --- were never specified. The only piece of wording that talks about it can be found in the C++20 proposal \cite{P0542R5}, and later in the Contracts MVP wording in \cite{P2388R4}:
+However, the exact semantics of the identifier \tcode{r} in the above declaration --- which we will call the \emph{return-name}, following the grammar term introduced in \cite{P2932R2} --- were never specified. The only piece of wording that talks about it can be found in the C++20 proposal \cite{P0542R5}, and later in the Contracts MVP wording section in \cite{P2388R4}:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 A postcondition may introduce an identifier to represent the glvalue result or the prvalue result object of the function.
@@ -53,7 +53,7 @@ X f()
   post(r: r.is_valid());
 \end{codeblock}
 
-However, a prvalue does not represent an actual object, rather it represents a potential object --- a value that can be used to initialise an object. As such, you cannot call a member function on a prvalue; you first have to materialise it into a temporary object, which is a glvalue, and then call a member function on that. This implicit materialisation works for \tcode{this} (and typically compiles down to a no-op) because a pointer is trivially copyable. However, it does not work for noncopyable types such as \tcode{std::unique_ptr}:
+However, a prvalue does not represent an actual object, rather it represents a potential object --- a value that can be used to initialise an object. As such, one cannot call a member function on a prvalue; first, it has to be materialised it into a temporary object, which is a glvalue, and then call a member function on that. This implicit materialisation works for \tcode{this} (and typically compiles down to a no-op) because a pointer is trivially copyable. However, it does not work for noncopyable types such as \tcode{std::unique_ptr}:
 
 \begin{codeblock}
 // This function returns a non-null pointer
@@ -87,7 +87,7 @@ M getM()
 
 We could make \emph{return-name} a reference (or possibly a \tcode{const} reference) to the return object, but that would make the type of \tcode{r} a reference type and therefore very different from the actual return type of the function (which might be a non-reference). This would be observable through \tcode{decltype} and through different overloads being chosen and might be surprising for the user, especially given that this reference was never declared anywhere.
 
-Therefore, it seems like the correct mental model is to say that the \emph{return-name} is not actually a variable, nor a reference, but just a name, similar to the identifiers in structured bindings. Formally, we would say that the \emph{return-name} introduces an identifier that is the name of an lvalue that refers to the unnamed return object of the function, similar to how we specify in \href{https://eel.is/c++draft/dcl.struct.bind}{[dcl.struct.bind]} that the $i$-th identifier in a structured binding's \emph{identifier-list} is the name of an lvalue that refers to the element $i$ of the unnamed object or array introduced by the structured binding.
+Therefore, it seems like the correct mental model is to say that the \emph{return-name} is not actually a variable, nor a reference, but just a name, similar to the identifiers in structured bindings. Formally, we would say that the \emph{return-name} introduces an identifier that is the name of an lvalue that referring to the unnamed return object of the function, similar to how we specify in \href{https://eel.is/c++draft/dcl.struct.bind}{[dcl.struct.bind]} that the $i$-th identifier in a structured binding's \emph{identifier-list} is the name of an lvalue referring to the element $i$ of the unnamed object or array introduced by the structured binding.
 
 For a \emph{return-name} \tcode{r}, \tcode{decltype(r)} should therefore behave in the same way as it does for structured bindings: for a function returning a value of type \tcode{T}, it should just be \tcode{T}, which is the least surprising to the user; \tcode{decltype((r))} would be \tcode{T\&}, following the usual rules for \tcode{decltype} of expressions.
 
@@ -95,9 +95,9 @@ If the return type of the function is of reference type, then the type of \tcode
 
 \subsection{Address}
 
-An interesting subtlety arises for trivially copyable types, values of which may be returned in registers. For such types, if the \emph{return-name} referred directly to the return object of the function, adding a postcondition to a function might be an ABI breaking change: the \emph{return-name} is a glvalue, which means you can take its address, which an object in registers does not have, therefore the object could no longer be returned in registers.
+An interesting subtlety arises for trivially copyable types, values of which may be returned in registers. For such types, if the \emph{return-name} referred directly to the return object of the function, adding a postcondition to a function might be an ABI-breaking change: the \emph{return-name} is a glvalue, which means one can take its address, which an object in registers does not have, therefore the object could no longer be returned in registers.
 
-This would be an unfortunate outcome. However, there is a workaround. To allow passing return objects of trivially copyable types in registers, there is a provision in \href{https://eel.is/c++draft/class.temporary#3}{[class.temporary] p. 3} that implementations are permitted to create a temporary object to hold the result object. We can therefore specify that for a function returning an object of trivially copyable type, \emph{return-name} may refer to this temporary object instead of referring to the actual return object.
+This would be an unfortunate outcome. However, there is a workaround. To allow passing return objects of trivially copyable types in registers, there is a provision in \href{https://eel.is/c++draft/class.temporary#3}{[class.temporary] p. 3} that implementations are permitted to create a temporary object to hold the result. We can therefore specify that for a function returning an object of trivially copyable type, \emph{return-name} may refer to this temporary object instead of referring to the actual return object.
 
 The only user-observable consequence of this workaround is that in code that uses the address of the \emph{return-name}, for example,
 
@@ -170,7 +170,7 @@ X f()
 
 In the code above, the author of \tcode{struct X} forgot to make \tcode{is_valid()} a \tcode{const} function (or perhaps, it is an old C API that takes a non-\tcode{const} raw pointer to \tcode{X}, etc.), and we do not own that code so we cannot modify it. Yet we \emph{know} that \tcode{is_valid()} will not modify the object, so we should be able to tell the compiler to trust us and compile the code above.
 
-The counterargument here is that if we made \tcode{r} implicitly \tcode{const}, you can still achieve the above by writing
+The counterargument here is that if we made \tcode{r} implicitly \tcode{const}, one can still achieve the above by writing
 
  \begin{codeblock}
 X f()

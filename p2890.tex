@@ -7,67 +7,54 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P2890R1 \\
-Date: &2023-11-29 \\
+Document \#: & P2890R2 \\
+Date: &2023-12-13 \\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
 
 \begin{abstract}
-This paper proposes to allow precondition and postcondition specifiers on lambda expressions. We propose a rule for name lookup inside precondition and postcondition predicates and discuss several alternatives for specifying the semantics of lambda captures triggered by the odr-use of entities inside a contract predicate.
+This paper proposes to allow \tcode{pre} and \tcode{post} specifiers on lambda expressions. The proposal is straightforward except for the semantics of lambda captures triggered by the odr-use of entities inside a contract predicate. We consider several alternatives for how to resolve this issue.
 \end{abstract}
 
-\section{Introduction}
+\section{Proposal}
 \label{sec:intro}
 
-In the Contracts MVP (see \cite{P2900R2}), preconditions and postconditions are so far only allowed on ordinary functions. However, there is no a priori reason why we should not allow them to appear also on lambda expressions. For example, the following code should be well-formed:
+In the Contracts MVP (see \cite{P2900R2}), \tcode{contract_assert} is already allowed inside a lambda expression (because it is allowed anywhere an expression of type \tcode{void} is allowed), but \tcode{pre} and \tcode{post} are only allowed on the declaration of ordinary functions. However, there is no a priori reason why we should not allow them to appear also on lambda expressions. We propose that the following code should be well-formed:
 \begin{codeblock}
-constexpr bool add_overflows(int a, int b) {
-  return (b > 0 && a > INT_MAX - b) || (b < 0 && a < INT_MIN - b);
-}
-
-int main() {
-  std::vector<int> vec = { /* ... */ };
-  auto sum = accumulate(
-    vec.begin(), vec.end(), 0, 
-    [](int a, int b) 
-      pre (!add_overflows(a, b))  // precondition on lambda
-    {
-      return a + b;
-    });
-  // ...
-}
+auto f = [] (int i)
+  pre (i > 0)      // proposed; ill-formed in MVP
+  post (r: r > i)  // proposed; ill-formed in MVP
+{
+  contract_assert (s > 0);  // already allowed in MVP
+  return i + s;
+};
 \end{codeblock}
 
-While not explicitly stated in \cite{P2900R2}, we assume that assertions are already allowed on lambdas because they go into the lambda body and are allowed anywhere expressions are allowed.
+The proposed syntax grammar for adding \tcode{pre} and \tcode{post} has already been specified in \cite{P2961R2}: the sequence of \tcode{pre} and \tcode{post} specifiers is always the last part of the declaration before the opening brace of the lambda body.
 
-\section{Discussion}
-\subsection{Name lookup}
+Regarding name lookup and access control for the predicate in \tcode{pre} and \tcode{post} on a lambda,  we propose that it should follow the existing  MVP rule for functions (see \cite{P2900R2} section 2.3.2): it should work as-if these predicates were at the start of the lambda's body. This rule is well-motivated and applies equally to this case.
 
-The most recent discussion of contract annotations on lambdas can be found in \cite{P2388R4}:
+\section{History}
 
-\pagebreak
+C++20 Contracts \cite{P0542R5} did not allow \tcode{pre} and \tcode{post} on lambda expressions because it was using attribute syntax, and attributes could not be meaningfully applied to lambdas at the time:
+
+\pagebreak % MANUAL
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Contracts attributes (as any other attribute in that syntactical location) appertain to the function type. However, they are not part of the function type.
+Note that this does not solve the issue of being able to use attributes on lambda expressions (see Core issue 2097). In fact, until that issue is resolved it will not be possible to specify preconditions and postconditions for lambda expressions.
+\end{adjustwidth}
+
+The cited issue was later resolved by adopting \cite{P2173R1} for C++23, and is no longer relevant for the Contracts MVP because we are no longer using attribute syntax. The more recent \cite{P2388R4} also did not allow \tcode{pre} and \tcode{post} on lambda expressions, but for another reason:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 These features are deferred due to unresolved issues: [...] a way to express preconditions and postconditions for lambdas: name lookup is already problematic in lambdas in the face of lambda captures. This problem is pursued in \cite{P2036R1}, and until it has been solved we see no point in delaying the minimum contract support proposal.
 \end{adjustwidth}
 
-However, since that paper was published, \cite{P2036R3} has been adopted for C++23, which resolved the name lookup issues cited above. We therefore no longer see a problem with allowing precondition and postcondition specifiers on lambda expressions.
+The cited issue was later resolved by adopting \cite{P2036R3} for C++23, but in fact is also not relevant. The issue solved by \cite{P2036R3} was about name lookup in the trailing return type of a lambda. Name lookup in \tcode{pre} and \tcode{post} is fundamentally different, because identifiers in these predicates should refer to captured entities accessible in the lambda's body, not to entities in the scope containing the declaration of the lambda: those entities will no longer be available by the time the lambda is called and the preconditions and postconditions are checked. The existing MVP rule for functions (as-if at the start of the body) is straightforward and gives us the desired semantics for lambdas.
 
-We propose that name lookup for entities inside precondition and postcondition specifiers on lambdas follow the same rules as they do for lambda trailing return types (see \cite{P2036R3}): name lookup first considers the captures of the lambda before looking further outward. Consider:
-
-\begin{codeblock}
-int i = 0;
-double j = 42.0;
-// ...
-auto counter = [j=i] mutable pre (j >= 0) {
-  return j++;
-};
-\end{codeblock}
-
-In this code, the \tcode{j} in the precondition predicate should refer to the \tcode{j} of type \tcode{int} introduced by the init-capture, not the \tcode{j} of type \tcode{double} declared outside. This rule is most consistent with the rest of the language, and least surprising to the user.
-
-\subsection{Captures}
+\section{Captures}
 
 Entities in the predicate of a contract annotation are unconditionally odr-used (see \cite{P2900R2}), regardless of whether the contract annotation is checked or ignored. This must be so because the contract semantic is in general unknown at compile time (see \cite{P2877R0}).
 
@@ -85,9 +72,9 @@ std::function<int()> g(const std::vector<S>& v)
 }
 \end{codeblock} 
 
-Here, the lambda capture triggered by the precondition specifier triggers an expensive copy of the whole vector \tcode{v}. Without the precondition, the copy would not happen. 
+Here, the lambda capture triggered by the precondition predicate triggers an expensive copy of the whole vector \tcode{v}. Without the precondition specifier being present, the copy would not happen. 
 
-Here is an example of a compile-time effect due to a precondition specifier on a lambda triggering a lambda capture:
+Here is an example of a compile-time effect due to a precondition predicate on a lambda triggering a lambda capture:
 
 \begin{codeblock}
 constexpr auto f(int i) {
@@ -111,7 +98,7 @@ struct X {
 };
 \end{codeblock}
 
-We can even construct an example where the lambda capture triggered by the precondition annotation changes which function is selected by overload resolution (taken from \cite{P2932R2}):
+We can even construct an example where the lambda capture triggered by the contract annotation may change which function is selected by overload resolution (taken from \cite{P2932R2}):
 
 \begin{codeblock}
 template <typename T>
@@ -119,20 +106,23 @@ std::true_type f(T t);
 
 template <typename T>
 std::false_type f(T t)
-requires std::is_convertible_v<T, bool(*)()>;
+requires std::is_trivially_copyable_v<T>;
 
-void g() {
-  auto x = []() { return true; }
-  static_assert(!decltype(f(x))::value); // convertible to \tcode{bool(*)()}
-  
-  auto y = []() pre(x()) { return true; }
-  static_assert(decltype(f(x))::value);  // not convertible
+int main() {
+    std::shared_ptr<int> p;
+    
+    auto f1 = [=]{ return true; };
+    static_assert(decltype(f(x))::value == false);      // passes
+    
+    auto f2 = [=]{ contract_assert(p); return true; };  // just add an assertion
+    static_assert(decltype(f(x))::value == false);      // fails
 }
+
 \end{codeblock}
 
-Should  we allow such cases?
+Strictly speaking, it would be conforming for the first \tcode{static_assert} to fail, because it is not guaranteed that the lambda is trivially copyable, however it is trivially copyable on every major C++ compiler. With the \tcode{contract_assert} added, the lambda \emph{must} be non-trivially copyable if \tcode{p} is captured, changing overload resolution. Should we allow this to happen?
 
-\subsubsection{Option 1: Contract predicates can trigger captures}
+\subsection*{Option 1: Contract predicates can trigger captures}
 
 The first option is to not treat contract predicates differently from any other expressions in C++ for the purpose of triggering lambda captures, i.e. to allow the implicit captures to happen in all cases shown above. This behaviour is arguably the most straightforward, most consistent with the rest of the language, and least surprising to the user: it simply falls out of the current rules for odr-use and lambda captures. It is also consistent with assumptions, which behave in the same way:
 
@@ -144,9 +134,9 @@ constexpr auto f(int i) {
 
 This phenomenon has been extensively discussed when assumptions were standardised for C++23 (see \cite{P1774R8} section 4.4). While there were concerns that \tcode{[[assume]]} should not be able to change the layout of a class, ultimately EWG decided it was too much of an edge case unlikely to cause problems in real code to justify complicating the rules of the language to make such a capture ill-formed. The same reasoning can be applied to contract annotations.
 
-In the case where the lambda capture from a contract predicate triggers an expensive copy of the vector, there is a straightforward workaround to avoid the expensive copy: do not use a default-capture, but only capture \tcode{v.size()} explicitly, or better still, perform the check outside of the lambda. In the case where the lambda capture from a contract predicate changes the layout of a class, the layout of the class was non-portable in the first place, so user code should not rely on it. Similarly, user code that relies on a lambda \emph{with a default capture} being convertible to a function pointer is inherently broken. In all of those cases, the user wrote bad code and they got what they asked for. It is completely reasonable to say that we do not want to bend over backwards and make the language more complicated in order to make such cases ill-formed.
+In the case where the lambda capture from a contract predicate triggers an expensive copy of the vector, there is a straightforward workaround to avoid the expensive copy: do not use a default-capture, but only capture \tcode{v.size()} explicitly, or better still, perform the check outside of the lambda. In the case where the lambda capture from a contract predicate changes the layout of a class, the layout of the class was non-portable in the first place, so user code should not rely on it. Similarly, user code that relies on a lambda \emph{with a default capture} being trivially copyable is doing something that the Standard explicitly calls out as something no code should rely on (see \href{https://eel.is/c++draft/expr.prim.lambda#closure-3}{[expr.prim.lambda.closure] p. 3}). In all these cases, the user wrote bad code and they got what they asked for. It is completely reasonable to say that we do not want to bend over backwards and make the language more complicated in order to make such cases ill-formed.
 
-\subsubsection{Option 2: Contract predicates do not trigger captures}
+\subsection*{Option 2: Contract predicates do not trigger captures}
 
 \cite{P2932R2} proposes that the odr-use of a local entity in a contract predicate should \emph{not} implicitly capture that entity. It argues that allowing the capture would violate the so-called \emph{zero overhead principle}: adding a contract annotation should never lead to a different branch being taken at compile time. Otherwise, this could lead to ``heisenbugs'' (a program contains a bug, we add a contract annotation to find the bug, but the contract annotation causes the program to take another branch where the bug does not exist) and measurable performance degradations. The paper argues that the existence of cases where the addition of a contract annotation can cause such ``heisenbugs'' and performance degradations, no matter how obscure these cases are, would be a major disincentive for the adoption of Contracts in C++.
 
@@ -163,7 +153,7 @@ void test() {
 
 With the proposal in \cite{P2932R2}, the parameter \tcode{i} would not be captured, which means that the \tcode{i} in the contract predicate would refer to the outer \tcode{i} variable which has static storage duration and therefore does not need to be captured in order to be odr-used inside the lambda. We believe that allowing the above behaviour would be very confusing to the user, and that therefore the proposal in \cite{P2932R2} is not viable.
  
- \subsubsection{Option 3: Triggering a capture from a contract predicate is ill-formed}
+ \subsection*{Option 3: Triggering a capture from a contract predicate is ill-formed}
  
 The better alternative to option 2, avoiding the problem of unintentionally referring to the wrong variable inside the lambda, is to say that if the predicate of a contract annotation triggers a lambda capture of an entity not otherwise captured, the program is unconditionally ill-formed:
  
@@ -176,7 +166,7 @@ auto f(int i) {
 
 This satisfies the zero overhead principle for contracts on lambdas and fixes the issue with option 2. We therefore consider option 3 viable. The downsides compared to option 1 are that carving out  such an exception for how lambda captures work increases the complexity of the language, and that the resulting compile error might not be obvious for a novice user. Further, if we choose this option, we strongly recommend that we introduce the same rule for assumptions, as a DR against C++23, otherwise option 3 would introduce an unfortunate inconsistency.
  
-\subsubsection{Option 4: Triggering a capture from a contract predicate emits a warning}
+\subsection*{Option 4: Triggering a capture from a contract predicate emits a warning}
 
 Another alternative to address this issue is to not make triggering a lambda capture from a contract predicate ill-formed, but to issue a compiler warning. In C++, there are many other cases where this approach is taken. Consider:
 
@@ -190,11 +180,11 @@ In this case, the user got the element type of \tcode{std::map} wrong (which is 
 
 We could even go further and make the warning mandated by the standard, rather than just a matter of QoI; we created a precedent for having well-formed programs that nevertheless require a diagnostic by standardising \tcode{\#warning}, and we might standardise another such case if we adopt the compile-time-\emph{observe} semantic from \cite{P2894R1}.
 
-However, triggering implicit captures from contract predicates is arguably somewhat different from the \tcode{std::map} example in that, as discussed above, triggering a capture from a contract predicate is \emph{always} suboptimal and questionable code, not just in certain cases. It therefore seems that, if we do not want to allow the user to just ``get what they get'' (option 1) in those cases, then making them ill-formed (option 3) is a better approach than issuing a warning (option 4) as the former is a more effective and more teachable deterrent to writing such code and we do not have to worry about false positives.
+However, triggering implicit captures from contract predicates is arguably somewhat different from the \tcode{std::map} example. As we saw above, triggering a capture from a contract predicate is \emph{always} suboptimal and questionable code, not just in certain cases. It therefore seems that, if we do not want to allow the user to just ``get what they get'' (option 1) in those cases, then making them ill-formed (option 3) is a better approach than issuing a warning (option 4). Option 3 is a more effective and more teachable deterrent to writing such code and we do not have to worry about false positives.
 
-\subsubsection{Option 5: odr-using an entity in a contract predicate that is not otherwise odr-used is ill-formed}
+\subsection*{Option 5: odr-using an entity in a contract predicate that is not otherwise odr-used is ill-formed}
 
-Triggering lambda captures is actually not the only way in which the odr-use of an entity in a contract annotation can violate the zero overhead principle from \cite{P2932R2}. Another way is through triggering a template instantiation, which in turn can change observable state via friend injection. This case might be negligible because it is an obscure wart of the C++ language that we would like to make ill-formed (see \cite{CWG2118}). But there is a third and much more plausible case where odr-use of an entity in a contract annotation can violate the zero overhead principle: a template instantiation can trigger dynamic initialisation of a static class member, which in turn can have arbitrary effects on the observable behaviour of the program:
+Triggering lambda captures is actually not the only way in which the odr-use of an entity in a contract predicate can violate the zero overhead principle from \cite{P2932R2}. Another way is through triggering a template instantiation, which in turn can change observable state via friend injection. This case might be negligible because it is an obscure wart of the C++ language that we would like to make ill-formed (see \cite{CWG2118}). But there is a third and much more plausible case where odr-use of an entity in a contract annotation can violate the zero overhead principle: a template instantiation can trigger dynamic initialisation of a static class member, which in turn can have arbitrary effects on the observable behaviour of the program:
 
 \begin{codeblock}
 struct X {
@@ -218,19 +208,29 @@ int main() {
 }
 \end{codeblock}
 
-Therefore, making it ill-formed for a contract annotation to trigger a lambda capture (option 3) would not actually be a comprehensive fix that ensures odr-use of entities inside a contract predicate never violate the zero overhead principle. Such a comprehensive fix would be to make any program ill-formed where a contract predicate odr-uses an entity not otherwise odr-used (and not just if that odr-use triggers an implicit lambda capture). This is our option 5.
+Therefore, making it ill-formed for a contract predicate to trigger a lambda capture (option 3) would not actually be a comprehensive fix that ensures odr-use of entities inside a contract predicate never violate the zero overhead principle. Such a comprehensive fix would be to make any program ill-formed where a contract predicate odr-uses an entity not otherwise odr-used (and not just if that odr-use triggers an implicit lambda capture). This is our option 5.
 
 We believe that this option 5 is impractical, as it would prohibit the user from e.g. using STL algorithms like \tcode{std::for_each} in a contract annotation, unless the exact same instantiation of \mbox{\tcode{std::for_each}} is already used somewhere else in the program. Further, it is not obvious how this option could be implemented as such odr-use might occur in a different translation unit.
 
 Note that triggering a template instantiation, unlike triggering a lambda capture, while arguably a violation of the zero overhead principle, does not seem to pass the litmus test in Appendix A of \cite{P2932R2} as it cannot affect overload resolution. It therefore seems like a less serious violation of the zero overhead principle than the lambda capture case.
 
+\subsection*{Option 6: Do not allow contracts on lambdas with default captures}
+
+Since the issue discussed here only occurs with lambda expressions that have default captures, we could also say that contract annotations should not be allowed on such lambdas. Note that this would affect not only \tcode{pre} and \tcode{post}, for which the possibility to add them to lambdas is being proposed in this paper, but also any \tcode{contract_assert} in the body of the lambda, which the Contracts MVP permits today.
+
+We believe that this solution is too drastic as it would take away too much value for the user, therefore we do not consider this solution viable.
+
+\subsection*{Option 7: Do not allow contracts on lambdas}
+
+As the most radical solution to the problem, we could say that contract annotations are not allowed on any lambdas (\tcode{pre} and \tcode{post}) or inside the body of any lambdas (\tcode{contract_assert}). We do not consider this solution viable for the same reason as option 6.
+
 \section{Summary}
 
-We propose to allow add precondition and postconditon specifiers on lambda expressions in the Contracts MVP \cite{P2900R2}.
+We propose to allow adding \tcode{pre} and \tcode{post} specifiers to lambda expressions in the Contracts MVP \cite{P2900R2}, with the syntax proposed in \cite{P2961R2}. Regarding name lookup and access control for the predicate in \tcode{pre} and \tcode{post} on a lambda,  we propose that it should follow the existing MVP rule for functions (see \cite{P2900R2} section 2.3.2): it should work as-if these predicates were at the start of the lambda's body.
 
-We propose that name lookup for entities inside precondition and postcondition specifiers on lambdas follow the same rules as they do for lambda trailing return types: name lookup first considers the captures of the lambda before looking further outward.
+Entities in a contract predicate are odr-used, even if the contract annotation has the \emph{ignore} semantic. This odr-use inside a lambda can trigger an implicit lambda capture. It follows therefore that adding a contract annotation to a program can trigger a lambda capture that would otherwise not happen, which in turn can change the compile-time semantics of the program. This violates a desirable property called the \emph{zero overhead principle} (see \cite{P2932R2}). To address this issue, we considered the following seven options:
 
-Entities in a contract predicate are odr-used, even if the contract annotation has the \emph{ignore} semantic. This odr-use inside a lambda can trigger an implicit lambda capture. It follows therefore that adding a contract annotation to a program can trigger a lambda capture that would otherwise not happen, which in turn can change the compile-time semantics of the program. This violates a desirable property called the \emph{zero overhead principle} (see \cite{P2932R2}). To address this issue, we have five options:
+\pagebreak %MANUAL
 
 \begin{enumerate}
 \item Contract predicates can trigger captures (the default if we do not add any special rule).
@@ -238,22 +238,27 @@ Entities in a contract predicate are odr-used, even if the contract annotation h
 \item Triggering a capture from a contract predicate is ill-formed.
 \item Triggering a capture from a contract predicate emits a warning.
 \item odr-using an entity in a contract predicate that is not otherwise odr-used is ill-formed.
+\item Do not allow any contract annotations on lambdas with default captures
+\item Do not allow any contract annotations on any lambdas
 \end{enumerate}
 
-For the reasons discussed in this paper, we believe that the only viable options are 1 and 3. Option 1 is the correct choice if we prefer to not add additional complexity to C++, whereas option 3 is the correct choice if we consider lambda captures triggered by contract annotations a violation of the zero overhead principle from \cite{P2932R2} that needs to be avoided in all possible cases. Note however that there are other cases where odr-use inside a contract predicate can trigger violations of the zero overhead principle that would not be addressed by option 3. If we choose option 3, we strongly recommend that we introduce the same rule for assumptions, as a DR against C++23, to be consistent.
+For the reasons discussed in this paper, we believe that the only viable options are 1 and 3. Option 1 is the correct choice if we prefer to not add additional complexity to C++, and accept that one can construct cases where the zero overhead principle from \cite{P2932R2} might be violated by captures from entities inside contract predicates (with straightforward fixes available for such cases). Option 3 is the correct choice if there should be \emph{no possible case} where contract predicates would capture entities in a way that violates the zero overhead principle from \cite{P2932R2}.
 
-%\section*{Document history}
+Note that there are other circumstances, unrelated to lambda captures, where odr-use inside a contract predicate can still violate the zero overhead principle, in a way not addressed by option 3. Making these violations impossible would require the more drastic option 5, which would have unfortunate consequences. However, arguably the additional cases addressed by option 5 are less serious violations of the zero overhead principle.
 
-%\begin{itemize}
-%\item \textbf{R0}, 2023-03-08: Initial version.
-%\item \textbf{R1}, 20XX-XX-XX: ??
-%\end{itemize}
+If we choose option 3, we strongly recommend that we introduce the same rule for triggering captures from \tcode{[[assume(x)]]}, as a DR against C++23, to be consistent.
 
-%\section*{Acknowledgements}
+\section*{Document history}
 
-%nothing yet
+\begin{itemize}
+\item \textbf{R0}, 2023-03-08: Initial version
+\item \textbf{R1}, 2023-12-07: Considering more options for resolving the captures issue
+\item \textbf{R2}, 2023-12-13: Fixed nonsensical name lookup rules
+\end{itemize}
 
-\pagebreak
+\section*{Acknowledgements}
+
+Thanks to Ville Voutilainen and Joshua Berne for pointing out that the name lookup rules proposed in the previous revision (R1) of this paper were  nonsensical.
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

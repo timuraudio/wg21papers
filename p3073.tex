@@ -1,0 +1,170 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+\begin{document}
+\title{Remove \tcode{evaluation_undefined_behavior} and \tcode{will_continue()} from the Contracts MVP}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Ville Voutilainen \small(\href{mailto:ville.voutilainen@gmail.com}{ville.voutilainen@gmail.com})  
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3073R0 \\
+Date: &2024-01-23 \\
+Project: & Programming Language C++ \\
+Audience: & SG21
+\end{tabular}
+
+\begin{abstract}
+This paper proposes to remove the enum value \tcode{evaluation_undefined_behavior} and the function \mbox{\tcode{will_continue()}} from the Contracts MVP. Given the remaining open questions surrounding these two library facilities, and given that neither is essential in order to use the Contracts MVP, or depended upon by any other part of the Contracts MVP, we believe that they should instead be standardised as post-MVP extensions, to give SG21 enough time to resolve these open questions without putting at risk the SG21 roadmap to get the Contracts MVP into C++26.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+By approving \cite{P2811R5}, SG21 adopted a standard library API for the Contracts MVP proposal \cite{P2900R4} that allows to query the properties of a runtime contract violation inside a user-defined contract-violation handler invoked upon detection of such a violation. This query happens via an object of type \mbox{\tcode{std::contracts::contract_violation}} created by the implementation and passed into the contract-violation handler. For this purpose, \mbox{\tcode{std::contracts::contract_violation}} offers a number of property functions, including: 
+\begin{itemize}
+\item \tcode{detection_mode()}: returns an enum representing the mode by which the contract violation was detected (evaluation of the predicate returned 
+\tcode{false} or would have returned \tcode{false}; or the evaluation of the predicate exited via an exception);
+\item \tcode{kind()}: returns an enum representing the kind of contract that was violated (precondition, postcondition, or assertion); 
+\item \tcode{semantic()}: returns an enum indicating which contract semantic was used to check the contract assertion (\emph{enforce} or \emph{ignore}); and
+\item \tcode{will_continue()}: returns a \tcode{bool} value indicating whether evaluation of the program will continue after the current contract-violation handler has returned normally, or whether the program will be terminated.
+\end{itemize}
+Recent discussions on the SG21 reflector have revealed that for two components of this proposed standard library API, there is currently a substantial amount of open questions around their meaning, their correct specification, and their motivating use cases. These components are: the enum value \mbox{\tcode{evaluation_undefined_behavior}}, which is one of the possible values returned by \mbox{\tcode{detection_mode()}}, and the \tcode{will_continue()} function. Neither facility is required in order to use the rest of the \mbox{\tcode{std::contracts::contract_violation}} API or indeed the Contracts MVP as a whole. We therefore propose, with this paper, that both facilities be removed from the Contracts MVP.
+
+Note that we are \emph{not} suggesting that either facility is not useful or should not be standardised. We merely propose that given the remaining open questions surrounding these two facilities, and given that neither is essential in order to use the Contracts MVP, or depended upon by any other part of the Contracts MVP, they should be treated as post-MVP extensions. Treating these facilities as post-MVP extensions, in the same way as other useful features such as support for virtual functions \cite{D3097R0} and postcondition captures \cite{D3098R0}, will give SG21 enough time to resolve the open questions surrounding these facilities without putting at risk the roadmap agreed to by SG21 \cite{P2695R1} and the chances of getting the Contracts MVP into C++26.
+
+\section{\tcode{evaluation_undefined_behavior}}
+\label{sec:ub}
+
+\subsection{What is \tcode{evaluation_undefined_behavior} for?}
+\label{subsec:reasons}
+
+\cite{P2811R5}, the proposal approved by SG21 for the Contracts MVP, specifies that returning the enum value \mbox{\tcode{evaluation_undefined_behavior}} from \mbox{\tcode{detection_mode()}} means that the ``contract predicate would have undefined behaviour when evaluated''.
+
+Since approval of the paper, it has been suggested that the value could actually mean more than that. In particular, the suggestion is that if a sanitiser or similar tool is capable of detecting undefined behaviour at runtime anywhere in the program and report this to the user, it could do so by calling the contract-violation handler, in which case \tcode{std::contracts::contract_violation} would serve as a standard API for such tools to report intercepted defects. In this scenario, \mbox{\tcode{evaluation_undefined_behavior}} would signal to the user that the nature of the intercepted defect is an expression that, when evaluated, would have undefined behaviour.
+
+Discussion of this idea on the SG21 reflector revealed that there is no consensus about whether \tcode{evaluation_undefined_behavior} should mean that:
+\begin{itemize}
+\item Evaluation of the contract predicate expression itself, or one of its immediate subexpressions, would have undefined behaviour, or
+\item Evaluation of any expression while evaluating the contract predicate, including inside any function (possibly in another translation unit) called during such evaluation, would have undefined behaviour, or
+\item Evaluation of any expression anywhere during the execution of the program would have undefined behaviour, regardless of whether the program actually contains any contract assertions.
+\end{itemize}
+
+\subsection{Is \tcode{evaluation_undefined_behavior} the correct API for runtime detection of undefined behaviour?}
+
+We believe that adding a standard API to C++ for sanitisers and other tools to report undefined behaviour to the user is a very promising idea. This approach, if done right, has the potential to integrate three different strategies to mitigate undefined behaviour in C++ --- contract-violation handling, runtime detection of core language undefined behaviour, and the new concept of \emph{erroneous behaviour} currently in development (see \cite{P2795R4} and \cite{P2973R0}) --- into a single integrated facility designed to comprehensively address instances of undefined behavior in C++ that cannot be diagnosed at compile time. We are currently working on a paper exploring this approach, \cite{D3100R0}, and we are aware of at least one other paper currently in development that addresses integrating Contracts and erroneous behaviour.
+
+However, at present, we do not yet know exactly which extensions to the \mbox{\tcode{std::contracts::}} \mbox{\tcode{contract_violation}} API are needed to evolve it into a comprehensive API for runtime detection of undefined behaviour. As such, we consider it premature to add one part of such an API to the Standard, in the form of the single enum value \mbox{\tcode{evaluation_undefined_behavior}}, without having had a chance to discuss the other possible parts of such an API, or indeed consider this design space more holistically. It is not certain that this enum value is the correct design choice for such an API. If we diagnose instances of undefined behaviour at runtime and report them via this API, we might for example choose to:
+\begin{itemize}
+\item report the defect as an implicit precondition predicate that evaluated to \tcode{false}, such as an implicit precondition \tcode{p != nullptr} on a pointer dereference \tcode{*p}, in which case the enum value \tcode{predicate_false} might make more sense,
+\item report different kinds of undefined behaviour via different enum values rather than just a single value that captures all of them.
+\end{itemize}
+Moreover, it is not clear how \mbox{\tcode{evaluation_undefined_behavior}} would interact with other parts of the \mbox{\tcode{std::contracts::contract_violation}} API. Consider again the example of a sanitiser detecting undefined behaviour due to a null pointer dereference. What should \tcode{kind()} return in this case?
+\begin{itemize}
+\item If we wish to treat this case as the violation of an implicit precondition \tcode{p != nullptr}, we might want to return \tcode{contract_kind::pre}.
+\item Otherwise, we might want to return a non-standard \tcode{contract_kind} supplied by the implementation as a vendor extension.
+\end{itemize}
+Discussion of this idea on the SG21 reflector revealed that there is no consensus on what the correct choice is.
+
+\subsection{Specification challenges}
+
+Trying to find wording to correctly specify \mbox{\tcode{evaluation_undefined_behavior}} has generated a considerable amount of discussion between the authors of \cite{P2900R4}. At the time of writing, there is no consensus on the correct specification strategy for this feature.
+
+The original wording in \cite{P2811R5}, that the enum value means that the “contract predicate would have undefined behaviour when evaluated”, is a requirement that is impossible to implement and therefore impossible to specify normatively. The reason this is impossible to implement is that the predicate may call an existing library function or a function otherwise defined in a separate translation unit, and when such a function definition was compiled, it was not compiled with any sort of undefined behaviour detection mechanisms in place. An implementation cannot reasonably detect all undefined behaviour that would occur in the cone of evaluation of a predicate through all possible translation unit boundaries when calling arbitrary functions.
+
+The problem with the specification in \cite{P2811R5} is that it reads like a normative requirement while the best we can do is to give some kind of non-normative encouragement to call the violation handler upon detection of undefined behaviour (with varying degrees of QoI). But even if we do that, it is still an open question how we should specify \mbox{\tcode{evaluation_undefined_behavior}} normatively.
+
+One suggested option is to say that no program with well-defined behaviour will ever result in the value \mbox{\tcode{evaluation_undefined_behavior}} being passed into the violation handler. This is technically correct, but does not work as a specification, as it makes  \mbox{\tcode{evaluation_undefined_behavior}} effectively a variant of \tcode{std::unreachable()}: the value cannot be meaningfully used by a contract-violation handler in an \tcode{if}-statement, because an optimizer will optimise away conditions and branches where this would be the value returned by \tcode{detection_mode()}.
+
+Another suggested option is to say that the value \mbox{\tcode{evaluation_undefined_behavior}} is passed into the violation handler for contract violations that occurred ``for implementation-defined reasons''. However, this immediately raises the question what the permissible reasons are, which is a question we currently do not have consensus on (see Section \ref{subsec:reasons}).
+
+More generally, while we already have some facilities in the Standard that do nothing normatively and exist only for the convenience of tools (\tcode{std::breakpoint}, some attributes), we do not yet have a facility in the Standard that only has meaning for programs that have undefined behaviour and are therefore outside of the scope of the Standard itself. We need to figure out how to acknowledge the existence of sanitisers in the Standard; doing so is novel.
+
+One suggestion is that if the behaviour of a program is undefined, it may be permissible for a sanitiser to change the program into a different program that no longer has undefined behaviour, and to thus bring it back into the scope of the Standard where we can specify something about the behaviour of the program. Another suggestion is that it may be possible to modify \href{https://eel.is/c++draft/defns.undefined}{[defns.undefined]} to introduce, for the first time, requirements on C++ programs with undefined behaviour in the Standard. At any rate, we believe it would be better if exploring and reviewing these specification strategies would not block the progression of the Contracts MVP into C++26.
+
+\subsection{Lack of usage experience}
+
+As we already pointed out, having a sanitiser that not only detects runtime undefined behaviour, but also reports information about where and how it occurred to a user-defined callback, where these properties can be programmatically queried through a standard API, is an idea very much worth exploring. However, as far as we know we do not yet have any usage experience with this approach, raising the question whether adding it to the Standard at this time would be premature.
+
+All clang sanitisers have a callback \tcode{__sanitizer_set_death_callback}, but it takes no arguments. The callback can therefore be used to inform the user that the process is about to terminate, but it does not provide any API whatsoever to programmatically query what happened or where.
+
+ASan has a slightly more sophisticated callback \tcode{__asan_set_error_report_callback} which takes a single argument of type \tcode{const char*}. However, this merely provides a string with the report dump that will be written to the console, so again this does not provide an API to programmatically query what happened or where. Moreover, this callback is specific to ASan and does not exist for UBSan (see \href{ https://github.com/google/sanitizers/issues/1298}{UBSan issue 1298}).
+
+In conclusion, at the time of writing we are not aware of any sanitiser or other tool that is capable of detecting undefined behaviour at runtime and reporting meaningful information about the defect to a user callback with an API along the lines of \mbox{\tcode{std::contracts::contract_violation}}.
+
+\section{\tcode{will_continue()}}
+
+The class \mbox{\tcode{std::contracts::contract_violation}} was added to the Contracts MVP with the member function \tcode{will_continue()} at a time when the only possible contract semantics were \emph{ignore} and \emph{enforce}, the latter being the only possible value returned by \tcode{semantic()} because \emph{ignore} never results in an invocation of the contract-violation handler.
+
+At the time, \tcode{will_continue()} was intended as a futureproofing facility to be able to programmatically distinguish the \emph{enforce} semantic from the not-yet-standard \emph{observe} semantic on an implementation that decides to provide the latter as a vendor extension. Later, the \emph{observe} semantic was added to the Contracts MVP via adopting \cite{P2877R0}, making \tcode{will_continue()} seemingly redundant (a value of \tcode{true} maps to \emph{observe} and a value of \tcode{false} maps to \emph{enforce}), but nevertheless \tcode{will_continue()} remained in the MVP. 
+
+The motivation given for retaining \tcode{will_continue()} is usually some combination of the three possible usages discussed below. As we will see, all three have problems.
+
+\subsection{Usage for nonstandard checked contract semantics}
+
+One possible use case for \tcode{will_continue()} in the current MVP is for working with checked contract semantics other than \emph{enforce} and \emph{observe} that an implementation may decide to provide as a vendor extension. It is often not necessary to know the exact behaviour of each such semantic within the contract-violation handler; it is however useful to programmatically distinguish a semantic that continues running the program after the contract-violation handler returns (\tcode{will_continue() == true}) from one that will terminate the program. In the latter case, the contract-violation handler can decide to take special measures (such as throwing an exception) to circumvent the termination in applications where it is undesirable.
+
+While this use case is at least somewhat plausible, the problem lies in specifying what it means exactly for the program to ``continue'' or ``terminate'' after the contract-violation handler returns and what ``after it returns'' means; these are currently open questions. Proposal 1.6 in \cite{P2811R5}, which was adopted by poll into the Contracts MVP, says that \tcode{will_continue()} indicates ``whether, when the contract-violation handler returns normally, evaluate is expected to continue immediately following the violated contract-checking annotation''. From this specification, it is not clear whether the compiler is allowed (or even required) to report \tcode{will_continue() == false} if it can prove that, for example, the next statement after the violated contract assertion is a call to \tcode{std::terminate()}:
+\begin{codeblock}
+void test(bool b) {
+  contract_assert(b);
+  std::terminate();  // does it count as ``continue'' if control flow reaches this line?
+}
+\end{codeblock}
+Reasoning about user code that follows the contract assertion seems like an unnecessarily hard task for implementations. The model seems more clear when the property \tcode{will_continue()} can be determined solely from the evaluation semantics of the contract assertion itself. And indeed, \cite{P2900R4} describes \tcode{will_continue()} along those lines by specifying that it ``returns \tcode{true} if flow of control will continue into user-provided code should the contract-violation handler return normally, \tcode{false} otherwise. 
+
+Alas, this specification does not work either. For example, if a vendor-specific checked semantic is specified to call \tcode{std::terminate} after the contract-violation handler returns instead of \tcode{std::abort} (called by \emph{enforce}), it will call the termination handler, which may run ``user-provided code''; if the semantic is specified to call \tcode{std::exit}, then destructors of global objects will be called, which almost certainly will run ``user-provided code''. The current specification in \cite{P2900R4} suggests that in both cases,  \tcode{will_continue()} should return \tcode{true}, which is counterintuitive and renders the facility useless for this purpose.
+
+There might be a way to specify  \tcode{will_continue()} such that it would be more useful for reasoning about vendor-specific contract semantics, but at the time of writing it is unclear how this could be accomplished.
+
+\subsection{Usage for runtime detection of undefined behaviour}
+
+If we are not using  \tcode{will_continue()} to reason about vendor-specific contract semantics, we are left with using it for the two standard checked semantics, \emph{observe} and \emph{enforce}. At first glance, it seems that \tcode{will_continue()} should always be \tcode{true} for \emph{observe} and \tcode{false} for \emph{enforce}, however \cite{P2900R4} says that for \emph{observe} this ``will generally be \tcode{true}, but it may be \tcode{false} should the platform identify that user-provided code will never execute along the branch where this contract-violation has been detected.''
+
+It is not clear from this description in which possible cases the latter would occur, and earlier revisions of \cite{P2900R4} did not give an example. This prompted several confused SG21 members to ask for such an example. The only example that \cite{P2900R4} now provides --- and indeed, the only motivation given in the paper for having \tcode{will_continue()} in the MVP at all --- has to do with runtime detection of undefined behaviour:
+\begin{codeblock}
+void f(int* p) {
+  contract_assert(p != nullptr);
+  *p = 5;
+}
+\end{codeblock}
+\cite{P2900R4} argues that if a sanitiser or other tool can prove that all control flow paths which would be reached after the contract assertion is evaluated have undefined behavior (in this case because they dereference a null pointer), it can inform the contract-violation handler of this impending undefined behaviour by returning the value \tcode{false} from \tcode{will_continue()}.
+
+We believe that motivating \tcode{will_continue()} with the desire to use it for runtime detection of undefined behaviour is problematic, because of many of the same reasons why using the value \mbox{\tcode{evaluation_undefined_behavior}} for runtime detection of undefined behaviour is problematic (see Section \ref{sec:ub}). Such usage is inherently unreliable and unportable, hinges on reasoning about code not local to the violated contract assertion, poses specification challenges that we do not yet have agreed-upon solutions for, and suffers from a lack of usage experience. It also offers no way to distinguish between the case where \tcode{will_continue()} returns \tcode{false} because the implementation detected undefined behaviour following the evaluation of the contract annotation, and the case where \tcode{will_continue()} returns \tcode{false} because the chosen contract semantic will invoke (well-defined) termination, which feels like an important distinction to make in order to detect the relevant defect.
+
+At the same time, we cannot think of any other case, that is, any program with well-defined behaviour, where it would make sense for \tcode{will_continue()} to return \tcode{false} for the \emph{observe} semantic.
+
+\subsection{Usage as a shorthand for querying the semantic}
+
+If we are not using \tcode{will_continue()} to reason about vendor-specific contract semantics, and we are not using it for runtime detection of undefined behaviour, then the meaning of \tcode{will_continue()} is merely that it is a shorthand for \tcode{semantic == std::contracts::contract_semantic::observe}, similar to how \tcode{empty()} is a shorthand for \tcode{size() == 0}. Such a specification is very clear and does not suffer from any of the problems described earlier in this paper. It also does not seem useful enough to justify the addition of \tcode{will_continue()}, and the potential for confusion that comes with it, to the C++ Standard.
+
+\section{Summary}
+
+In this paper, we have discussed the enum value \mbox{\tcode{evaluation_undefined_behavior}} and the function \mbox{\tcode{will_continue()}} which are currently part of the standard library API of the Contracts MVP proposal \cite{P2900R4}. We identified several open questions around the meaning, correct specification, and motivating use cases for both facilities.
+
+\cite{P2900R4} motivates both facilities by the desire to programmatically report undefined behaviour detected at runtime by a sanitiser or similar tool. While this is a promising direction that should be explored further, it is not clear whether the proposed API is indeed the most suitable for this task; further, there are currently significant specification challenges as well as a lack of user experience with this approach.
+
+One of these two facilities, \tcode{will_continue()}, also has a potential use outside of the context of runtime detection of undefined behaviour. One suggested use case is for reasoning about vendor-specific contract semantics, however it is currently unclear how to specify the function such that it is usable for this purpose. The only other known use case for \tcode{will_continue()} is as a shorthand for querying the contract semantic (whether it is \emph{enforce} or \emph{observe}) by calling \tcode{semantic()} directly, which does not seem particularly useful.
+
+Overall, we do not believe that a proposal with this amount of open questions can be forwarded to EWG and LEWG for design review. Considering that these open questions are non-trivial; that there is currently a lack of consensus in SG21 on how to resolve them; that it will take time and effort to reach such consensus; and that neither \mbox{\tcode{evaluation_undefined_behavior}} nor \mbox{\tcode{will_continue()}}  are essential in order to use the Contracts MVP, or depended upon by any other part of the Contracts MVP, we propose that both be removed from the Contracts MVP at this stage and instead considered for standardisation as post-MVP extensions, in order to maximise our chances of getting the Contracts MVP into C++26.
+
+%\section*{Document history}
+
+%\begin{itemize}
+%\item \textbf{R0}, 2023-03-08: Initial version.
+%\item \textbf{R1}, 20XX-XX-XX: ??
+%\end{itemize}
+
+%\section*{Acknowledgements}
+
+%nothing here yet
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

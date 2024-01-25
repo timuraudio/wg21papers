@@ -13,7 +13,7 @@ Ville Voutilainen \small(\href{mailto:ville.voutilainen@gmail.com}{ville.voutila
 
 \begin{tabular}{ll}
 Document \#: & D3073R0 \\
-Date: &2024-01-23 \\
+Date: &2024-01-25 \\
 Project: & Programming Language C++ \\
 Audience: & SG21
 \end{tabular}
@@ -58,12 +58,16 @@ Discussion of this idea on the SG21 reflector revealed that there is no consensu
 
 We believe that adding a standard API to C++ for sanitisers and other tools to report undefined behaviour to the user is a very promising idea. This approach, if done right, has the potential to integrate three different strategies to mitigate undefined behaviour in C++ --- contract-violation handling, runtime detection of core language undefined behaviour, and the new concept of \emph{erroneous behaviour} currently in development (see \cite{P2795R4} and \cite{P2973R0}) --- into a single integrated facility designed to comprehensively address instances of undefined behavior in C++ that cannot be diagnosed at compile time. We are currently working on a paper exploring this approach, \cite{D3100R0}, and we are aware of at least one other paper currently in development that addresses integrating Contracts and erroneous behaviour.
 
-However, at present, we do not yet know exactly which extensions to the \mbox{\tcode{std::contracts::}} \mbox{\tcode{contract_violation}} API are needed to evolve it into a comprehensive API for runtime detection of undefined behaviour. As such, we consider it premature to add one part of such an API to the Standard, in the form of the single enum value \mbox{\tcode{evaluation_undefined_behavior}}, without having had a chance to discuss the other possible parts of such an API, or indeed consider this design space more holistically. It is not certain that this enum value is the correct design choice for such an API. If we diagnose instances of undefined behaviour at runtime and report them via this API, we might for example choose to:
+However, at present, we do not yet know exactly which extensions to the \mbox{\tcode{std::contracts::}} \mbox{\tcode{contract_violation}} API are needed to evolve it into a comprehensive API for runtime detection of undefined behaviour. As such, we consider it premature to add one part of such an API to the Standard, in the form of the single enum value \mbox{\tcode{evaluation_undefined_behavior}}, without having had a chance to discuss the other possible parts of such an API, or indeed consider this design space more holistically.
+
+In particular, it is not certain that undefined behaviour detected at runtime should call the same callback as diagnosed contract violations (in particular if this undefined behaviour happens outside of the evaluation of a contract predicate, which is a possibility not yet discussed in any paper targeting SG21 at the time of writing). It seems like a plausible direction, but adding \mbox{\tcode{evaluation_undefined_behaviour}} to the API of \mbox{\tcode{std::contracts::contract_violation}} now would effectively set this direction into stone before SG21 even had a chance to discuss it, which does not seem compatible with our usual consensus-finding process.
+
+Further, even if runtime detection of undefined behaviour is to re-use the same callback as diagnosed contract violations (that is, the contract-violation handler), it is not certain that this enum value is the correct design choice. If we diagnose instances of undefined behaviour at runtime and report them via this API, we might for example choose to:
 \begin{itemize}
-\item report the defect as an implicit precondition predicate that evaluated to \tcode{false}, such as an implicit precondition \tcode{p != nullptr} on a pointer dereference \tcode{*p}, in which case the enum value \tcode{predicate_false} might make more sense,
-\item report different kinds of undefined behaviour via different enum values rather than just a single value that captures all of them.
+\item report the defect as an implicit precondition or postcondition predicate that evaluated to \tcode{false}, such as an implicit precondition \tcode{p != nullptr} on a pointer dereference \tcode{*p}, or an implicit postcondition of \tcode{false} on a function marked \tcode{[[noreturn]]}, in which case the enum value \tcode{predicate_false} might make more sense,
+\item report different kinds of undefined behaviour via different enum values rather than just a single value that captures all of them, for example to programmatically distinguish defects that may compromise memory safety from defects that merely compromise correctness.
 \end{itemize}
-Moreover, it is not clear how \mbox{\tcode{evaluation_undefined_behavior}} would interact with other parts of the \mbox{\tcode{std::contracts::contract_violation}} API. Consider again the example of a sanitiser detecting undefined behaviour due to a null pointer dereference. What should \tcode{kind()} return in this case?
+Finally, it is not clear how \mbox{\tcode{evaluation_undefined_behavior}} would interact with other parts of the \mbox{\tcode{std::contracts::contract_violation}} API. Consider again the example of a sanitiser detecting undefined behaviour due to a null pointer dereference. What should \tcode{kind()} return in this case?
 \begin{itemize}
 \item If we wish to treat this case as the violation of an implicit precondition \tcode{p != nullptr}, we might want to return \tcode{contract_kind::pre}.
 \item Otherwise, we might want to return a non-standard \tcode{contract_kind} supplied by the implementation as a vendor extension.

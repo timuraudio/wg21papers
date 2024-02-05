@@ -34,7 +34,7 @@ For contract assertions in particular, we know of many use cases for annotating 
 \item explicit contract semantics such as \tcode{enforce}, \tcode{assume}, etc (this was proposed for C++20 Contracts in \cite{P1429R3}).
 \end{itemize}
 
-We do not propose adding any such labels to the Contracts MVP (they will be proposed as a post-MVP extension, see \cite{P2755R0} and \cite{P2885R3}). However, it would be very helpful if compiler vendors could already start experimenting with adding such labels to contract annotations to gain the necessary implementation experience. The best approach we can think of is to implement such labels as vendor-specific attributes. This is exactly what this paper seeks to allow.
+We do not propose adding any such labels for C++26; they should be considered as a post-MVP extension for C++29 (see \cite{P2755R0} and \cite{P2885R3}). However, it would be very helpful if compiler vendors could already start experimenting with adding such labels to contract annotations to gain the necessary implementation experience. The best approach we can think of is to implement such labels as vendor-specific attributes. This is exactly what this paper seeks to allow.
 
 \section{Discussion}
 
@@ -131,16 +131,16 @@ Modify the proposed Contracts MVP grammar in \cite{P2900R5} as follows:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 
 \emph{precondition-specifier:} \\
-\phantom{~~~}\tcode{pre} \added{\emph{attribute-specifier-seq}} \tcode{(} \emph{conditional-expression} \tcode{)}
+\phantom{~~~}\tcode{pre} \added{\emph{attribute-specifier-seq}$_{opt}$} \tcode{(} \emph{conditional-expression} \tcode{)}
 
 \emph{postcondition-specifier:} \\
-\phantom{~~~}\tcode{post} \added{\emph{attribute-specifier-seq}} \tcode{(} \emph{result-name-introducer$_{opt}$ conditional-expression} \tcode{)}
+\phantom{~~~}\tcode{post} \added{\emph{attribute-specifier-seq}$_{opt}$} \tcode{(} \emph{result-name-introducer$_{opt}$ conditional-expression} \tcode{)}
 
 \emph{result-name-introducer:} \\
 \phantom{~~~}\emph{identifier} \tcode{:}
 
 \emph{assertion-statement:} \\
-\phantom{~~~}\tcode{contract_assert} \added{\emph{attribute-specifier-seq}} \tcode{(} \emph{conditional-expression} \tcode{) ;}
+\phantom{~~~}\tcode{contract_assert} \added{\emph{attribute-specifier-seq}$_{opt}$} \tcode{(} \emph{conditional-expression} \tcode{) ;}
 
 \end{adjustwidth}
 

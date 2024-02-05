@@ -1,0 +1,169 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+\begin{document}
+\title{Attributes for contract assertions}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})  \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P3088R0 \\
+Date: &2024-02-05 \\
+Project: & Programming Language C++ \\
+Audience: & SG21
+\end{tabular}
+
+\begin{abstract}
+In this paper, we propose to add an \emph{attribute-specifier-seq} to the grammar for contract assertions in the Contracts MVP. While this does not directly change what the user can do with the Contracts MVP, it follows the usual practice of allowing an \emph{attribute-specifier-seq} on any syntactic construct where this makes sense. It also allows compiler vendors to experiment with adding labels to contract assertions while still being conformant. 
+\end{abstract}
+
+\section{Motivation}
+\label{sec:intro}
+
+In the C++ Standard, we have a long-standing practice of allowing an \emph{attribute-specifier-seq} on any syntactic construct where this makes sense. Where such allowance is missing, it is typically added later via Core Issues, see for example \cite{CWG1657} and \cite{CWG2262}. Note that the latter allows attributes on an \emph{asm-definition}, even though the C++ Standard itself does not contain any attributes that would appertain to an \emph{asm-definition}. This allowance exists for compiler vendors to be able to ship vendor extensions while still being conformant.
+
+For contract assertions in particular, we know of many use cases for annotating them with labels, for example to express certain properties that will affect which contract semantic is chosen for their evaluation:
+\begin{itemize}
+\item contract levels such as \tcode{audit}, indicating that checking the contract assertion would violate the complexity and/or performance guarantees of a function (this was part of C++20 Contracts, see \cite{P0542R5});
+\item contract roles such as \tcode{new}, indicating that the contract assertion was newly added to a legacy codebase;
+\item explicit contract semantics such as \tcode{enforce}, \tcode{assume}, etc (this was proposed for C++20 Contracts in \cite{P1429R3}).
+\end{itemize}
+
+We do not propose adding any such labels to the Contracts MVP (they will be proposed as a post-MVP extension, see \cite{P2755R0} and \cite{P2885R3}). However, it would be very helpful if compiler vendors could already start experimenting with adding such labels to contract annotations to gain the necessary implementation experience. The best approach we can think of is to implement such labels as vendor-specific attributes. This is exactly what this paper seeks to allow.
+
+\section{Discussion}
+
+In order for this paper to be a complete proposal, we need to find the ideal location in the grammar for contract assertions where an \emph{attribute-specifier-seq} can be inserted. The fundamental principle of the attribute grammar is that the places where we put attributes always clearly appertain to one entity. A syntax that makes it ambiguous whether an attribute in that location would apply to the contract  assertion or to something else is not fit for purpose. In this section, we discuss the possible choices.
+
+\subsection{Before the contract assertion}
+
+We could consider placing the \emph{attribute-specifier-seq} before the contract assertion:
+\begin{codeblock}
+bool binary_search(Range r, const T& value)
+  [[vendor::audit]] pre (is_sorted(r));
+  
+void f() {
+  int i = get_i();
+  [[vendor::assume]] contract_assert (i > 0);
+  // ...
+}
+\end{codeblock}
+
+For \tcode{contract_assert}, this would be most consistent with other statements: an attribute appertaining to a statement usually goes before that statement. However, for \tcode{pre} and \tcode{post}, this position has at least two problems. First, it would involve identifying something as part of a
+contract assertion before seeing the contextual keyword \tcode{pre} or \tcode{post}, which would be naturally challenging for implementations and
+readability. Second, it would collide with the existing grammar for an attribute appertaining to a \emph{lambda-expression}:
+
+\begin{codeblock}
+auto f = [](int i) [[vendor::xxx]]  // this attribute appertains to the lambda-expression
+  pre (i > 0) {
+  // ...
+}
+\end{codeblock}
+
+This option is therefore not viable for \tcode{pre} or \tcode{post}. Regarding the possibility of adopting this option for \tcode{contract_assert}, we believe that it is more important for the syntax of \tcode{contract_assert} to be consistent with that of \tcode{pre} and \tcode{post} --- since all three belong to the same language facility --- than to be consistent with other kinds of statements.
+
+\subsection{After the contract assertion}
+We could consider placing the \emph{attribute-specifier-seq} after the contract assertion:
+\begin{codeblock}
+bool binary_search(Range r, const T& value)
+  pre (is_sorted(r)) [[vendor::audit]];
+  
+void f() {
+  int i = get_i();
+  contract_assert (i > 0) [[vendor::assume]];
+  // ...
+}
+\end{codeblock}
+While this grammar location is \emph{technically} possible --- as far as we can tell, it does not create any outright collisions with existing grammar --- it is far from ideal, in particularly because it is not obvious to the reader what the attribute appertains to:
+\begin{codeblock}
+// which \tcode{pre} does the attribute appertain to?
+void f(int* i) pre(i != nullptr) [[vendor::xxx]] pre (*i > 0);  
+
+// does the attribute appertain to the \tcode{pre} or to the function \tcode{g} as a whole?
+void g(int j) pre(j > 0) [[ vendor::yyy]]; 
+\end{codeblock}
+
+We therefore prefer to not adopt this option.
+
+\subsection{Inside the predicate}
+
+We could consider placing the  \emph{attribute-specifier-seq} somewhere inside the contract predicate, for example
+\begin{codeblock}
+void f(int i) 
+  pre ([[vendor::xxx]] i > 0);
+\end{codeblock}
+or
+\begin{codeblock}
+void f(int i) 
+  pre (i > 0 [[vendor::xxx]]);
+\end{codeblock}
+However, this location is confusing as it suggests that the attribute would appertain to the expression rather than to the contract assertion as a whole. The  first variant also has the problem that for \tcode{post}, it is unclear whether the attribute would instead appertain to the \emph{result-name-introducer}. We therefore prefer a location outside of the predicate.
+
+\subsection{After the \tcode{pre}, \tcode{post}, or \tcode{contract_assert} keyword}
+
+The remaining possible syntactic position is just after the \tcode{pre}, \tcode{post}, or \tcode{contract_assert} keyword:
+
+\begin{codeblock}
+bool binary_search(Range r, const T& value)
+  pre [[vendor::audit]] (is_sorted(r));
+  
+void f() {
+  int i = get_i();
+  contract_assert [[vendor::assume]] (i > 0);
+  // ...
+}
+\end{codeblock}
+
+Being between the two other elements that are part of the contract assertion itself --- the keyword and the predicate --- this location is always unambiguous. It also has the advantage that attributes applying to varied precondition or postcondition specifiers can be formatted and indented in a consistent manner, not hanging off far from the \tcode{pre} or \tcode{post} separated by an arbitrarily complex expression.
+
+Since this position is the only one not suffering from any obvious problems, it is the one we propose in this paper.
+
+\section{Proposed wording}
+
+Modify the proposed Contracts MVP grammar in \cite{P2900R5} as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+
+\emph{precondition-specifier:} \\
+\phantom{~~~}\tcode{pre} \added{\emph{attribute-specifier-seq}} \tcode{(} \emph{conditional-expression} \tcode{)}
+
+\emph{postcondition-specifier:} \\
+\phantom{~~~}\tcode{post} \added{\emph{attribute-specifier-seq}} \tcode{(} \emph{result-name-introducer$_{opt}$ conditional-expression} \tcode{)}
+
+\emph{result-name-introducer:} \\
+\phantom{~~~}\emph{identifier} \tcode{:}
+
+\emph{assertion-statement:} \\
+\phantom{~~~}\tcode{contract_assert} \added{\emph{attribute-specifier-seq}} \tcode{(} \emph{conditional-expression} \tcode{) ;}
+
+\end{adjustwidth}
+
+Modify [\href{https://eel.is/c++draft/dcl.attr.grammar#1.sentence-1}{dcl.attr.grammar}] p1 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+
+Attributes specify additional information for various source constructs such as types, variables, names, \added{contract assertions, }blocks, or translation units.
+
+\end{adjustwidth}
+
+%\section*{Document history}
+
+%\begin{itemize}
+%\item \textbf{R0}, 2023-03-08: Initial version.
+%\item \textbf{R1}, 20XX-XX-XX: ??
+%\end{itemize}
+
+%\section*{Acknowledgements}
+
+%nothing here yet
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

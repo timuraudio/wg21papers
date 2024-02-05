@@ -54,7 +54,7 @@ void f() {
 }
 \end{codeblock}
 
-For \tcode{contract_assert}, this would be most consistent with other statements: an attribute appertaining to a statement usually goes before that statement. However, for \tcode{pre} and \tcode{post}, this position has at least two problems. First, it would involve identifying something as part of a
+For \tcode{contract_assert}, this would be the choice most consistent with other statements: an attribute appertaining to a statement usually goes before that statement. However, for \tcode{pre} and \tcode{post}, this position has at least two problems. First, it would involve identifying something as part of a
 contract assertion before seeing the contextual keyword \tcode{pre} or \tcode{post}, which would be naturally challenging for implementations and
 readability. Second, it would collide with the existing grammar for an attribute appertaining to a \emph{lambda-expression}:
 
@@ -82,10 +82,11 @@ void f() {
 While this grammar location is \emph{technically} possible --- as far as we can tell, it does not create any outright collisions with existing grammar --- it is far from ideal, in particularly because it is not obvious to the reader what the attribute appertains to:
 \begin{codeblock}
 // which \tcode{pre} does the attribute appertain to?
-void f(int* i) pre(i != nullptr) [[vendor::xxx]] pre (*i > 0);  
+void f(int* i)
+  pre(i != nullptr) [[vendor::xxx]] pre (*i > 0);  
 
 // does the attribute appertain to the \tcode{pre} or to the function \tcode{g} as a whole?
-void g(int j) pre(j > 0) [[ vendor::yyy]]; 
+void g(int j) pre(j > 0) [[vendor::yyy]]; 
 \end{codeblock}
 
 We therefore prefer to not adopt this option.
@@ -102,7 +103,7 @@ or
 void f(int i) 
   pre (i > 0 [[vendor::xxx]]);
 \end{codeblock}
-However, this location is confusing as it suggests that the attribute would appertain to the expression rather than to the contract assertion as a whole. The  first variant also has the problem that for \tcode{post}, it is unclear whether the attribute would instead appertain to the \emph{result-name-introducer}. We therefore prefer a location outside of the predicate.
+However, this option is confusing as it suggests that the attribute would appertain to the expression rather than to the contract assertion as a whole. The  first variant also has the problem that for \tcode{post}, it is unclear whether the attribute would instead appertain to the \emph{result-name-introducer}. We therefore prefer a location outside of the predicate.
 
 \subsection{After the \tcode{pre}, \tcode{post}, or \tcode{contract_assert} keyword}
 
@@ -119,7 +120,7 @@ void f() {
 }
 \end{codeblock}
 
-Being between the two other elements that are part of the contract assertion itself --- the keyword and the predicate --- this location is always unambiguous. It also has the advantage that attributes applying to varied precondition or postcondition specifiers can be formatted and indented in a consistent manner, not hanging off far from the \tcode{pre} or \tcode{post} separated by an arbitrarily complex expression.
+Being between the two other elements that are part of the contract assertion itself --- the keyword and the predicate --- this location is always unambiguous, both for the C++ parser and the human reader. It also has the advantage that attributes applying to varied precondition or postcondition specifiers can be formatted and indented in a consistent manner, not hanging off far from the \tcode{pre} or \tcode{post} separated by an arbitrarily complex expression.
 
 Since this position is the only one not suffering from any obvious problems, it is the one we propose in this paper.
 
@@ -143,6 +144,7 @@ Modify the proposed Contracts MVP grammar in \cite{P2900R5} as follows:
 
 \end{adjustwidth}
 
+\pagebreak %MANUAL%%%%%%%
 Modify [\href{https://eel.is/c++draft/dcl.attr.grammar#1.sentence-1}{dcl.attr.grammar}] p1 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}

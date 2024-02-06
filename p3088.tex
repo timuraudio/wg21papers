@@ -30,12 +30,11 @@ In the C++ Standard, we have a long-standing practice of allowing an \emph{attri
 For contract assertions in particular, we know of many use cases for annotating them with labels, for example to express certain properties that will affect which contract semantic is chosen for their evaluation:
 \begin{itemize}
 \item contract levels such as \tcode{audit}, indicating that checking the contract assertion would violate the complexity and/or performance guarantees of a function (this was part of C++20 Contracts, see \cite{P0542R5});
-%JMB: changed "roles" to "properties" --- roles are a loaded term that don't fit here.
-\item contract properties such as being \tcode{new}, indicating that the contract assertion was newly added to a legacy codebase;
+\item contract properties such as \tcode{new}, indicating that the contract assertion was newly added to a legacy codebase;
 \item explicit contract semantics such as \tcode{enforce}, \tcode{assume}, etc (this was proposed for C++20 Contracts in \cite{P1429R3}).
 \end{itemize}
 
-We do not propose adding any such labels for C++26; they should be considered as a post-MVP extension for C++29 (see \cite{P2755R0} and \cite{P2885R3}). However, it would be very helpful if compiler vendors could already start experimenting with adding such labels to contract annotations to gain the necessary implementation experience. The best approach we can think of is to implement such labels as vendor-specific attributes. This is exactly what this paper seeks to allow.
+We do not propose adding any such labels to contract assertions for C++26; they should be considered as a post-MVP extension for C++29 (see \cite{P2755R0} and \cite{P2885R3}). However, it would be very helpful if compiler vendors could already start experimenting with adding labels to contract assertions as vendor extensions to gain the necessary implementation and usage experience. The best approach we can think of is to implement such labels as vendor-specific attributes, e.g. \tcode{[[vendor::audit]]}. This is exactly what this paper seeks to allow.
 
 \section{Discussion}
 
@@ -104,7 +103,7 @@ or
 void f(int i) 
   pre (i > 0 [[vendor::xxx]]);
 \end{codeblock}
-However, this option is confusing as it suggests that the attribute would appertain to the expression rather than to the contract assertion as a whole. The  first variant also has the problem that for \tcode{post}, it is unclear whether the attribute would instead appertain to the \emph{result-name-introducer}. We therefore prefer a location outside of the predicate.
+However, this option is confusing as it suggests that the attribute would appertain to the expression rather than to the contract assertion as a whole. This is not actually possible (under the current grammar rules, an \emph{attribute-specifier-seq} cannot appertain directly to a \emph{conditional-expression}; in every case where an \emph{attribute-specifier-seq} might be part of an expression is nested within another grammar construct and not adjacent to other constructs that can have attributes) and therefore technically there is no ambiguity, but this choice does not seem friendly to the human reader. The  first variant also has the problem that for \tcode{post}, it is unclear whether the attribute would instead appertain to the \emph{result-name-introducer}. We therefore prefer a location outside of the predicate.
 
 \subsection{After the \tcode{pre}, \tcode{post}, or \tcode{contract_assert} keyword}
 
@@ -143,19 +142,13 @@ Modify the proposed Contracts MVP grammar in \cite{P2900R5} as follows:
 \emph{assertion-statement:} \\
 \phantom{~~~}\tcode{contract_assert} \added{\emph{attribute-specifier-seq}$_{opt}$} \tcode{(} \emph{conditional-expression} \tcode{) ;}
 
+\added{The optional \emph{attribute-specifier-seq} appertains to the introduced contract assertion.}
 \end{adjustwidth}
 
-\pagebreak %MANUAL%%%%%%%
 Modify [\href{https://eel.is/c++draft/dcl.attr.grammar#1.sentence-1}{dcl.attr.grammar}] p1 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-
 Attributes specify additional information for various source constructs such as types, variables, names, \added{contract assertions, }blocks, or translation units.
-
-%JMB: We need to explicitly say that this attribute-specifier-seq in a function-contract-specifier (or assertion-statement) appertains to the corresponding contract assertion.
-%     Not really needed for thursday, but should be there  in the final wording.   Basically, right after
-%     the grammar, put in "The optional attribute-specifier-seq appertains to the introduced contract assertion."
-
 \end{adjustwidth}
 
 %\section*{Document history}

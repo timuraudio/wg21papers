@@ -30,7 +30,8 @@ In the C++ Standard, we have a long-standing practice of allowing an \emph{attri
 For contract assertions in particular, we know of many use cases for annotating them with labels, for example to express certain properties that will affect which contract semantic is chosen for their evaluation:
 \begin{itemize}
 \item contract levels such as \tcode{audit}, indicating that checking the contract assertion would violate the complexity and/or performance guarantees of a function (this was part of C++20 Contracts, see \cite{P0542R5});
-\item contract roles such as \tcode{new}, indicating that the contract assertion was newly added to a legacy codebase;
+%JMB: changed "roles" to "properties" --- roles are a loaded term that don't fit here.
+\item contract properties such as being \tcode{new}, indicating that the contract assertion was newly added to a legacy codebase;
 \item explicit contract semantics such as \tcode{enforce}, \tcode{assume}, etc (this was proposed for C++20 Contracts in \cite{P1429R3}).
 \end{itemize}
 
@@ -150,6 +151,10 @@ Modify [\href{https://eel.is/c++draft/dcl.attr.grammar#1.sentence-1}{dcl.attr.gr
 \begin{adjustwidth}{0.5cm}{0.5cm}
 
 Attributes specify additional information for various source constructs such as types, variables, names, \added{contract assertions, }blocks, or translation units.
+
+%JMB: We need to explicitly say that this attribute-specifier-seq in a function-contract-specifier (or assertion-statement) appertains to the corresponding contract assertion.
+%     Not really needed for thursday, but should be there  in the final wording.   Basically, right after
+%     the grammar, put in "The optional attribute-specifier-seq appertains to the introduced contract assertion."
 
 \end{adjustwidth}
 

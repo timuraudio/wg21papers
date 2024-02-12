@@ -1,0 +1,112 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+\begin{document}
+\title{Contracts, Undefined Behaviour, and Erroneous Behaviour}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})  
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3100R0 \\
+Date: &2024-01-25 \\
+Project: & Programming Language C++ \\
+Audience: & EWG, SG21, SG23
+\end{tabular}
+
+\begin{abstract}
+The presence of undefined behaviour in C++ is a major safety and security issue. While some instances of undefined behaviour can be identified at compile time via static analysis, or could be made identifiable at compile time through changes to the language specification, some instances of undefined behaviour will remain detectable only at runtime for the foreseeable future. In this paper, we consider three seemingly unrelated methods to detect such undefined behaviour and turn it into well-defined behaviour: the introduction of contract checks, the usage of sanitisers capable of detecting undefined behaviour by instrumenting the code, and the re-specification of undefined behaviour as erroneous behaviour. We show how all three methods can be interpreted as special cases of a more generic framework for reasoning about, detecting, and reporting bugs in C++ programs. We propose to adopt this framework, consisting of changes to the language specification as well as a standard library API, into the C++ Standard, enabling a unified strategy for addressing runtime undefined behaviour to achieve a better, safer, C++ ecosystem.
+\end{abstract}
+
+\section{Motivation}
+\label{sec:intro}
+
+Improving safety and security is arguably the most important challenge for the future evolution of the C++ language (\cite{Bastien2023}). According to the definition in \cite{Carruth2023}, safety is characterised by invariants or limits on program behaviour in the face of bugs; safety bugs are bugs where some aspect of program behaviour has no invariants or limits. According to the definition of \cite{Abrahams2023}, a safe operation is one that cannot cause undefined behaviour; a safe language has only safe operations. According to these definitions, C++ is not a safe language: both the core language and the C++ standard library allow for a multitude of ways in which a well-formed C++ can exhibit undefined behaviour, that is, situations in which the C++ standard places no restrictions on the behaviour of the program. Bugs that trigger undefined behaviour cause stability issues and can be exploited by threat actors, thereby causing security vulnerabilities.
+
+C++ currently lacks a generic approach for identifying and removing undefined behaviour. The concept itself is notoriously difficult to teach and understand; consequences of undefined behaviour such as time travel optimisations are in general unpredictable and notoriously hard to reason about. In the context of safety and security, a concern of particular importance is memory safety, which can be defined as a guarantee that the program will only read or write intended memory even in the face of bugs (\cite{Carruth2023}); undefined behaviour is particularly harmful because it compromises memory safety. Practice has shown that even when putting significant effort and resources into detecting, fixing, and mitigating undefined behaviour, memory safety bugs due to undefined behaviour continue to represent the majority of high-severity security vulnerabilities and stability issues (\cite{NSA2022}, \cite{CR2023}, \cite{CISA2023}). This evidence has prompted government agencies and other responsible bodies to call for an industry-wide shift away from C and C++ and towards using memory safe languages such as Rust and Java whenever possible.
+
+Realistically, we do not believe that it is possible to evolve C++ into a fully memory-safe language in the foreseeable future (\cite{Doumler2023}). That said, as the body responsible for the evolution of the C++ language, the C++ committee has an ethical obligation to meaningfully improve the safety of the C++ language, which we believe has a much higher chance of success when done in a holistic way rather than just by applying individual fixes to the language specification. Such meaningful change can be brought about by agreeing on a road map, consisting of a set of concrete strategies to transform as many instances of undefined behaviour as possible into well-defined behaviour. These strategies should prioritise instances of undefined behaviour that tend to cause the most harmful security vulnerabilities and stability issues, while at the same time not compromising the other desirable properties that make C++ a popular programming language, first of all performance and backwards-compatibility.
+
+In this paper, we propose one such strategy, addressing a entire category of undefined behaviour and complementing other strategies addressing other such categories. More concretely, we propose a unified framework for reasoning about, detecting, and reporting at runtime bugs in C++ programs due to undefined behaviour not identifiable at compile time. Our proposal generalises the contract-checking facility proposed in \cite{P2900R4} to extend to core undefined behaviour and undefined behaviour due to violating  preconditions in the C++ standard library, and supersedes recent proposals that introduce the notion of \emph{erroneous behaviour} (\cite{P2795R4}, \cite{P2973R0}).
+
+\section{Undefined behaviour}
+
+\subsection{High-level categorisation}
+
+We begin with a high-level categorisation of undefined behaviour in C++. At the top level, we can distinguish between \emph{explicit} undefined behaviour (a situation for which the C++ Standard explicitly states that the behaviour is undefined) and \emph{implicit} undefined behaviour (a situation where undefined behaviour arises because the C++ Standard omits any explicit definition of behaviour for the given situation); see \href{https://eel.is/c++draft/defns.undefined}{[defns.undefined]}. We can further distinguish between so-called \emph{core} undefined behaviour (a situation where the behaviour of evaluating a core language expression is undefined; an extensive list of such situations is given in \cite{P1705R1}) and \emph{library} undefined behaviour (a situation where the user fails to satisfy the precondition of a function in the C++ standard library, as defined in \href{https://eel.is/c++draft/structure.specifications}{[structure.specifications]} and listed in clauses \href{https://eel.is/c++draft/support}{[support]} through \href{https://eel.is/c++draft/thread}{[thread]}).
+
+Undefined behaviour is inherently a runtime property, i.e. it manifests itself at the point when control flow of the program reaches a construct for which the behaviour is undefined. Even though undefined behaviour always manifests itself at runtime, we can make a key categorisation of undefined behaviour by placing it into one of two buckets. The first bucket contains instances of undefined behaviour where the offending construct is, at least in principle, identifiable at compile time, for example through static analysis, and thus can be made ill-formed through appropriate changes to the language specification; the second bucket contains instances where this is not the case.
+
+The first bucket includes a broad range of undefined behaviour and can be arranged on a spectrum along how wide-ranging the changes to the language would have to be in order to make the offending construct ill-formed, in other words, how many other constructs that are \emph{valid} in C++ today would have to be made ill-formed along with it. This spectrum ranges from ``none'' to ``severe''. Close to the ``none'' end of the spectrum we find things like \tcode{\#define}-ing away keywords or flowing off the end of a value-returning function. At the ``severe'' end, we find undefined behaviour due to invalid memory accesses: mitigating these at compile time would require an approach along the lines of Rust's borrow checker or Hylo's mutable value semantics, which boils down to banning shared mutable references in some way or another and thereby making the vast majority of existing C++ programs ill-formed.
+
+The second bucket is typically characterised by a computation which sometimes results in undefined behaviour, but the circumstances under which this happens depend on input values that are in general unknowable at compile time. An example is signed integer overflow, which is diagnosable at compile time under certain circumstances (for example, when adding two signed integers whose values happen to be known at compile time), but not in the general case.
+
+\subsection{Scope of this proposal}
+
+Many current and past efforts towards increasing safety in C++ seek to eliminate undefined behaviour by moving particular constructs from the second bucket into the first bucket. Some efforts take place outside of the standardisation process and focus on coding guidelines (e.g. MISRA, Core Guidelines) and static analysis (e.g. SonarSource, PVS-Studio, Coverity). Other efforts seek to achieve this goal by evolving the specification of C++ to make more constructs statically checkable, such as recent work on safety profiles (\cite{P2687R0}) and lifetime annotations (\cite{P2771R1}), or by moving to a successor language (Carbon, Circle, Cpp2) where static guarantees can be achieved more easily.
+
+This proposal is complementary to all these efforts by focusing on undefined behaviour that remains in the second bucket. If undefined behaviour is not identified at compile time, it must instead be addressed by making the runtime behaviour well-defined, allowing the program to detect and report the bug or at least fall back to some form of safe behaviour (which may be incorrect and/or less performant, but no longer undefined). In the next section, we describe three seemingly unrelated methods to achieve this: contract checks, sanitisers, and erroneous behaviour. As we will see later, all three can actually be interpreted as special cases of a more generic framework for reasoning about, detecting, and reporting bugs in C++ programs.
+
+\section{Runtime detection and mitigation strategies}
+
+\subsection{Contract checks}
+
+A \emph{contract} is a formal interface specification for a software component such as a function or a class. It is a set of conditions that expresses expectations on how the component interoperates with other components in a correct program, in accordance with a conceptual metaphor with the conditions and obligations of legal contracts. Function contracts consist of \emph{preconditions} (requirements placed on the arguments passed to a function and/or the global state of the program upon entry into the function) and \emph{postconditions} (requirements placed on the return value of the function or the state of global objects when a function completes execution normally). 
+
+Contracts are often specified in human language in the documentation of the software, for example in the form of comments within the code or in a separate specification document; a contract specified in this way is a \emph{plain language contract}. However, conditions that are part of a contract can also be specified in code, making them checkable. In C++ today, this can be accomplished by using assertion macros; \cite{P2900R4} proposes a Contracts facility as a core language feature. The latter provides significant advantages such as being able to specify preconditions and postconditions on function declarations and standardise the semantics of handling contract violations, enabling the use of Contracts at scale.
+
+// TODO WRITE MORE //
+
+\subsection{Sanitisers}
+
+// TODO //
+
+\subsection{Erroneous behaviour}
+
+ Changing the language by giving the UB defined behaviour at runtime, while still acknowledging that it is an error and allowing implementations to diagnose: erroneous behaviour. Downside: tradeoffs with correctness, performance, and language complexity. Performance tradeoff is a problem. So we need to give an escape hatch. This drives up the language complexity because there is no uniform approach.
+ 
+// TODO // 
+
+\section{Contract all the things! Towards a unified framework}
+
+\subsection{Mapping erroneous behaviour to Contracts}
+
+observe by default, assume as opt-in
+
+\subsection{Mapping undefined behaviour to Contracts}
+
+assume by default, need to define well-defined behaviour for ignore (terminate?)
+
+\subsection{Mapping sanitisers to Contracts}
+
+// TODO //
+
+\section{Proposal}
+
+\subsection{Language}
+
+\subsection{Library}
+
+\section{Summary}
+
+
+
+%\section*{Document history}
+
+%\begin{itemize}
+%\item \textbf{R0}, 2023-03-08: Initial version.
+%\item \textbf{R1}, 20XX-XX-XX: ??
+%\end{itemize}
+
+%\section*{Acknowledgements}
+
+%nothing here yet
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

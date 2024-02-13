@@ -19,7 +19,7 @@ Audience: & SG21
 \end{tabular}
 
 \begin{abstract}
-In this paper, we discuss several ways in which attributes could appertain to a contract assertion. The grammar in the Contracts MVP does not currently allow this, but it would be useful to allow it. We propose an infix location for contracts-specific attributes appertaining to any form of contract assertion, which could be useful for vendor-specific mechanisms to add local control to the various implementation-defined aspects of the Contracts MVP.  Further, we propose that assertion statements, as with all other statements that evaluated at runtime, support a prefix location for non-contracts-specific attributes.
+In this paper, we discuss several ways in which attributes could appertain to a contract assertion. The grammar in the Contracts MVP does not currently allow this, but it would be useful to allow it. We propose an infix location for contracts-specific attributes appertaining to any form of contract assertion, which could be useful for vendor-specific mechanisms to add local control to the various implementation-defined aspects of the Contracts MVP.  Further, we propose that assertion statements, like all other statements evaluated at runtime, support a prefix location for non-contracts-specific attributes.
 \end{abstract}
 
 \section{Introduction}
@@ -34,7 +34,7 @@ The same motivation applies to contract assertions, which the Contracts MVP pape
 \begin{enumerate}
 \item Contracts-specific attributes that can appertain to any contract assertion (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}), for example, vendor-specific labels that influence the implementation-defined choice of semantic with which a contract assertion will be evaluated --- something the contracts MVP does not currently allow for.
 
-\item Attributes that can appertain to any statement that involves some runtime evaluation, such as \tcode{[[likely]]} and \tcode{[[unlikely]]}. The grammar in \cite{P2900R5} does not allow such attributes to appertain to an \emph{assertion-statement}, making it the odd duck among C++ statements that have runtime behaviour.
+\item Attributes such as \tcode{[[likely]]} and \tcode{[[unlikely]]} that can appertain to any statement that involves some runtime evaluation. The grammar in \cite{P2900R5} does not allow such attributes to appertain to an \emph{assertion-statement}, making it the odd duck among C++ statements that have runtime behaviour.
 \end{enumerate}
 
 This paper contains a proposal for each category of attributes, described in Section \ref{sec:labels} and Section \ref{sec:stmt}, respectively. These two proposals can be adopted into the Contracts MVP either together or separately.

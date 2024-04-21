@@ -17,10 +17,10 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P3228R0 \\
-Date: &2024-04-16 \\
+Document \#: & D3228R1 \\
+Date: &2024-04-20 \\
 Project: & Programming Language C++ \\
-Audience: & SG21
+Audience: & SG21, EWG
 \end{tabular}
 
 \begin{abstract}
@@ -32,9 +32,9 @@ This paper attempts to inform and structure to the discussion whether the Contra
 \section{Introduction}
 \label{sec:intro}
 
-The current Contracts MVP \cite{P2900R6}, as forwarded by SG21 to EWG and LEWG for design review, allows contract predicates that have side effects when evaluated. We have consensus that this is useful: when performing a contract check, the user might want to do things like allocating memory (for example, to perform an algorithm that asserts some non-trivial property of a range), lock and unlock a mutex (for example, to assert the value of a variable that can be accessed concurrently), or maintain some state (for example, to assert that the depth of a recursive function call has not exceeded a certain limit). Even \cite{P2680R1}, a direction paper proposing that contract predicates with side effects should be ill-formed by default, allowed for ``relaxed'' predicates that can exhibit such side effects. We therefore need to have a solid specification for how such predicates should behave.
+The current Contracts MVP \cite{P2900R6}, as forwarded by SG21 to EWG and LEWG for design review, allows contract predicates that have side effects when evaluated. While side effects that modify the essential behaviour of the program are discouraged (contract assertions should assert the correctness of a program without altering it), other side effects can be useful. For example, when performing a contract check, the user might want to do things like allocating memory (for example, to perform an algorithm that asserts some non-trivial property of a range), lock and unlock a mutex (for example, to assert the value of a variable that can be accessed concurrently), or maintain some state (for example, to assert that the depth of a recursive function call or the number of times a particular statement has been executed has not exceeded a certain limit). Even \cite{P2680R1}, a direction paper proposing that contract predicates with side effects should be ill-formed by default, allowed for ``relaxed'' predicates that can exhibit such side effects. We therefore need to have a solid specification for how such predicates should behave.
 
-\cite{P2900R6} currently specifies that for a \emph{checked} contract assertion, the predicate evaluation may be elided if the compiler can prove that the result of such an evaluation would be \tcode{true} or \tcode{false}. Further, it specifies that at any point within a contract assertion sequence, any previously evaluated contract assertions may be evaluated again. Effectively this means that, if a predicate has observable side effects, those side effects may occur zero, one or more times, with no upper bound on the number of possible evaluations.
+\cite{P2900R6} currently specifies that for a \emph{checked} contract assertion, the predicate evaluation may be elided if the compiler can prove that the result of such an evaluation would be \tcode{true} or \tcode{false}. Further, it specifies that at any point within a contract assertion sequence, any previously evaluated contract assertions may be evaluated again, and such repetitions can occur an arbitrary number of times. Effectively this means that, if a predicate has observable side effects, those side effects may occur zero, one or more times, with no upper bound on the number of possible evaluations.
 
 At the March 2024 WG21 meeting in Tokyo, several issues with this approach were discovered, leading to the realisation that SG21 needs to rediscuss this part of \cite{P2900R6}'s specification and either adopt a different solution that addresses these issues, or at least reconfirm that we consider the current design correct and strengthen the motivation for it.  This paper serves to inform and structure that discussion.
 
@@ -87,26 +87,28 @@ There are several reasons why a guarantee that the predicate is evaluated a dete
 
 More generally, a deterministic number of evaluations is required if we wish to minimise the amount of implementation-defined and unspecified behaviour added to the C++ language by the Contracts MVP. This is something that has been brought up as a significant concern in EWG.
 
-More specifically, deterministic behaviour is a requirement in some safety-critical systems, which may be unable to use Contracts at all unless this requirement is satisfied. Note that this does not necessarily mean a deterministic execution time, or a deterministic sequence of CPU instructions, but a deterministic observable behaviour with regard to side effects. In other words, eliding the evaluation of a side-effect-free predicate would be a normal optimisation transformation and unobservable under the as-if rule, while eliding the evaluation of a predicate with side effects would make the behaviour of a \emph{checked} contract assertion observably non-deterministic, which is undesirable. The only situation where this happens in the language today is copy elision; for some use cases, it may be considered undesirable to add more such situations.
+More specifically, deterministic behaviour is a requirement in some safety-critical systems, which may be unable to use Contracts at all unless this requirement is satisfied. Note that this does not necessarily mean a deterministic execution time, or a deterministic sequence of CPU instructions, but a deterministic observable behaviour with regard to side effects. In other words, eliding the evaluation of a side-effect-free predicate would be a normal optimisation transformation and unobservable under the as-if rule, while eliding the evaluation of a predicate with side effects would make the behaviour of a \emph{checked} contract assertion observably non-deterministic, which is undesirable. The only situation where this happens in the language today is copy elision; some consider it undesirable to add more such situations.
+
+Contract predicates that neither maintain internal state nor modify the state of the program still can have observable side effects. Examples that occur in practice are checking a value in the contract predicate that may be concurrently accessed from other threads, which requires locking a mutex and unlocking it again afterwards, or allocating a scratch buffer for an algorithm that proves some property on a range passed into or returned from a function. It might be beneficial to be able to reason about how many times such a contract assertion will attempt to acquire a lock, or allocate memory, rather than having such events occur an unspecified, non-deterministic amount of times when contract checks are enabled.
 
 \subsection{Exactly one evaluation}
-If we constrain ``deterministic number of evaluations'' further to ``exactly one evaluation'', we gain more properties that one might consider desirable. ``Exactly one evaluation'' seems to be the only reasonable implementation of ``deterministic number of evaluations'' (we see no possible reason why one would want to specify, for example, that each contract assertion is always evaluated twice), therefore we consider them to be the same requirement for the remainder of this paper.
+If we constrain ``deterministic number of evaluations'' further to ``exactly one evaluation'', we gain more potentially desirable properties. ``Exactly one evaluation'' seems to be the only reasonable implementation of ``deterministic number of evaluations'' (we see no possible reason why one would want to specify, for example, that each contract assertion is always evaluated twice), therefore we consider them to be the same requirement for the remainder of this paper.
 
-\cite{P2756R0} argues that ``exactly one evaluation'' is the most simple, intuitive, and easy to reason about solution, and the only one that follows existing practice in \tcode{assert} and similar macros --- meaning that this is the behaviour a user would expect when upgrading their uses of such macros to \cite{P2900R6} contract assertions.
+\cite{P2756R0} argues that ``exactly one evaluation'' is the most simple, intuitive, and easy to reason about solution, and the only one that follows existing practice in \tcode{assert} and similar macros. This is also the approach that all other programming languages with a Contracts facility (Ada, D\footnote{Notably, the D programming language actually has a facility to reject functions with side effects at compile time --- functions can be annotated to be ``pure'' --- but chooses to not require contract predicates to be ``pure''. Contract predicates are therefore allowed to have side effects, like in the other programming languages, which are guaranteed to occur either zero times (when contract checks are off) or exactly once (when contract checks are on), although the D documentation does note that predicates with side effects are discouraged.}, Eiffel, etc.) follow: contract checks can be enabled or disabled, but when they are enabled, the predicate is evaluated exactly once, and any potential side effects are observed exactly once. It is therefore likely that this is the behaviour most users would assume when they start using the new C++ Contracts facility.
 
-Assertions that rely on being evaluated exactly once when checking is enabled are common in practice. For example, one might want to add an assertion counting the number of times a recursion occurs, and report a contract violation if the recursion depth exceeds some fixed limit. Consider the following example (adapted from Clang):
+Assertions that rely on being evaluated exactly once when checking is enabled are common in practice. For example, one might want to add an assertion counting the number of times a recursion or iteration occurs, or the number of times a certain statement is executed, and report a contract violation if this number exceeds some fixed limit. Consider the following example (adapted from Clang):
 \begin{codeblock}
 #ifndef NDEBUG
-  unsigned depth = 0;
+  unsigned nIter = 0;
 #endif
   while (item->isVariant()) {
-    assert(++depth < 6 && "Variants are nested deeper than the supported limit");
+    assert(++nIter < 6 && "Variants are nested deeper than the supported limit");
     // ...
   }
 \end{codeblock}
-Without a guarantee that the predicate is evaluated exactly once when the assertion is checked, this code would break, as the assertion could end up failing when it should pass, or passing when it should fail, potentially leading to undefined behaviour.
+Without a guarantee that the predicate is evaluated exactly once when the assertion is checked, this code would break, as the assertion could end up failing when it should pass, or passing when it should fail, potentially leading to undefined behaviour. Note that the above contract assertion is maintaining state and has a side effect when evaluated, but that is contained to the assertion itself and does not modify the state of the program or any other assertions.
 
-The assertion as written above would not work with the current Contracts MVP because \cite{P2900R6} does not offer a facility like \tcode{NDEBUG} for conditionally declaring a variable only when the associated contract assertion is checked. Further, in \cite{P2900R6}, local variables such as \tcode{depth} are implicitly const and would need to be wrapped into a \tcode{const_cast} in order to be incremented in the contract predicate. However, even without any of these limitations, any predicate that maintains and updates state like the one above cannot ever be made to work if there is no guarantee that \emph{checked} contract predicates are evaluated exactly once. 
+The assertion as written above would not work with the current Contracts MVP because \cite{P2900R6} does not offer a facility like \tcode{NDEBUG} for conditionally declaring a variable only when the associated contract assertion is checked. Further, in \cite{P2900R6}, local variables such as \tcode{nIter} are implicitly const and would need to be wrapped into a \tcode{const_cast} in order to be incremented in the contract predicate. However, even without any of these limitations, any predicate that maintains and updates state like the one above cannot ever be made to work if there is no guarantee that \emph{checked} contract predicates are evaluated exactly once. 
 
 Such predicates exist and are relatively common in existing code bases, as can be easily verified by a code search\footnote{\url{https://codesearch.isocpp.org/cgi-bin/cgi_ppsearch?q=assert\%28\%2B\%2B&search=Search}}. Further, it is possible that there are cases where such a predicate, when used with \tcode{assert}, does not wrap the declaration of the counter in an \tcode{\#ifdef NDEBUG} block, and the counter is not a local variable, but one with static or thread-local storage duration, meaning that changing such an \tcode{assert} to a \tcode{contract_assert} would silently break the program and potentially introduce undefined behaviour, without any compiler warning or other message to the user.
 
@@ -151,7 +153,7 @@ While supporting both caller- and callee-side checking in the same program witho
 
 One might want to make the number of evaluations deliberately unspecified to further discourage users from writing predicates with side effects as they learn that they cannot rely on the behaviour of such predicates: the side effects may occur any number of times or not at all. This is discussed in more detail in \cite{P1670R0} and \cite{P2751R1}.
 
-Not relying on side effects in contract predicates is stated as an important design principle in \cite{P2900R6}. The philosophy is that contract assertions should be able to test the correctness of the programs that did not yet have those assertions in them, which effectively means that they need to test the correctness of the same program when those assertions are ignored and not some other program. If, however, the predicates alter the behaviour such that the new, altered program is then correct (or incorrect), such contract assertions fail at diagnosing any defects and instead themselves introduce Heisenbugs. Note that assertions with side effects are nevertheless found in real-world code bases, and can be useful, such as the the recursion depth counter described in Section~\ref{subsec:determ}.
+Not relying on side effects in contract predicates is stated as an important design principle in \cite{P2900R6}. The philosophy is that contract assertions should be able to test the correctness of the programs that did not yet have those assertions in them, which effectively means that they need to test the correctness of the same program when those assertions are ignored and not some other program. If, however, the predicates alter the behaviour such that the new, altered program is then correct (or incorrect), such contract assertions fail at diagnosing any defects and instead themselves introduce Heisenbugs. Note that assertions with side effects are nevertheless found in real-world code bases, and can be useful, such as the counter described in Section~\ref{subsec:determ}.
 
 \subsection{Avoid numbers other than 0, 1, ``many''}
 \label{subsec:01many}
@@ -164,22 +166,14 @@ Another possible reason to prefer an unspecified number of evaluations instead o
 \label{sec:prepost}
 
 We begin by listing all plausible specification strategies for how many times the predicate of a checked contract assertion may be evaluated. Whether elisions are allowed is orthogonal to the other concerns, so we can split the solution space into solutions that allow elisions and solutions that do not. The four known solutions that allow elisions are as follows (all four have been proposed somewhere at some point):
-
-%\pagebreak % MANUAL %%%%%%%%%%%
-
-\renewcommand{\theenumi}{$\Alph{enumi}_0$}
-\begin{enumerate}
+\renewcommand{\theenumi}{$\Alph{enumi}_0$} \begin{enumerate}
 \item At most once, i.e. evaluation may be elided but not duplicated (\cite{P1670R0}, \cite{D3197R0} poll 7).
 \item At most twice (\cite{P2521R5}), i.e. evaluation may be both elided and duplicated.
 \item An unspecified number of times, with an implementation-defined upper bound $N$ (\cite{P3119R0} proposal 3).
 \item An unspecified number of times, with no upper bound (status quo, \cite{P2900R6}).
 \end{enumerate}
-
-%\pagebreak % MANUAL %%%%%%%%%
-
 Further, we can construct four solutions that are analogous to the above but do not allow elisions (only one of those, $A_1$, has been formally proposed):
-\renewcommand{\theenumi}{$\Alph{enumi}_1$}
-\begin{enumerate}
+\renewcommand{\theenumi}{$\Alph{enumi}_1$} \begin{enumerate}
 \item Exactly once (\cite{P2756R0}).
 \item Once or twice, i.e. evaluation may be duplicated but not elided.
 \item An unspecified number of times, with an implementation-defined upper bound $N$, but at least once.
@@ -229,15 +223,14 @@ Design requirement & $A_0$ & $A_1$ & $B_0$ & $B_1$ & $C_0$ & $C_1$ & $D_0$ & $D_
 \end{table}
 
 
-\footnotetext[1]{Note that the 0, 1, ``many'' requirement might be satisfiable for $B_0$ and $B_1$ if instead of generally allowing 2 evaluations, we specified these cases as \mbox{0 -- 1} evaluations on one or both sides of the call (caller-side and callee-side).}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
 The design requirements listed in the decision matrix are numbered to make it easier to refer to them. These numbers do not imply a ranking by importance; we are not attempting to perform such a ranking in this paper.
 
 This decision matrix reveals that solution $A_1$ (predicate is evaluated exactly once) is the only solution that satisfies the design requirement of having a deterministic number of evaluations, while solution $C_0$ (predicate is evaluated any number of times, with an implementation-defined upper bound) satisfies all other design requirements except the deterministic number of evaluations, and all other solutions satisfy some subset of the requirements satisfied by $C_0$. Satisfying all design requirements in this set simultaneously is therefore impossible.
 
-Choosing a solution will require making decisions about contradicting requirements. For example, SG21 will need to decide  whether it is more important to have a normatively specified deterministic number of evaluations (requirement 1), or whether it is more important to allow duplications of evaluations (requirement 3) in order to support the caller-side vs. callee-side use case described in Section~\ref{subsec:ville}, as satisfying both of these requirements is impossible\footnote{Polling this particular decision would largely be a re-litigation of the decision made at the February 2023 WG21 meeting in Issaquah when SG21 polled \cite{P2756R0} and \cite{P2751R1}, respectively.}. Other decisions involve whether to allow elision and whether to allow an unspecified number of evaluations.
+Choosing a solution will require making decisions about contradicting requirements. For example, SG21 will need to decide  whether it is more important to have a normatively specified deterministic number of evaluations (requirement 1), or whether it is more important to allow duplications of evaluations (requirement 3) in order to support the caller-side vs. callee-side use case described in Section~\ref{subsec:ville}, as satisfying both of these requirements is impossible. Other decisions involve whether to allow elision and whether to allow an unspecified number of evaluations.
+
+% removed this footnote as it does not seem helpful
+%\footnote{Polling this particular decision would largely be a re-litigation of the decision made at the February 2023 WG21 meeting in Issaquah when SG21 polled \cite{P2756R0} and \cite{P2751R1}, respectively.}
 
 A possible decision tree to pick a concrete solution for \tcode{pre} and \tcode{post} is illustrated in Figure~\ref{fig:prepost}.
 
@@ -262,6 +255,27 @@ of a function, or the use of \tcode{post} and the use of \tcode{contract_assert}
 That said, the consistency requirement should be be weighed against the other requirements and we can in principle adopt a different solution for  \tcode{contract_assert} than for \tcode{pre} and \tcode{post}. For example, if we decide that requirement 1 (deterministic number of evaluations) is particularly important for \tcode{contract_assert}, because of the issue regarding existing practice with the \tcode{assert} macro discussed in Section~\ref{subsec:determ}, and that this is more important than the consistency requirement, or the requirements 5 --- 7 when applied to \tcode{contract_assert}, we could adopt solution $A_1$ for \tcode{contract_assert} despite having chosen a different solution for \tcode{pre} and \tcode{post}.
 
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\footnotetext[1]{Note that the 0, 1, ``many'' requirement might be satisfiable for $B_0$ and $B_1$ if instead of generally allowing 2 evaluations, we specified these cases as \mbox{0 -- 1} evaluations on one or both sides of the call (caller-side and callee-side).}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{What are contract assertions?}
+
+The current disagreement on the correct solution is  not only about which use cases and requirements to prioritise over others, but also about the correct mental model of what contract assertions \emph{are}.
+
+One mental model is that the salient difference between contract assertions and existing control flow constructs such as \tcode{if} statements is that contract assertions can be ``turned off'' by choosing the \emph{ignore} evaluation semantic when compiling the program, similarly to how \tcode{assert} macros can be turned off by defining \tcode{NDEBUG}; apart from this ability, contract assertions are normal C++ code and contract predicates are normal C++ expressions. In this mental model, a \emph{checked} contract assertion such as \tcode{pre(expr)}, \tcode{post(expr)}, or \tcode{contract_assert(expr)} is effectively equivalent to:
+\begin{codeblock}
+if (!(expr))
+  do_whatever_the_chosen_semantic_does();
+\end{codeblock}
+
+A different mental model is that contract assertions are not normal C++ code. Instead, they are \emph{annotations} that serve to inject additional information into the compiler about possible states that we consider to be incorrect. When choosing a \emph{checked} evaluation semantic, we instruct the compiler to use this information to identify such incorrect states, but we do not say how exactly the compiler is supposed to accomplish this: by evaluating \tcode{expr} or by using the information encoded in \tcode{expr} in some other way.
+
+The first mental model leads to solution $A_1$; the second mental model leads to the other solutions, with $D_0$ being the most permissive about what the compiler is allowed to do with \tcode{expr} when checking for contract violations.
+
+Notably, the current design in \cite{P2900R6} does not seem consistent in this regard. By choosing the ``natural syntax'' proposed in \cite{P2961R2} over the attribute-like syntax, we decided to make contract assertions look like normal code, rather than like annotations with special semantics, which is more consistent with the first mental model. Conversely, by allowing elision and duplication, we chose evaluation semantics that are more consistent with the second mental model.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %\pagebreak % MANUAL %%%%%%%%%
@@ -269,7 +283,7 @@ That said, the consistency requirement should be be weighed against the other re
 %\pagebreak % MANUAL %%%%%%%%%
 
 \section*{Acknowledgements}
-Thanks to John Spicer, Ville Voutilainen, and Ga\v sper A\v zman for the illuminating discussions that led to this paper. Thanks to Jonas Persson, Andrew Tomazos, Joshua Berne, and Jens Maurer for their helpful comments on a draft of this paper.
+Thanks to John Spicer, Ville Voutilainen, and Ga\v sper A\v zman for the illuminating discussions that led to this paper. Thanks to Jonas Persson, Andrew Tomazos, Joshua Berne, Jens Maurer, Andrzej Krzemie\' nski, and John Lakos for their helpful comments.
 
 
 \renewcommand{\bibname}{References}

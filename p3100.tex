@@ -12,13 +12,13 @@
 
 \begin{tabular}{ll}
 Document \#: & D3100R0 \\
-Date: &2024-01-25 \\
+Date: &2024-04-22 \\
 Project: & Programming Language C++ \\
 Audience: & EWG, SG21, SG23
 \end{tabular}
 
 \begin{abstract}
-TODO
+In this paper, we propose to specify undefined behaviour that manifests at runtime to be a \emph{contract violation}. Core language constructs that can exhibit undefined behaviour are respecified as having \emph{implicit} contract assertions that can be evaluated with the same evaluation semantics as the \emph{explicit} contract assertions proposed in the Contracts MVP (\cite{P2900R6}). We further propose to add the \tcode{assume} semantic to the four evaluation semantics in \cite{P2900R6}. The \tcode{assume} semantic is equivalent to the behaviour of undefined behaviour in C++23 today and provides backwards-compatibility without performance regressions; the other four evaluation semantics map to different strategies to mitigate undefined behaviour at runtime, such as hardened builds and sanitisers. Our proposed framework replaces the concept of \emph{erroneous behaviour} introduced in \cite{P2795R5} and paves the way for a safer and more secure C++ Standard.
 \end{abstract}
 
 \section{Introduction}
@@ -31,19 +31,21 @@ Improving safety and security is one of the main challenges for the future evolu
 
 According to these definitions, C++ is not a safe language: both the core language and the C++ standard library allow for a multitude of ways in which a well-formed C++ can exhibit unbounded undefined behaviour, that is, situations in which the C++ standard places no restrictions on the behaviour of the program. Bugs that trigger undefined behaviour cause stability issues and can be exploited by threat actors, thereby causing security vulnerabilities.
 
-Of particular concern is undefined behaviour due to invalid memory accesses, which was found by large companies such as Google and Microsoft to be responsible for $\~ 70$\% of security vulnerabilities (\cite{NSA2022}, \cite{CR2023}). This led various government agencies to start advocating for an industry-wide shift away from C and C++ and towards memory-safe languages such as Rust (\cite{EU2022}, \cite{CISA2023}, \cite{ONCD2024}), triggering a debate about the future of C++.
+Of particular concern is undefined behaviour due to invalid memory accesses, which was found by large companies such as Google and Microsoft to be responsible for $\~ 70$\% of security vulnerabilities (\cite{NSA2022}, \cite{CR2023}). This led various government agencies to start advocating for an industry-wide shift away from C and C++ and towards memory-safe languages such as Rust (\cite{CISA2023}, \cite{ONCD2024}), triggering a debate about the future of C++.
 
 \subsection{Current approaches}
 
-Various approaches exist to manage undefined behaviour in C++. Some of them are good engineering practices that are not specific to C++, such as practicing code reviews, enforcing coding guidelines such as MISRA or the C++ Core Guidelines, and automated testing targeting different aspects of the code (unit tests, fuzz tests, etc). When applied correctly, these techniques can significantly reduce the amount of undefined behaviour entering production code. In addition, it can be effective to use tooling in order to find instances of undefined behaviour either at compile time (by using static analysis tools such as Coverity, Sonar, PVS-Studio, etc.) or at runtime (by running sanitisers such as ASan and UBSan).
+Various approaches exist to mitigate undefined behaviour in C++. Some of them are good engineering practices that are not specific to C++, such as code reviews, enforcing coding guidelines such as MISRA or the C++ Core Guidelines, and automated testing targeting different aspects of the code (unit tests, fuzz tests, etc). When applied correctly, these techniques can significantly reduce the amount of undefined behaviour entering production code. In addition, it can be effective to use tooling in order to find instances of undefined behaviour either at compile time (by using static analysis tools such as Coverity, Sonar, PVS-Studio, etc.) or at runtime (by running sanitisers such as ASan and UBSan).
 
-In addition, the ISO C++ committee, as the body owning the specification of the C++ programming language, is in the unique position to be able to evolve this specification to eliminate sources of undefined behaviour \emph{normatively}. Given that undefined behaviour in C++ is fundamentally a runtime property, there are two fundamental ways to approach it: by making certain constructs that would have undefined behaviour at runtime ill-formed (i.e. diagnosing such constructs \emph{statically} at compile time) on the one hand, or by re-specifying the runtime behaviour of such constructs to be well-defined rather than undefined (i.e. handling undefined behaviour \emph{dynamically} at runtime).
+In addition, the ISO C++ committee, as the body owning the specification of the C++ programming language, is in the unique position to be able to evolve this specification to eliminate sources of undefined behaviour \emph{normatively} for all conforming implementations of C++. Given that undefined behaviour in C++ is fundamentally a runtime property, two approaches are possible. First, by making certain constructs that would have undefined behaviour at runtime ill-formed (i.e. diagnosing such constructs \emph{statically} at compile time). Second, by re-specifying the runtime behaviour of such constructs to be well-defined rather than undefined (i.e. mitigating undefined behaviour \emph{dynamically} at runtime). These two approaches complement each other.
 
 \subsection{Runtime handling of undefined behaviour}
 
-In principle, it would be possible to change C++ such that by default, undefined behaviour can no longer occur, because any  potentially unsafe construct would be rejected at compile time. The Rust programming language is a successful proof of concept for this approach. However, doing so would break practically any useful program that exists in C++ today, and is therefore not a realistic prospect \cite{Doumler2023}. For example, in order to statically reject memory bugs, we would need to make any code ill-formed that allows multiple pointers or references to the same object to exist, unless it can be statically proven that all such pointers or references are \tcode{const}. This effectively requires an approach like Rust's borrow checker or Hylo's mutable value semantics, thereby disqualifying any C++ code that returns a non-\tcode{const} reference from a function, uses random access, doubly-linked lists, etc. This might be viable for some \emph{new} code (where potentially unsafe constructs could be limited to \emph{unsafe blocks} like in Rust), but not for \emph{existing} code. 
+In principle, it would be possible to evolve C++ such that by default, undefined behaviour can no longer occur, because any  potentially unsafe construct would be rejected at compile time. The Rust programming language is a successful proof of concept for this approach. However, doing so would break practically every useful program that exists in C++ today, and is therefore not a realistic prospect \cite{Doumler2023}.
 
-Therefore, to address safety in C++, we should follow a two-pronged approach. On the one hand, we should aim to make more undefined behaviour diagnosable at compile time, wherever the tradeoffs for doing so are favourable. On the other hand, we also need to accept that some instances of undefined behaviour will remain undiagnosable at compile time for the foreseeable future, and will have to be handled at runtime instead. The aim of this paper is to focus entirely on such runtime handling, while leaving compile-time detection to other ongoing efforts.
+For example, in order to reject all invalid memory accesses at compile time, we would need to make any code ill-formed that allows multiple pointers or references to the same object to exist, unless it can be statically proven that all such pointers or references are \tcode{const}. This effectively requires an approach like Rust's borrow checker or Hylo's mutable value semantics, thereby disqualifying any C++ code that returns a non-\tcode{const} reference from a function, uses random access, doubly-linked lists, etc. This might be viable for some \emph{new} code (where potentially unsafe constructs could be contained in \emph{unsafe blocks} like in Rust and manually proven to be safe), but not for \emph{existing} code. 
+
+Therefore, to address safety in C++, we should follow a two-pronged approach. On the one hand, we should aim to make more undefined behaviour diagnosable at compile time, wherever the tradeoffs for doing so are favourable. On the other hand, we also need to accept that some instances of undefined behaviour will remain undiagnosable at compile time for the foreseeable future, and will have to be handled at runtime instead. The aim of this paper is to focus entirely on such runtime handling, while leaving compile-time detection to other ongoing efforts such as the safety profiles proposed in \cite{P2687R0}.
 
 \subsection{The role of Contracts}
 
@@ -51,108 +53,244 @@ Therefore, to address safety in C++, we should follow a two-pronged approach. On
 
 It has been stated that such an extensible Contracts facility is a panacea that has the potential to solve the undefined behaviour problem in C++. This is a misconception. Contracts are the wrong tool for making more undefined behaviour diagnosable at compile time. However, for all the undefined behaviour \emph{not} diagnosed at compile time, Contracts provides a comprehensive framework for handling such undefined behaviour at runtime. The key idea is to respecify specific instances of core language undefined behaviour to be a \emph{contract violation}. This allows us to formally speak of incorrect code and to define its behaviour in the C++ Standard, rather than leaving the behaviour undefined. This behaviour can be configured by the user (issue a diagnostic message, terminate the program, ignore the contract violation, etc.) by choosing one of several standard \emph{evaluation semantics}.
 
-Recently, the committee has adopted the proposal (\cite{P2795R5}) into the C++26 working draft, which follows essentially the same motivation. The proposal makes reading an uninitialised variable well-defined by specifying it as \emph{erroneous behaviour}, another term for behaviour that is incorrect, but not undefined. When encountering erroneous behaviour, an implementation is allowed and encouraged to diagnose this error, but is also allowed to ignore the error and treat the read as valid. The paper goes on to say that other instances of undefined behaviour can be respecified to be erroneous behaviour instead.
+Recently, the committee has adopted the proposal (\cite{P2795R5}) into the C++26 working draft, which follows essentially the same motivation. The proposal makes reading the value of an uninitialised variable well-defined by respecifying such reads as \emph{erroneous behaviour}, another term for behaviour that is incorrect, but not undefined. When encountering erroneous behaviour, an implementation is allowed and encouraged to diagnose the defect, but is also allowed to ignore it and treat the read as valid --- a variation of having different contract evaluation semantics. The paper goes on to say that other instances of undefined behaviour can be respecified to be erroneous behaviour instead.
 
-As we will show in this paper, the semantics provided by erroneous behaviour are essentially a subset of the semantics that the Contracts framework provides. We can therefore entirely subsume erroneous behaviour into contract violation handling. As a result, we get a unified framework for reasoning about and handling runtime undefined behaviour that is more generic and flexible than erroneous behaviour and has several other advantages over the approach of \cite{P2795R5}.
+As we will show in this paper, the semantics provided by erroneous behaviour are essentially a subset of the semantics that the Contracts framework provides. We can therefore entirely subsume erroneous behaviour into contract violation handling. As a result, we get a unified framework for reasoning about and handling runtime undefined behaviour that is more generic and flexible than erroneous behaviour and has several other advantages over the approach proposed in \cite{P2795R5}.
 
 \section{The Contracts MVP}
 \subsection{Explicit contract assertions}
 
-The current Contracts MVP \cite{P2900R6} proposes to add \emph{contract assertions}, i.e. syntactic constructs such as \tcode{pre(x)}, \tcode{post(x)}, and \tcode{contract_assert(x)}, where \tcode{x} is a boolean expression, to express conditions that are expected to be true in a correct program. These contract assertions can be either ignored or checked. When checked, the predicate \tcode{x} is evaluated; if it evaluates to \tcode{false}, a contract violation has been detected. In general, a contract violation means that the program is \emph{incorrect} (i.e. has a bug), but the behaviour of the program is nevertheless well-defined at this point. 
-
-What exactly happens after a contract violation has been detected is determined by the chosen \emph{contract evaluation semantic}. \cite{P2900R6} proposes four such semantics: \tcode{ignore}, \tcode{observe}, \tcode{enforce}, and \tcode{quick_enforce}. The first one is an \emph{unchecked} semantic, whereas the others are \emph{checked} semantics; the latter two are \emph{enforcing} semantics, i.e. semantics that will not allow the code to continue execution past a contract violation. This prevents the program from executing buggy code that might cause undefined behaviour, for example:
+The current Contracts MVP \cite{P2900R6} proposes to add \emph{contract assertions}, i.e. syntactic constructs such as \tcode{pre(x)}, \tcode{post(x)}, and \tcode{contract_assert(x)}, where \tcode{x} is a boolean expression, to express conditions that are expected to be true in a correct program. For example, we can annotate the subscript operator in a \tcode{vector} class with a precondition assertion to catch out-of-bounds access, one of the most common sources of security vulnerabilities:
 \begin{codeblock}
 T& vector::operator[](size_t index)
-  pre (index < size()) {  // user-defined contract assertion
-  return data[index];     // cannot get here if using an enforcing semantic!
-}
-
-void test() {
-  vector<int> v;
-  return v[666];  // program does not have UB if using an enforcing semantic!
+pre (index < size()) {  // explicit contract assertion
+  return data[index];     
 }
 \end{codeblock}
-In the remainder of this paper, we will call these \cite{P2900R6} contract assertions \emph{explicit contract assertions} as they have been explicitly added by the user.
+
+In the remainder of this paper, we will call the contract assertions proposed by  \cite{P2900R6} \emph{explicit contract assertions} as they are code explicitly added by the user.
 
 \subsection{Evaluation semantics}
 
-Describe the four here... move some of the stuff from the previous subsection (including the second half of the code example) down here
+Contract assertions can be either ignored or checked. When checked, the predicate \tcode{x} is evaluated; if it evaluates to \tcode{false}, a contract violation has been detected. In general, a contract violation means that the program is \emph{incorrect} (i.e. has a bug), but the behaviour of the program is nevertheless well-defined at this point. 
 
-\section{The proposal}
-
-\subsection{Implicit contract assertions}
-
-The core idea of this proposal is that we can apply the evaluation semantics proposed in \cite{P2900R6} not just to explicit contract assertions, but also to core language constructs that today have undefined behaviour. Consider, for example, signed integer addition. When adding two \tcode{int}s \tcode{a} and \tcode{b}, instead of saying that the behaviour is undefined if the result of the addition is not representable by \tcode{int}, we can say that signed integer addition has an \emph{implicit precondition assertion} that the addition will not overflow. In other words, if we notionally consider signed integer addition to be a built-in \tcode{operator+(int, int)}, this built-in operator will behave as if it was declared with the following precondition assertion:
-\begin{codeblock}
-int operator+(int a, int b)
-  pre ((b >= 0 && a <= INT_MAX - b) || (b < 0 && a >= INT_MIN - b));
-\end{codeblock}
-We call this precondition assertion \emph{implicit} because it has not been added to the program in the form of an explicit, \cite{P2900R6} style precondition assertion, but is instead implicitly generated by the compiler.
-
-In the same  replace any occurrence of ``for operation $X$, if $Y$ is false, the behaviour is undefined'' with ``operation $X$ has the implicit precondition that $Y$ is true''.
-
-\subsection{Well-defined, safe fallback behaviour}
-
-So far, we have merely re-specified undefined behaviour to 
-
-We can distinguish
-
-In addition, to make this operation \emph{safe}, we need to specify some kind of well-defined behaviour for the error case (we call this the \emph{safe fallback behaviour}). For signed integer addition, we can specify that the result of the implicit addition operator will be some well-defined number. We could specify the value of this number, for example, by specifying that signed integer overflow wraps or saturates, but it is entirely sufficient to say that it will be an unspecified number. Using this number in a calculation will most likely be incorrect (i.e. a bug), but it will no longer be undefined behaviour.
-
-
-\subsection{Non-ignorable implicit contract assertions}
-
-\subsection{Adding the \tcode{assume} semantic}
-
-Like explicit precondition assertions, implicit precondition assertions are evaluated with one of the following \emph{evaluation semantics}, listed from most ``safe'' to least ``safe'':
+What exactly happens when a contract assertion is evaluated is determined by the chosen \emph{contract evaluation semantic}. \cite{P2900R6} proposes four such semantics. These are, from safest to least safe:
 \begin{itemize}
 \item \tcode{quick_enforce}: evaluate the contract predicate; if a contract violation occurs, immediately terminate the program.
 \item \tcode{enforce}: evaluate the contract predicate; if a contract violation occurs, call the contract-violation handler. When the contract-violation handler returns, terminate the program.
 \item \tcode{observe}: evaluate the contract predicate; if a contract violation occurs, call the contract-violation handler. When the contract-violation handler returns, continue execution.
 \item \tcode{ignore}: do not evaluate the contract predicate.
-\item \tcode{assume}: do not evaluate the contract predicate; if it would not evaluate to \tcode{true}, the behaviour is undefined (thus, an implementation is allowed to optimise the program based on the assumption that the predicate is \tcode{true}).
 \end{itemize}
-Note that \cite{P2900R6} only proposes the first four evaluation semantics, but not \tcode{assume}. In this paper, we propose to add \tcode{assume} to the list of possible evaluation semantics. As we will see, \tcode{assume} is crucially important for \emph{implicit} contract assertions, as it allows us to keep full compatibility with C++23 and earlier if the user wishes to do so.
 
-We follow the model in \cite{P2900R6} that the selection of evaluation semantics is entirely \emph{implementation-defined}, i.e. any implementation could choose any of these semantics for any operation and still be conforming. That is, no implementation is required to check any implicit contract assertions; however, if it chooses to do so, we can now reason about the behaviour within the scope of the C++ Standard, and no longer have to treat it as undefined and therefore unsafe.
+We call \tcode{ignore} an \emph{unchecked} semantic and the other three \emph{checked} semantics. Additionally, we say that \mbox{\tcode{quick_enforce}} and \tcode{enforce} are \emph{enforcing} semantics, i.e. semantics that will not allow the code to continue execution past a contract violation. This prevents the program from continuing into code that might have undefined behaviour. Consider, for example, a program that causes an out-of-bounds access with our implementation of \tcode{vector::operator[]} from above:
+\begin{codeblock}
+int main() {
+  vector<int> v;
+  std::cout << v[666];    // no UB here if using an enforcing semantic!
+}
+\end{codeblock}
+Note that the above is different from using a function without preconditions such as \mbox{\tcode{vector::at}} because C++ does not force us to use an enforcing semantic; if we choose a non-enforcing semantic such as \tcode{ignore} or \tcode{observe}, the above program  has undefined behaviour. Whether the implementation of  \tcode{vector::operator[]} is \emph{safe} therefore depends on the chosen evaluation semantic. In a safety-critical context, we could require that an enforcing semantic must be chosen to compile the program. However, using contract assertions in this way does not preclude compiling the code with different semantics in different contexts, and does not require macros to achieve such flexibility.
 
-Using again the signed integer overflow example, we can see how the different possible evaluation semantics map to different existing implementation strategies:
+\section{The proposal}
+
+\subsection{Implicit contract assertions}
+
+The core idea of this proposal is that we can apply the Contracts framework not only to explicit contract assertions, but also to core language constructs that may have undefined behaviour when evaluated, by treating such undefined behaviour as a contract violation.
+
+Consider, for example, signed integer addition. When adding two \tcode{int}s \tcode{a} and \tcode{b}, instead of saying that the behaviour is undefined if the result of the addition is not representable by \tcode{int}, we can say that signed integer addition has an \emph{implicit precondition assertion} that the addition will not overflow. In other words, if we consider signed integer addition to be performed by notionally calling a built-in \tcode{operator+(int, int)}, this built-in operator will behave as if it was declared with the following precondition assertion:
+\begin{codeblock}
+int operator+(int a, int b)
+pre ((b >= 0 && a <= INT_MAX - b)  // implicit precondition assertion
+  || (b < 0  && a >= INT_MIN - b));  
+\end{codeblock}
+We call this precondition assertion \emph{implicit} because it has not been added to the program in the form of an explicit, \cite{P2900R6} style precondition assertion, but is instead implicitly generated by the compiler.
+
+Similarly to signed integer overflow, we can replace any other occurrence of ``for operation $X$, if $Y$ is false, the behaviour is undefined'' in the C++ Standard with ``operation $X$ has the implicit precondition that $Y$ is true'', and treat a violation of such an implicit precondition assertion as a contract violation, in the same way as for explicit precondition assertions.
+
+\subsection{Safe fallback behaviour}
+
+We can classify all instances of undefined behaviour in C++ into two types: those for which we can define a useful \emph{safe fallback behaviour} for the error case, and those for which we cannot.
+
+For example, for signed integer addition, a safe fallback behaviour is that the result of the  addition  will be some valid number. We could additionally specify the value of this number, for example, by specifying that signed integer overflow wraps or saturates, but to remove the undefined behaviour it is entirely sufficient to say that it will be an unspecified but valid value. Using this number in a calculation will most likely be incorrect (i.e. a bug), but it will no longer be undefined. If we consider integer addition as a built-in operator as above, we can specify that the safe fallback behaviour is, notionally, what the \emph{function body} of this built-in operator will execute.
+
+As another example, when reading an indeterminate value, a safe fallback behaviour is to instead read some unspecified but valid value. Again, we could be more specific (for example, we could instead read zero) but there is no need to do so.
+
+Note that all cases of undefined behaviour that according to \cite{P2795R5} could be treated as erroneous behaviour could instead be specified as operations with an implicit contract assertion and a safe fallback behaviour which serves as the notional implementation of this operation.
+
+\subsection{Adding the \tcode{assume} semantic}
+
+In many cases, safe fallback behaviours will have significant runtime overhead compared to the status quo. The user might therefore choose to enable them in certain contexts such as debug builds or ``hardened'' builds for safety-critical applications, but prefer the current C++23 behaviour in other contexts. For example, in many performance-sensitive applications, not optimising on the assumption of no integer overflow is likely to cause an unacceptable performance penalty. 
+
+In order for C++ to remain successful for high-performance applications, we therefore need to provide the choice between the safe fallback behaviour and the existing, unsafe behaviour today. We further need to provide this choice separately for different kinds of undefined behaviour. In the Contracts framework, such a choice can be provided by offering different evaluation semantics.
+
+If we want to offer the current C++23 behaviour as an option to avoid unacceptable performance regressions, we need to add a fifth evaluation semantic to the four possible evaluation semantics in \cite{P2900R6}:
+\begin{itemize}
+\item \tcode{assume}: do not evaluate the contract predicate; if it would not evaluate to \tcode{true}, the behaviour is undefined.
+\end{itemize}
+The \tcode{assume} semantic is an \emph{unchecked} semantic. Unlike the other unchecked semantic, \tcode{ignore}, the \tcode{assume} semantic allows the compiler to optimise the program based on the assumption that the predicate of the given contract assertion is always \tcode{true}. When applied to implicit contract assertions, the \tcode{assume} semantic is therefore equivalent to the current specification for core language undefined behaviour in C++23 and earlier, thereby offering the required backwards-compatibility as an option when selecting the evaluation semantic for a particular kind of implicit contract assertions.
+
+\subsection{Mapping evaluation semantics to implementation strategies}
+
+We follow the model in \cite{P2900R6} that the selection of evaluation semantics is entirely \emph{implementation-defined}, i.e. any implementation could choose any of these semantics for any operation and still be conforming. That is, no implementation is required to check any implicit contract assertions; however, if it chooses to do so, and any such check fails, we can now reason about the behaviour of the program within the scope of the C++ Standard, and no longer have to treat it as undefined and therefore unsafe.
+
+Using again the signed integer overflow example, we can establish a mapping between the five  possible evaluation semantics and different possible implementation strategies for mitigating this particular kind of undefined behaviour:
 \begin{itemize}
 \item The GCC compiler option \tcode{-ftrapv}, which aborts the program on signed integer overflow, is a conforming implementation of the \tcode{quick_enforce} evaluation semantic;
-\item A sanitiser which detects signed integer overflow and prints a diagnostic is a conforming implementation of the \tcode{enforce} evaluation semantic;
-\item The GCC compiler option \tcode{-fwrapv}, which implements signed integer addition using wrap around using twos-complement representation, is a conforming implementation of the \tcode{ignore} evaluation semantic;
-\item Today's default behaviour for optimised builds, which is to assume that signed integer addition can never overflow, and optimise based on this assumption, is a conforming implementation of the \tcode{assume} evaluation semantic.
+\item A sanitiser which detects signed integer overflow and prints a diagnostic is a conforming implementation of the \tcode{enforce} or \tcode{observe} evaluation semantic (depending on whether the process is terminated or execution continues after printing the diagnostic);
+\item The GCC compiler option \tcode{-fwrapv}, which implements signed integer addition using wrap around using twos-complement representation, is a conforming implementation of the \tcode{ignore} evaluation semantic, which silently executes the safe fallback behaviour;
+\item The default behaviour in C++23 and earlier, which is to assume that signed integer addition can never overflow, and optimise based on this assumption when the appropriate optimisation flags are selected by the user, is a conforming implementation of the \tcode{assume} evaluation semantic.
 \end{itemize}
 
-We can construct the same mapping for any kind of undefined behaviour for which we can define a safe fallback behaviour. For example, undefined behaviour due to reading an indeterminate value can be respecified such that reading a value has an implicit precondition that the value is not indeterminate; if the value is indeterminate, the result will be some unspecified value (but no longer undefined behaviour). A conforming C++ implementation can apply any of the five evaluation semantics to this implicit precondition: \tcode{enforce} gives a diagnostic followed by termination, \tcode{ignore} simply reads some unspecified value (initialising all values to \tcode{0} would be a conforming implementation of this semantic), while \tcode{assume} matches the default in C++23 and before, where reading such a value is undefined behaviour (and the compiler can therefore optimise on the assumption that it never happens).
+We can construct the same mapping for any kind of undefined behaviour for which we can define a safe fallback behaviour. For example, undefined behaviour due to reading an indeterminate value can be respecified such that reading a value has an implicit precondition assertion that the value is not indeterminate; if the value is indeterminate, the result will be some unspecified value (but no longer undefined behaviour). A conforming C++ implementation can apply any of the five evaluation semantics to this implicit precondition assertion. For example, \tcode{enforce} gives a diagnostic followed by termination (a sanitiser detecting this case is a conforming implementation of this semantic), \tcode{ignore} silently executes the safe fallback behaviour, i.e. simply reads an unspecified but valid value (setting all uninitialised values to \tcode{0} is a conforming implementation of this semantic), while \tcode{assume} matches the default in C++23 and before, where reading such a value is undefined behaviour (and the compiler can therefore optimise on the assumption that it never happens).
 
+\subsection{Non-ignorable implicit contract assertions}
 
-\subsection{Undefined behaviour with no fallback}
+For some instances of undefined behaviour in C++, there is no safe fallback behaviour that makes sense. Examples are dereferencing an invalid pointer and out-of-bounds access into a plain array. We can respecify such instances of undefined behaviour in terms of implicit contract assertions, in the same way as we did before. For example, we can notionally interpret subscripting into an array as the following built-in function:
+\begin{codeblock}
+template <typename T, size_t N>
+T& subscript(T(&array)[N], size_t index) 
+pre(index < N) {  // implicit precondition assertion
+  return array[index];
+}
+\end{codeblock}
+If we are subscripting into a pointer \tcode{ptr} to an array \tcode{a}, but \tcode{sizeof(a)} is not statically known, then the implicit precondition assertion cannot be expressed as above, and instead must be checked with some ``magic'' function that requires additional instrumentation. Nevertheless, we can reason about such an implicit precondition in the same way:
+\begin{codeblock}
+template <typename T>
+T& subscript(T* ptr, size_t index) 
+pre(__magic_bounds_check(ptr, index)) {  // implicit precondition assertion
+  return ptr[index];
+}
+\end{codeblock}
+In such cases, unlike in our previous integer addition example, if the implicit precondition is checked, and a contract violation is detected, there is no possible safe fallback behaviour that would \emph{not} have undefined behaviour and that we could use to replace the notional function body which dereferences \tcode{ptr + index}. In our proposed framework, we call such implicit contract assertions \emph{non-ignorable implicit contract assertions}. Operations that violate memory safety and/or type safety typically fall into this category.
 
-Dereferencing a pointer, out-of-bounds access into an array.
+Non-ignorable implicit contract assertions cannot be evaluated with the \tcode{ignore} or \tcode{observe} semantic; the only options permitted are \tcode{quick_enforce}, \tcode{enforce}, and \tcode{assume}.
+
+We can again construct a mapping of the possible evaluation semantics map to different implementation strategies:
+\begin{itemize}
+\item Clang's proposed\footnote{See \url{https://discourse.llvm.org/t/rfc-enforcing-bounds-safety-in-c-fbounds-safety}} \tcode{-fbounds-safety} extension, which turns out-of-bounds access into a runtime trap, is a conforming implementation of the \tcode{quick_enforce} semantic;
+\item ASan's behaviour of printing a diagnostic and terminating the process when an  out-of-bounds access occurs is a conforming implementation of the \tcode{enforce} semantic;
+\item The default, unsafe behaviour in C++23 and below is a conforming implementation of the \tcode{assume} semantic.
+\end{itemize}
+The same mapping exists for every other instance of undefined behaviour in C++ without a safe fallback behaviour, when respecified as an operation with a non-ignorable implicit contract assertion.
 
 \subsection{Contract-violation handling API}
 
-df
+Treating undefined behaviour as a contract violation means that undefined behaviour diagnosed at runtime causes a call to the contract-violation handler when the evaluation semantic is \tcode{enforce} or \tcode{observe}. On an implementation where these evaluation semantics are supported for implicit contract assertions, and the contract-violation handler is replaceable, we need to specify what happens when the user provides a user-defined  contract-violation handler and that handler will be called from the (notional) evaluation of an implicit contract assertion. In particular, we need to define the state of the \tcode{contract_violation} object for this case. We can do so with only minor modifications to the library API proposed in \cite{P2900R6}. 
+
+In \cite{P2900R6}, the \tcode{contract_violation} class has the following five member functions:
+\begin{codeblock}
+class contract_violation {
+public:
+  const char* comment() const noexcept;
+  detection_mode detection_mode() const noexcept;
+  contract_kind kind() const noexcept;
+  std::source_location location() const noexcept;
+  contract_semantic semantic() const noexcept;
+};
+\end{codeblock}
+Below, we discuss the impact of adding implicit contract assertions on each member function.
+
+\subsubsection{\tcode{comment()} and \tcode{location()}}
+We do not propose any changes to the specification of \tcode{comment()} and \tcode{location()}. The recommended practice in \cite{P2900R6} is that they return a textual representation of the expression that triggered the contract violation and the source location of the contract violation, respectively. The same is possible for violations of implicit contract assertions.
+
+Generating a textual representation for every possible expression that could lead to diagnosable undefined behaviour is likely to cause an unacceptable amount of code bloat. It is however equally conforming to instead generate some other string that may help the user identify the problem, such as the diagnostic message already printed by existing sanitisers. It is further conforming to simply return an empty string and a default-constructed source location if no information is available, or if the information is not programmatically accessible in the contract-violation handler (for example, because it located in a separate debug information file).
+
+\subsubsection{\tcode{detection_mode()}}
+We propose that the value returned by \tcode{detection_mode()} for violations of implicit contract assertions be unspecified.
+
+Until revision \cite{P2900R4}, the Contracts MVP contained a preparatory feature in the form of the enum value \mbox{\tcode{detection_mode::evaluation_undefined_behavior}} (added via approving \cite{P2811R7}) for the purpose of handling core language undefined behaviour as a contract violation. In revision \cite{P2900R5}, this enum value was removed from the Contracts MVP (via approving \cite{P3073R0}). We do not propose to add this enum value back in, or to modify the current specification of the \tcode{detection_mode} enum in any other way.
+
+The name \tcode{evaluation_undefined_behavior} is a misnomer in multiple ways. First, after respecifying undefined behaviour as a the violation of an implicit contract assertion, it will no longer be undefined behaviour. Second, checking an implicit contract assertion --- unlike for explicit contract assertions --- does not necessarily involve a contract predicate that can be evaluated (and some implicit contract assertions cannot be specified in such terms).
+
+Regardless of the name, it does not seem useful to describe all violations of an implicit contract assertion via the same enum value for \tcode{detection_mode}. There is a wide range of possible implementations for certain implicit contract assertions: compilers offering a ``hardening'' mode, sanitisers, architectures implementing pointer protection in hardware such as CHERI, etc. These implementations should be allowed to report different modes of detecting the contract violation via different implementation-defined values for  \tcode{detection_mode} as this may be useful information for the implementer of the user-defined contract-violation handler.
+
+\subsubsection{\tcode{kind()}}
+
+We propose to add a new enum value \tcode{implicit} to the enum \tcode{assertion_kind}. This value will be returned from the \tcode{kind()} function when the contract violation resulted from an implicit rather than an explicit contract assertion:
+
+\begin{small}
+\phantom{\tcode{~~}}\tcode{enum class assertion_kind \{} \\
+\phantom{\tcode{~~~~}}\added{\tcode{implicit = 0,}} \\
+\phantom{\tcode{~~~~}}\tcode{pre = 1,} \\
+\phantom{\tcode{~~~~}}\tcode{post = 2,} \\
+\phantom{\tcode{~~~~}}\tcode{assert = 3} \\
+\phantom{\tcode{~~}}\tcode{\};}
+\end{small}
+
+We chose the numeric value \tcode{0} for the new enum value to emphasise that it does not correspond to any kind of explicit contract assertion (i.e. an assertion that the user wrote).
+
+\subsubsection{\tcode{semantic()}}
+
+
+We do not propose any changes to the specification of \tcode{semantic()}. The same options exist for evaluating implicit contract assertions as for explicit contract assertions: the two evaluation semantics that can result in a call to the contract-violation handler are \tcode{enforce} and \tcode{observe}.
+
+Note however that non-ignorable implicit contract assertions such as a pointer pointing to a valid object when dereferencing it cannot be evaluated with the \tcode{observe} semantic, and therefore \tcode{semantic()} will always return \tcode{evaluation_semantic::enforce} when violations of implicit contract assertions result in a call to a user-defined contract-violation handler.
 
 \section{Discussion}
 
-\subsection{Erroneous behaviour}
+\subsection{Making C++ a safer language}
 
-This proposal entirely supersedes the concept of \emph{erroneous behaviour} as proposed in \cite{P2795R5}.
+The primary aim of this paper is to replace undefined behaviour that is not diagnosable at compile time and instead manifests at runtime with \emph{safe} well-defined behaviour, thereby reducing the overall amount of undefined behaviour in C++ and making it a safer language. We can gradually and iteratively apply the proposed framework for more and more kinds of undefined behaviour in the C++ language, starting with the most obvious candidates.
 
-Note that when \cite{P2795R5} talks about a program that \emph{erroneously} does $X$, this is exactly equivalent to saying that $X$ happens after a contract violation has been detected.
+Candidates for respecification as implicit contract assertions with a \emph{safe fallback behaviour} include reading an indeterminate value (thus replacing \cite{P2795R5}), signed integer overflow, bad bitshifts, and other arithmetic operations and conversions that result in unrepresentable values. In general, all kinds of undefined behaviour that are listed in \cite{P2795R5} as candidates for erroneous behaviour can be respecified in these terms instead.
 
-Write about options,  fallbackj
+Candidates for respecification as \emph{non-ignorable} contract assertions (i.e., without a safe fallback behaviour) include all kinds of accessing invalid memory (dereferencing a pointer to an invalid object, out-of-bounds access into an array, etc.), flowing off the end of a non-\tcode{void} function, and calling a pure virtual function in an abstract base constructor or destructor.
 
-Difference: fallback does not require syntax. This is important for assume and backwards compat. complexity of the lanugae.
+Note that the choice of evaluation semantic remains implementation-defined and therefore within the purview of the implementation vendor. Compilers that choose to harden certain safety holes such as uninitialised values can document that they use the \tcode{ignore} semantic for this particular implicit contract assertion; sanitisers and other tools that add instrumentation to detect memory issues can document that they use the \tcode{enforce} semantic for the implicit contract assertions they are designed to diagnose; etc. An implementation that chooses to do nothing at all about undefined behaviour in order to avoid performance regressions (discussed in more detail in Section~\ref{subsec:erroneous}) can document that is uses the \tcode{assume} semantic for all implicit contract assertions.
 
-Table
+The framework proposed here establishes standard vocabulary for all these choices and places their behaviour within the scope of the C++ Standard. This standard vocabulary is useful to reason about the safety of a particular configuration in standard terms. For example, in a safety-critical context, one can now choose to restrict configurations to not use the \tcode{assume} the semantic for any implicit or explicit contract assertions, or just for certain kinds of implicit contract assertions that correspond to the largest safety and security risks, and enforce such restrictions on the tooling level.
+
+\subsection{A better alternative to erroneous behaviour}
+\label{subsec:erroneous}
+
+This proposal entirely replaces the changes proposed in \cite{P2795R5} and the concept of \emph{erroneous behaviour} introduced by that paper.
+
+Note that when \cite{P2795R5} talks about an operation that \emph{erroneously} does $X$, this is exactly equivalent to saying that $X$ is the safe fallback behaviour of an operation in case its implicit precondition assertion was violated (regardless of whether this assertion was checked). In both cases, we are talking about the behaviour of a program that is known to be in an incorrect state and that behaviour nevertheless being well-defined. The two terms ``erroneous behaviour'' and ``violation of an implicit contract assertion'' to describe such behaviour are therefore essentially interchangeable.
 
 
-\subsection{Safety vs. performance}
+According to \cite{P2795R5}, the implementation is permitted to do any of the following when erroneous behaviour occurs:
+\begin{itemize}
+\item Issue a diagnostic; 
+\item Terminate the application; 
+\item Do nothing.
+\end{itemize}
+This list of permitted behaviours is a strict subset of the five permitted contract evaluation semantics \tcode{quick_enforce}, \tcode{enforce}, \tcode{observe}, \tcode{ignore}, and \tcode{assume}. Issuing a diagnostic maps to \tcode{observe}; terminating the application with or without such a diagnostic maps to the two enforcing semantics (\tcode{enforce} or \tcode{quick_enforce}, respectively), and doing nothing maps to \tcode{ignore} (silently execute the safe fallback behaviour).
 
-sdf
+The erroneous behaviour framework contains a subtle difference in its specification of the enforcing semantics. The wording in \cite{P2795R5} specifies that on erroneous behaviour, the implementation is permitted to terminate the execution at an unspecified time after that operation, whereas the enforcing semantics in \cite{P2900R6} do not give permission for the termination to be delayed until an unspecified time. One of the reasons why it is desirable to unify both frameworks, rather than having two separate mechanisms for achieving essentially the same thing, is that we can avoid such subtle divergences in behaviour.
+
+Note that the erroneous behaviour framework lacks several features of the Contracts framework that can be very useful for handling defects. First, Contracts allow the user to handle the defect programmatically via installing a user-defined violation handler; second, our proposal allows handling of many more kinds of undefined behaviour by also handling cases without a safe fallback behaviour (which we call \emph{non-ignorable} contract violations); and third, our proposal offers the option of full backwards-compatibility with C++23 and earlier via the \tcode{assume} semantic.
+
+This last point is particularly significant. Many kinds of undefined behaviour require significant runtime overhead for diagnosis at runtime or even just for changing to a safe fallback behaviour. At the same time, C++ is used in many applications where runtime performance is the absolute highest priority: low-latency trading, video games, real-time signal processing, high-performance computing, etc. Introducing any \emph{measurable} runtime regressions in a new C++ standard will likely lead to such a new standard being rejected by such applications. Continuing to support applications that require maximum performance and cannot afford runtime regressions is as critical for the survival of C++ as improving safety. Any respecification of undefined behaviour to well-defined behaviour that may introduce such runtime regressions therefore requires an escape hatch to revert to the legacy unsafe behaviour of C++23 and earlier, even if the new, safe behaviour is the new default.
+
+The erroneous behaviour \cite{P2795R5} introduces such an escape hatch in the form of a new attribute \mbox{\tcode{[[indeterminate]]}} that needs to be added to a variable declaration to get the C++23 behaviour. Since \cite{P2795R5} dooes not offer the \tcode{assume} semantic as an option, applying the erroneous behaviour framework to \emph{any} other kind of undefined behaviour will also require such explicit opt-out syntax. This approach does not scale. If we continue to introduce erroneous behaviour to the Standard, we will end up with a whole zoo of various opt-out attributes and other syntactic markers, which will drive up the already high complexity of the language. In addition, the functionality of some of these new syntactic markers, an in particular the fact that they are \emph{unsafe}, might not be obvious to users, inviting new sources of safety bugs. For other cases such as overflowing arithmetic operations, it is not clear what an opt-out syntax could even look like and whether it is possible. Finally, the cost of correctly applying new opt-out syntax to legacy codebases may be too high for some companies, which means that in order to avoid performance regressions, they will have to permanently remain on older compilers.
+
+By contrast, the \tcode{assume} semantic offers a unified mechanism to opt into the unsafe behaviour of C++23 and earlier if needed, without having to change any existing code. This approach avoids unnecessary complexity, is easier to teach, and easier to enforce with tooling, as  the unsafe opt-in is entirely contained inside the choice of contract evaluation semantic. Note that the choice of evaluation semantic is implementation-defined, and the granularity of this choice is arbitrary: it can be global, per TU, per kind of undefined behaviour, or even per assertion; compilers are free to offer configuration options for all these cases. If strict safety requirements need to be followed, the usage of the \tcode{assume} semantic can be outright banned for both implicit and explicit contract assertions. In addition, a conforming implementation can choose to never use the \tcode{assume} semantic by default, and even to not offer this semantic as an option at all.
+
+\subsection{Providing a standard C++ API for sanitisers}
+
+Several kinds of undefined behaviour that can be respecified in terms of contract violations as proposed here require additional instrumentation to diagnose at runtime. This is particularly true for assertions related to memory safety such as whether a pointer points to a valid object. Diagnosing such issues is the mainstay of sanitisers such as ASan and UBSan. Our proposal provides a standard API that such sanitisers can use to interact with user code.
+
+There is limited existing practice for such APIs. All clang sanitisers have a callback \tcode{__sanitizer_set_death_callback}, taking no arguments. This callback can be used to inform the user that the process is about to terminate, but it does not provide an API to programmatically query what happened or where. ASan has a slightly more sophisticated callback \tcode{__asan_set_error_report_callback} which takes a single argument of type \tcode{const char*}. This argument provides a string that contains the generated error report.
+
+Compared to these callbacks, the library API of the Contracts MVP (with the slight modifications proposed in this paper) provides not only a user callback in the form of a replaceable contract-violation handler, but also programmatically accessible information about the defect via the  \mbox{\tcode{contract_violation}} object passed into the contract-violation handler. This more comprehensive API can serve as a uniform standard callback mechanism for sanitisers, thus placing them much more firmly within the scope of the C++ standard.
+
+Note that supporting this API is entirely optional for existing sanitisers. \cite{P2900R6} specifies that the behaviour of the default contract-violation handler is implementation-defined and an implementation does not have to offer the option of installing a user-defined contract-violation handler, therefore existing sanitisers are already conforming. Any given sanitiser can be said to apply the \tcode{enforce} evaluation semantic (without a replaceable contract-violation handler) to those kinds of undefined behaviour that it diagnoses, and the \tcode{assume} evaluation semantic to the remaining kinds.
+
+\subsection{Preconditions in the C++ standard library}
+
+The C++ standard library currently specifies that the violation of any precondition of a standard library function results in undefined behaviour. It follows that many common functions such as \tcode{std::vector::operator[]} are inherently unsafe according to the C++ standard.
+
+Vendors that wish to offer safer implementations are already free to strengthen this specification and provide implementations where violations of certain preconditions result in termination or some other well-defined behaviour (e.g. triggering a breakpoint in debug mode). Contracts do not impose any additional restrictions on library vendors: they can use the new explicit contract assertions as specified in \cite{P2900R6} for this purpose, but are not required to do so.
+
+The concept of implicit contract assertions proposed in this paper extends the concepts of contract violations and evaluation semantics to not only \cite{P2900R6}-style explicit contract assertions, but also preconditions asserted through other means, including compiler built-ins. A standard library implementation can document which of the preconditions in the standard library it implements via explicit contract assertions, which it considers to be implicit contract assertions, and which evaluation semantics it provides for these implicit contract assertions. The framework proposed here would therefore allow vendors to communicate which safety guarantees their standard library implementation provides or does not provide using standard-conforming vocabulary, and place the mitigation strategies employed by these vendors within the scope of the C++ standard, rather than into the realm of vendor-specific extensions. This is relevant for ongoing efforts such as the currently proposed\footnote{See \url{https://discourse.llvm.org/t/rfc-hardening-in-libc/}} hardening modes for the libc++ standard library implementation.
+
+\subsection{Errors leading to \tcode{std::terminate} being called}
+
+In addition to respecifying undefined and erroneous behaviour to be a contract violation, we can consider respecifying errors that lead to \tcode{std::terminate} being called to be a contract violation as well. Such errors are typically unrecoverable situations that arise during exception handling and require abandoning stack unwinding and exception handling in favour of program termination. This approach is explored in more detail in another paper, \cite{P3205R0}; below, we provide a sketch how this approach fits into our proposed framework.
+
+The most common error that leads to \tcode{std::terminate} being called is the attempt to throw an exception from a function marked \tcode{noexcept}. Handling this error can be integrated into the Contracts framework by specifying that a \tcode{noexcept} function has an implicit contract assertion that it will not exit via an exception; thus, an attempt to do so is a contract violation, and the usual contract evaluation semantics apply.
+
+To preserve backwards-compatibility with the behaviour in C++23 and earlier, we can define the call to \tcode{std::terminate} to be the safe fallback behaviour\footnote{Note that we cannot guarantee the backwards-compatible call to \tcode{std::terminate} by simply using the enforcing evaluation semantics, because they are not guaranteed to call \tcode{std::terminate} specifically, only to terminate the program in some implementation-defined way. Note further that for instances of undefined behaviour, the evaluation semantic that is equivalent to the current C++23 behaviour is the \tcode{assume} semantic, while for errors that lead to \tcode{std::terminate} being called, the evaluation semantic that is equivalent to the current C++23 behaviour is the \tcode{ignore} semantic.} for this contract violation (i..e. the behaviour that occurs if the \tcode{ignore} semantic is used for this particular contract assertion). In addition, we can opt in to other useful behaviours via the other four semantics. For example, the \tcode{enforce} or \tcode{observe} semantics offer the options to report the error or even to unwind the stack anyway by using a throwing contract-violation handler, and the \tcode{assume} semantic offers the option of more aggressive code optimisations than is possible today\footnote{Today, the compiler is only allowed to optimise based on the assumption that an exception will never escape a \tcode{noexcept} function because \tcode{std::terminate} will be called; with the \tcode{assume} semantic, the compiler would additionally be allowed to time-travel-optimise-out all code paths that would lead to such a call to \tcode{std::terminate}.}.
 
 %\section*{Document history}
 
@@ -164,6 +302,8 @@ sdf
 %\section*{Acknowledgements}
 
 %nothing here yet
+
+\pagebreak % MANUAL
 
 \renewcommand{\bibname}{References}
 \bibliographystyle{abstract}

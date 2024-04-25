@@ -12,7 +12,7 @@
 
 \begin{tabular}{ll}
 Document \#: & D3100R0 \\
-Date: &2024-04-22 \\
+Date: &2024-04-23 \\
 Project: & Programming Language C++ \\
 Audience: & EWG, SG21, SG23
 \end{tabular}
@@ -229,6 +229,7 @@ Note however that non-ignorable implicit contract assertions such as a pointer p
 \section{Discussion}
 
 \subsection{Making C++ a safer language}
+\label{subsec:makingsafe}
 
 The primary aim of this paper is to replace undefined behaviour that is not diagnosable at compile time and instead manifests at runtime with \emph{safe} well-defined behaviour, thereby reducing the overall amount of undefined behaviour in C++ and making it a safer language. We can gradually and iteratively apply the proposed framework for more and more kinds of undefined behaviour in the C++ language, starting with the most obvious candidates.
 
@@ -291,6 +292,10 @@ In addition to respecifying undefined and erroneous behaviour to be a contract v
 The most common error that leads to \tcode{std::terminate} being called is the attempt to throw an exception from a function marked \tcode{noexcept}. Handling this error can be integrated into the Contracts framework by specifying that a \tcode{noexcept} function has an implicit contract assertion that it will not exit via an exception; thus, an attempt to do so is a contract violation, and the usual contract evaluation semantics apply.
 
 To preserve backwards-compatibility with the behaviour in C++23 and earlier, we can define the call to \tcode{std::terminate} to be the safe fallback behaviour\footnote{Note that we cannot guarantee the backwards-compatible call to \tcode{std::terminate} by simply using the enforcing evaluation semantics, because they are not guaranteed to call \tcode{std::terminate} specifically, only to terminate the program in some implementation-defined way. Note further that for instances of undefined behaviour, the evaluation semantic that is equivalent to the current C++23 behaviour is the \tcode{assume} semantic, while for errors that lead to \tcode{std::terminate} being called, the evaluation semantic that is equivalent to the current C++23 behaviour is the \tcode{ignore} semantic.} for this contract violation (i..e. the behaviour that occurs if the \tcode{ignore} semantic is used for this particular contract assertion). In addition, we can opt in to other useful behaviours via the other four semantics. For example, the \tcode{enforce} or \tcode{observe} semantics offer the options to report the error or even to unwind the stack anyway by using a throwing contract-violation handler, and the \tcode{assume} semantic offers the option of more aggressive code optimisations than is possible today\footnote{Today, the compiler is only allowed to optimise based on the assumption that an exception will never escape a \tcode{noexcept} function because \tcode{std::terminate} will be called; with the \tcode{assume} semantic, the compiler would additionally be allowed to time-travel-optimise-out all code paths that would lead to such a call to \tcode{std::terminate}.}.
+
+\section{Proposed wording}
+
+Proposed wording will be added once there is agreement on which instances of undefined behaviour to respecify in the fashion proposed here (see Section~\ref{subsec:makingsafe} for discussion) and once the Contracts MVP is approved (wording for the respecification proposed here will heavily rely on the wording of the Contracts MVP).
 
 %\section*{Document history}
 

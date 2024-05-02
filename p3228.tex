@@ -320,7 +320,9 @@ void f(List* l) {
   }
 }
 \end{codeblock}
-This transformation silently breaks the program and results in the wrong data being processed, even though the program is correct apart from the destructive side effect in the assertion. This is another reason why in the programming model of the Contracts MVP, side effects that maintain state within a contract assertion are considered destructive and are not supported, even though they can not be made ill-formed or undefined or erroneous behaviour, and this property holds regardless of whether elisions or duplications of \emph{checked} assertions are allowed or exactly one evaluation of the predicate of a \emph{checked} assertion is guaranteed.
+This transformation silently breaks the program and results in the wrong data being processed, even though the program is correct apart from the destructive side effect in the assertion. Just like before, this bug can be fixed by factoring the increment out of the predicate, which will make the assumption work as intended.
+
+This kind of breakage is another reason why in the programming model of the Contracts MVP, side effects that maintain state within a contract assertion are considered destructive and are not supported, even though we cannot make them ill-formed or undefined or erroneous behaviour; this property holds regardless of whether elisions or duplications of \emph{checked} assertions are allowed or exactly one evaluation of the predicate of a \emph{checked} assertion is guaranteed.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -365,7 +367,7 @@ else if (evaluation_semantic::observe       == _semantic
   // handle violation
 }
 \end{codeblock}
-If we instead guarantee that a \emph{checked} contract assertion evaluates its predicate exactly once, the mapping instead becomes:
+If we instead guarantee that a \emph{checked} contract assertion evaluates its predicate exactly once, the mapping becomes:
 \begin{codeblock}
   // ...
   // checking semantic - determine the value of the predicate
@@ -480,7 +482,9 @@ Now that we have discussed different design requirements for allowing or disallo
 
 This paper does not propose any concrete changes to the Contracts MVP. Instead, we list all plausible specification strategies for how many times the predicate of a checked contract assertion may be evaluated, and provide an analysis of which solutions satisfy which design requirements. The intent of the paper is to add some structure to the discussion and to highlight the engineering tradeoffs that each solution involves, to help reach consensus on the best solution in SG21 and EWG.
 
-Whether elisions are allowed is orthogonal to the other concerns, so we can split the solution space into solutions that allow elisions and solutions that do not. The four known solutions that allow elisions are as follows (all four have been proposed somewhere at some point):
+Whether elisions are allowed is orthogonal to the other concerns, so we can split the solution space into solutions that allow elisions and solutions that do not. The four known solutions that allow elisions are as follows (all four have been proposed at some point):
+
+\pagebreak % DO NOT BREAK UP THE FOLLOWING LIST
 
 \renewcommand{\theenumi}{$\Alph{enumi}_0$} \begin{enumerate}
 \item At most once, i.e. evaluation may be elided but not duplicated (\cite{P1670R0}, \cite{D3197R0}).
@@ -502,12 +506,12 @@ A few more solutions than the ones listed above are theoretically possible, such
 
 Further, there has been a suggestion that we could allow duplications and simultaneously ensure a deterministic amount of evaluations with a solution that says that the predicate must be evaluated exactly $N$ times, where $N$ is implementation-defined. An implementation may then say that, for example, $N$ is 1 if the function called is in a statically linked library, but 2 if the library is linked dynamically. However, a conforming implementation may satisfy such a specification by simply saying that $N$ is any number between 0 and 64 (for example), therefore such a solution is equivalent to solution $C_0$.
 
-Now that we enumerated both the requirements and the possible solutions, we can create a decision matrix listing which possible solutions satisfy which design requirements. This decision matrix is given in Table~\ref{table:matrix}.
+Now that we enumerated all the requirements and possible solutions, we can create a decision matrix that visualises which possible solutions satisfy which design requirements:
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \newcommand{\yes}{\includegraphics[width=4mm]{images/yes.png}}
 \newcommand{\no}{\includegraphics[width=4mm]{images/no.png}}
-\vspace{4mm}
+%\vspace{4mm}
 \begin{table}[!htbp]
 \begin{tabular}{|p{5.4cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|}
 \hline 
@@ -527,17 +531,15 @@ Allow elisions & \yes & \no & \yes & \no & \yes & \no & \yes & \no \\
 Allow more than two repetitions& \no & \no & \no & \no & \yes & \yes & \yes & \yes \\
 \hline
 \end{tabular}
-\vspace{2mm}
-\caption{Decision matrix for the number of evaluations problem. The order in which the design requirements are listed does not imply a ranking by importance; we are not attempting to perform such a ranking in this paper.}
-  \label{table:matrix}
 \end{table}
+The order of the design requirements does not imply a ranking by importance; we are not attempting to perform such a ranking in this paper.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
+\pagebreak
 \section{Discussion}
 
-The decision matrix (Table~\ref{table:matrix}) reveals that it is impossible to satisfy all design requirements. Out of the six design requirements presented, all of which can be well-motivated as we have seen above, at most four design requirements can be satisfied simultaneously by any solution considered in this paper.
+The decision matrix above reveals that it is impossible to satisfy all design requirements. Of the six design requirements presented, all of which can be well-motivated as we have seen above, at most four design requirements can be satisfied simultaneously by any solution considered in this paper.
 
 Choosing a solution will therefore require making a tradeoff between  contradicting requirements. For example, SG21 and EWG will need to decide  whether it is more important to have a normatively specified deterministic number of evaluations (which effectively translates to ``exactly one evaluation when checked'' --- see Section~\ref{subsec:exactlyonce}), or whether it is more important to allow duplications of evaluations in order to support caller-side checking without an ABI break (Section~\ref{subsec:ville}), as satisfying both of these requirements is impossible. In case the latter is deemed to be the better tradeoff, four more decisions need to be made: whether to allow elisions (Section~\ref{subsec:elisions}), whether to allow more than two repetitions (Section~\ref{subsec:rep}), whether to require a deterministic upper bound on those repetitions (Section~\ref{subsec:upper}), and whether such a deterministic upper bound should be normative or implementation-defined. If SG21 and EWG can get consensus on these questions, it becomes unambiguous which concrete solution to choose for the specification.
 

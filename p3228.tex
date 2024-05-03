@@ -44,7 +44,7 @@
 
 \begin{tabular}{ll}
 Document \#: & D3228R1 \\
-Date: &2024-05-02 \\
+Date: &2024-05-03 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -175,7 +175,7 @@ Under this definition, most C++ expressions have side effects. C++ expressions w
 
 No algorithm exists to statically prove whether an arbitrary C++ expression will have side effects when executed. It is therefore impossible to make contract predicates ill-formed based on whether the predicate expression will have side effects when executed. First, any such analysis is made impossible by the existence of opaque functions whose definitions are in a different translation unit. Second, even if all function definitions were transparent to the compiler, proving that an arbitrary C++ expression is side-effect-free would still be equivalent in complexity to the Halting problem.
 
-It is possible to define a subset of C++ expressions for which the side-effect-free property \emph{can} be proven, and C++ compilers usually have compilers usually have internal logic to make this determination for the purposes of various optimisations. However, we currently lack the specification tools to specify such a subset in the C++ Standard, and in addition this subset is very small and excludes all but the most trivial of allowed forms of expressions.
+It is possible to define a subset of C++ expressions for which the side-effect-free property \emph{can} be proven, and C++ compilers usually have internal logic to make this determination for the purposes of various optimisations. However, we currently lack the specification tools to specify such a subset in the C++ Standard, and in addition this subset is very small and excludes all but the most trivial of allowed forms of expressions.
 
 \subsection{Side effects outside of the cone of evaluation}
 \label{subsec:cone}
@@ -309,7 +309,7 @@ contract_assert(++index == l->d_data);
 \end{codeblock}
 becomes equivalent to
 \begin{codeblock}
-[[assume(l->d_data == 1)]];
+[[assume(1 == l->d_data)]];
 \end{codeblock}
 which in turn allows the compiler to transform the function \tcode{f} into the following:
 \begin{codeblock}
@@ -320,7 +320,25 @@ void f(List* l) {
   }
 }
 \end{codeblock}
-This transformation silently breaks the program and results in the wrong data being processed, even though the program is correct apart from the destructive side effect in the assertion. Just like before, this bug can be fixed by factoring the increment out of the predicate, which will make the assumption work as intended.
+This transformation silently breaks the program and results in the wrong data being processed, even though the program is correct apart from the destructive side effect in the assertion. Just like before, this bug can be fixed by factoring the increment out of the predicate, which will make the assumption work as intended:
+
+\begin{codeblock}
+void f(List* l) {
+//\#ifndef NDEBUG
+  int index = 0;
+//\#endif
+  while (l) {
+  //\#ifndef NDEBUG
+    ++index;
+  //\#endif
+    contract_assert(index == l->d_data);
+    process(l->d_data);
+    l = l->d_next;
+  }
+}
+++index;
+contract_assert(index == l->d_data);
+\end{codeblock}
 
 This kind of breakage is another reason why in the programming model of the Contracts MVP, side effects that maintain state within a contract assertion are considered destructive and are not supported, even though we cannot make them ill-formed or undefined or erroneous behaviour; this property holds regardless of whether elisions or duplications of \emph{checked} assertions are allowed or exactly one evaluation of the predicate of a \emph{checked} assertion is guaranteed.
 
@@ -412,26 +430,15 @@ Regardless of whether such an upper bound on the number of evaluations is normat
 \subsection{Allow duplications}
 \label{subsec:ville}
 
-% TODO MOVE THIS SOMEWHERE
-
-However, if the number of evaluations of \tcode{contract_assert} is  unspecified, such an assertion is more clearly diagnosable as a bug in itself (regardless of the chosen evaluation semantic), and the author of the function \tcode{f} is more likely to be convinced to fix it by factoring the side effect out of the predicate:
-\begin{codeblock}
-++index;
-contract_assert(index == l->d_data);
-\end{codeblock}
-
-% TODO END
-
-
-The main motivation for allowing duplication of predicate evaluations is to allow the implementation to perform caller-side checking\footnote{Note that only a subset of contract checks can be implemented caller-side. Some contract checks can be implemented only callee-side. This is the case for indirect function calls, for example, through a function pointer or a facility like \tcode{std::function}. In such scenarios, a callee-side check can be generated only if the compiler front-end sees the function contract assertion related to the function call, i.e. it knows which function will be called and can see the declaration of that function. It is also the case for checking postconditions in the Microsoft ABI, as this ABI performs argument destruction callee-side and postcondition checks are guaranteed to happen before argument destruction. Note further that, if we adopt the proposed design in \cite{P3097R0} and \cite{P3165R0} for supporting function contract assertions on virtual functions, the reverse will also become true: only a subset of contract checks can be implemented callee-side. In particular, checks for function contract assertions of the statically called function in a virtual function call can be generated only caller-side as the statically called function is unknown to the callee.} while preserving ABI compatibility. Caller-side checking cannot in general be implemented without either allowing duplication or requiring ABI changes.
+The main motivation for allowing duplication of predicate evaluations is to allow the implementation to perform caller-side checking\footnote{Note that only a subset of contract checks can be implemented caller-side. Some contract checks can be implemented only callee-side. This is the case for indirect function calls, for example, through a function pointer or a facility like \tcode{std::function}. In such scenarios, a callee-side check can be generated only if the compiler front-end sees the function contract assertion related to the function call, i.e. it knows which function will be called and can see the declaration of that function. It is also the case for checking postconditions in the Microsoft ABI, as this ABI performs argument destruction callee-side and postcondition checks are guaranteed to happen before argument destruction. Note further that, if we adopt the proposed design in \cite{P3097R0} and \cite{P3165R0} for supporting function contract assertions on virtual functions, the reverse will also become true: only a subset of contract checks can be implemented callee-side. In particular, checks for function contract assertions of the statically called function in a virtual function call can be generated only caller-side as the statically called function is unknown to the callee.} while preserving ABI compatibility. To our best knowledge, caller-side checking cannot be implemented without either allowing duplication or requiring ABI changes. When considering such changes, preserving ABI compatibility is crucial for allowing user applications to link against shared libraries such as system libraries: regardless of the shape of the application's dependency graph, and which components in that graph are compiled with or without Contracts support, the program must still link and execute correctly.
 
 Consider a shared library that has function contract assertions on its function declarations, and an application that uses this library by compiling against a header and then dynamically linking against a shared library. The provider of the shared library may ship the compiled library binary with callee-side checks disabled or enabled; the developer of the application may not have any control over this.
 
-The developer of the application should have the choice of compiling the application with caller-side checks either enabled or disabled (the latter resulting in the caller-side-checkable subset of the library checks being checked, which can be useful to diagnose problems). Either version of the application should be compatible with either version of the shared library, without having to recompile and re-link\footnote{Without this requirement, guaranteeing that contract checks be evaluated exactly once would be relatively easy: if in the library, checks are disabled, in the application we call a thunk wrapper, which checks precondition assertions and then calls the function; otherwise, we just call the function. The library's build never affects whether the preconditions are checked, only the application build does. However, in this implementation model, we cannot flip precondition checks on and off by just building the library differently and then running an unmodified application with it. Instead, we would need to recompile the application, which might be prohibitively slow or impossible.} when switching between a shared library that has callee-side checking enabled and one that has them disabled. When linking an application having caller-side checks enabled and a library having callee-side checks enabled, running the program will result in the caller-side-checkable subset of the library checks being checked twice.
+The developer of the application should have the choice of compiling the application with caller-side checks either enabled or disabled (the latter resulting in the caller-side-checkable subset of the library checks being checked, which can be useful to diagnose problems). Either version of the application should be compatible with either version of the shared library, without having to recompile and re-link\footnote{Without this requirement, guaranteeing that contract checks be evaluated exactly once would be relatively easy: if in the library, checks are disabled, in the application we call a thunk wrapper, which checks precondition assertions and then calls the function; otherwise, we just call the function. The library's build never affects whether the preconditions are checked, only the application build does. However, in this implementation model, we cannot flip precondition checks on and off by just building the library differently and then running an unmodified application with it. Instead, we would need to recompile the application, which might be prohibitively slow or impossible.} when switching between a shared library that has callee-side checking enabled and one that has them disabled. When linking an application having caller-side checks enabled and a library having callee-side checks enabled, running the program will result in some function contract assertions in that library being checked twice.
 
 We can consider implementation strategies that would allow this use case while also guaranteeing that contract checks be evaluated exactly once (or not more than once). However, this requires that the implementation provides a way for function calls compiled with caller-side checking to skip callee-side checking and thereby avoid a duplicated check. Such strategies come with tradeoffs. One possible strategy would be to compile the library binary such that each function with precondition or postcondition assertions has two entry points, one that performs the callee-side check and one that does not, thereby allowing function calls compiled with caller-side checking to choose the latter entry point. However, this can significantly increase the amount of symbols in the binary, and requires a change to the ABI. Another possibility is to compile the library such that the choice whether to perform callee-side checks can be made dynamically at runtime, but this would incur additional runtime overhead and again require a change to the ABI.
 
-For some users, the tradeoffs of either strategy will be unacceptable: a global ABI break might make this approach undeployable, and in a world where some C++ applications require tens of gigabytes of memory to link due to the sheer amount of symbols, there is a strong incentive to avoid adding more symbols. Further, there is currently no implementation experience for either strategy\footnote{Caller-side checking itself does not have implementation experience either, but it is arguably somewhat less theoretical, because compilers know how to parse the function contract specifiers of a function declaration and rewrite a function call \tcode{f()} into a caller-side checked function call such as \mbox{\tcode{(pre_check() ? f() : abort())}}.}. Avoiding these tradeoffs however requires us to either explicitly allow duplication of predicate evaluations, or to place this use case outside of the scope of the C++ Standard and treat support for it as a non-conforming vendor extension, as we do for example for \tcode{-fno-exceptions}.
+For some users, the tradeoffs of either strategy will be unacceptable: if the ABI change is not backwards-compatible, this makes the strategy undeployable, and in a world where some C++ applications require tens of gigabytes of memory to link due to the sheer amount of symbols, there is a strong incentive to avoid adding more symbols. Further, there is currently no implementation experience for either strategy\footnote{Caller-side checking itself does not have implementation experience either, but it is arguably somewhat less theoretical, because compilers know how to parse the function contract specifiers of a function declaration and rewrite a function call \tcode{f()} into a caller-side checked function call such as \mbox{\tcode{(pre_check() ? f() : abort())}}.}. Avoiding these tradeoffs however requires us to either explicitly allow duplication of predicate evaluations, or to place this use case outside of the scope of the C++ Standard and treat support for it as a non-conforming vendor extension, as we do for example for \tcode{-fno-exceptions}.
 
 %%%%%%%%%%
 \subsection{Allow elisions}
@@ -484,8 +491,6 @@ This paper does not propose any concrete changes to the Contracts MVP. Instead, 
 
 Whether elisions are allowed is orthogonal to the other concerns, so we can split the solution space into solutions that allow elisions and solutions that do not. The four known solutions that allow elisions are as follows (all four have been proposed at some point):
 
-\pagebreak % DO NOT BREAK UP THE FOLLOWING LIST
-
 \renewcommand{\theenumi}{$\Alph{enumi}_0$} \begin{enumerate}
 \item At most once, i.e. evaluation may be elided but not duplicated (\cite{P1670R0}, \cite{D3197R0}).
 \item At most twice (\cite{P2521R5}), i.e. evaluation may be both elided and duplicated.
@@ -506,7 +511,7 @@ A few more solutions than the ones listed above are theoretically possible, such
 
 Further, there has been a suggestion that we could allow duplications and simultaneously ensure a deterministic amount of evaluations with a solution that says that the predicate must be evaluated exactly $N$ times, where $N$ is implementation-defined. An implementation may then say that, for example, $N$ is 1 if the function called is in a statically linked library, but 2 if the library is linked dynamically. However, a conforming implementation may satisfy such a specification by simply saying that $N$ is any number between 0 and 64 (for example), therefore such a solution is equivalent to solution $C_0$.
 
-Now that we enumerated all the requirements and possible solutions, we can create a decision matrix that visualises which possible solutions satisfy which design requirements:
+Now that we enumerated all the requirements and possible solutions, we can create a decision matrix that visualises which possible solutions satisfy which design requirements (Table \ref{table:matrix}). The order of the design requirements in this matrix does not imply a ranking by importance; we are not attempting to perform such a ranking in this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \newcommand{\yes}{\includegraphics[width=4mm]{images/yes.png}}
@@ -531,17 +536,23 @@ Allow elisions & \yes & \no & \yes & \no & \yes & \no & \yes & \no \\
 Allow more than two repetitions& \no & \no & \no & \no & \yes & \yes & \yes & \yes \\
 \hline
 \end{tabular}
+\vspace{2mm}
+\caption{Decision matrix for the number of contract predicate evaluations.}
+\label{table:matrix}
 \end{table}
-The order of the design requirements does not imply a ranking by importance; we are not attempting to perform such a ranking in this paper.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\pagebreak
+
 \section{Discussion}
 
-The decision matrix above reveals that it is impossible to satisfy all design requirements. Of the six design requirements presented, all of which can be well-motivated as we have seen above, at most four design requirements can be satisfied simultaneously by any solution considered in this paper.
+The decision matrix in Table \ref{table:matrix} reveals that it is impossible to satisfy all design requirements. Of the six design requirements presented, all of which can be well-motivated as we have seen above, at most four design requirements can be satisfied simultaneously by any solution considered in this paper. Choosing a solution will therefore require making a tradeoff between contradicting requirements.
 
-Choosing a solution will therefore require making a tradeoff between  contradicting requirements. For example, SG21 and EWG will need to decide  whether it is more important to have a normatively specified deterministic number of evaluations (which effectively translates to ``exactly one evaluation when checked'' --- see Section~\ref{subsec:exactlyonce}), or whether it is more important to allow duplications of evaluations in order to support caller-side checking without an ABI break (Section~\ref{subsec:ville}), as satisfying both of these requirements is impossible. In case the latter is deemed to be the better tradeoff, four more decisions need to be made: whether to allow elisions (Section~\ref{subsec:elisions}), whether to allow more than two repetitions (Section~\ref{subsec:rep}), whether to require a deterministic upper bound on those repetitions (Section~\ref{subsec:upper}), and whether such a deterministic upper bound should be normative or implementation-defined. If SG21 and EWG can get consensus on these questions, it becomes unambiguous which concrete solution to choose for the specification.
+For example, SG21 and EWG will need to decide  whether it is more important to have a normatively specified deterministic number of evaluations (which effectively translates to ``exactly one evaluation when checked'' --- see Section~\ref{subsec:exactlyonce}), or whether it is more important to allow duplications of evaluations in order to support caller-side checking without an ABI break (Section~\ref{subsec:ville}), as satisfying both of these requirements is impossible.
+
+In case the latter is deemed to be the better tradeoff, four more decisions need to be made: whether to allow elisions (Section~\ref{subsec:elisions}), whether to allow more than two repetitions (Section~\ref{subsec:rep}), whether to require a deterministic upper bound on those repetitions (Section~\ref{subsec:upper}), and whether such a deterministic upper bound should be normative or implementation-defined.
+
+If SG21 and EWG can get consensus on the above questions, it becomes unambiguous which concrete solution to choose for the specification.
 
 Notably, it is possible to choose one solution for \tcode{pre} and \tcode{post} and a different solution for \mbox{\tcode{contract_assert}}. One such proposal is \cite{P3257R0}. It proposes to retain the status quo (solution $D_0$) for \tcode{pre} and \tcode{post}, but to adopt solution $A_1$ for \tcode{contract_assert}. The latter has different tradeoffs than the former. In particular, the need to support caller-side checking does not exist for \tcode{contract_assert}, because assertion statements can appear only inside the function body and are therefore always checked callee-side. Instead, there is a new design requirement: it might be desirable to pick the same solution for \tcode{contract_assert} as we did for \tcode{pre} and \tcode{post} so that the three assertion kinds provided in the Contracts MVP behave in a consistent fashion.
 
@@ -561,7 +572,7 @@ It is our hope that the analysis provided in this paper will be helpful for SG21
 %\pagebreak % MANUAL %%%%%%%%%
 
 \section*{Acknowledgements}
-Thanks to John Spicer,  Joshua Berne, Ville Voutilainen, Ga\v sper A\v zman, Andreas Weis, and Anthony Williams for the illuminating discussions that led to this paper. Thanks to Jonas Persson, Andrew Tomazos, Jens Maurer, Andrzej Krzemie\' nski, and John Lakos for their helpful comments on an earlier revision of this paper. Thanks to Joshua Berne for reviewing a draft of this revision, and for providing the \tcode{List} code example. Thanks to everyone who participated in the discussion on the SG21 reflector which this paper attempts to capture.
+Thanks to John Spicer,  Joshua Berne, Ville Voutilainen, Ga\v sper A\v zman, Andreas Weis, and Anthony Williams for the illuminating discussions that led to this paper. Thanks to Joshua Berne for reviewing this paper and providing the \tcode{List} code example. Thanks to Jonas Persson, Andrew Tomazos, Jens Maurer, Andrzej Krzemie\' nski, John Lakos, Ran Regev, and Greg Marr for their helpful comments. Thanks to everyone who participated in the discussion on the SG21 reflector which this paper attempts to capture.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

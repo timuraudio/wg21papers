@@ -4,7 +4,7 @@
  \usepackage[bottom]{footmisc} 
 
 \begin{document}
-\title{Contracts, Undefined Behaviour, and Erroneous Behaviour}
+\title{Undefined and erroneous behaviour is a contract violation}
 \author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})  \\
 Ga\v sper A\v zman \small(\href{mailto:gasper.azman@gmail.com}{gasper.azman@gmail.com})   \\
 Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net})  
@@ -56,7 +56,7 @@ It has been stated that such an extensible Contracts facility is a panacea that 
 
 Recently, the committee has adopted the proposal (\cite{P2795R5}) into the C++26 working draft, which follows essentially the same motivation. The proposal makes reading the value of an uninitialised variable well-defined by respecifying such reads as \emph{erroneous behaviour}, another term for behaviour that is incorrect, but not undefined. When encountering erroneous behaviour, an implementation is allowed and encouraged to diagnose the defect, but is also allowed to ignore it and treat the read as valid --- a variation of having different contract evaluation semantics. The paper goes on to say that other undefined behaviour can be respecified to be erroneous behaviour instead.
 
-As we will show in this paper, the semantics provided by erroneous behaviour are essentially a subset of the semantics that the Contracts framework provides. We can therefore entirely subsume erroneous behaviour into contract violation handling. As a result, we get a unified framework for reasoning about and handling runtime undefined behaviour that is more generic and flexible than erroneous behaviour and has several other advantages over the approach proposed in \cite{P2795R5}.
+As we will show in this paper, the semantics provided by erroneous behaviour are essentially a subset of the semantics that the Contracts framework provides. We can therefore entirely subsume erroneous behaviour into contract violation handling. As a result, we get a unified framework for reasoning about and handling runtime undefined behaviour that is more generic and flexible than erroneous behaviour and has several other advantages over the approach proposed in \cite{P2795R5} that is currently in the C++26 Working Draft. Our proposed framework  also addresses the last use case \href{https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2020/p1995r1.html\#wg21.otherfeatures}{wg21.otherfeatures} listed in \cite{P1995R1}, the ``Contracts --- Use Cases'' paper that laid the foundation for SG21's work.
 
 \section{The Contracts MVP}
 \subsection{Explicit contract assertions}
@@ -83,7 +83,7 @@ What exactly happens when a contract assertion is evaluated is determined by the
 \item \tcode{ignore}: do not evaluate the contract predicate.
 \end{itemize}
 
-We call \tcode{ignore} an \emph{unchecked} semantic and the other three \emph{checked} semantics. Additionally, we say that \mbox{\tcode{quick_enforce}} and \tcode{enforce} are \emph{enforcing} semantics, i.e. semantics that will not allow the code to continue execution past a contract violation. This prevents the program from continuing into code that might have undefined behaviour. Consider, for example, a program that causes an out-of-bounds access with our implementation of \tcode{vector::operator[]} from above:
+We call \tcode{ignore} a \emph{non-checking} semantic and the other three \emph{checking} semantics. Additionally, we say that \mbox{\tcode{quick_enforce}} and \tcode{enforce} are \emph{enforcing} semantics, i.e. semantics that will not allow the code to continue execution past a contract violation. This prevents the program from continuing into code that might have undefined behaviour. Consider, for example, a program that causes an out-of-bounds access with our implementation of \tcode{vector::operator[]} from above:
 \begin{codeblock}
 int main() {
   vector<int> v;
@@ -128,7 +128,7 @@ If we want to offer the current C++23 behaviour as an option to avoid unacceptab
 \begin{itemize}
 \item \tcode{assume}: do not evaluate the contract predicate; if it would not evaluate to \tcode{true}, the behaviour is undefined.
 \end{itemize}
-The \tcode{assume} semantic is an \emph{unchecked} semantic. Unlike the other unchecked semantic, \tcode{ignore}, the \tcode{assume} semantic allows the compiler to optimise the program based on the assumption that the predicate of the given contract assertion is always \tcode{true}. When applied to implicit contract assertions, the \tcode{assume} semantic is therefore equivalent to the current specification for core language undefined behaviour in C++23 and earlier, thereby offering the required backwards-compatibility as an option when selecting the evaluation semantic for a particular kind of implicit contract assertions.
+The \tcode{assume} semantic is a \emph{non-checking} semantic. Unlike the other non-checking semantic, \tcode{ignore}, the \tcode{assume} semantic allows the compiler to optimise the program based on the assumption that the predicate of the given contract assertion is always \tcode{true}. When applied to implicit contract assertions, the \tcode{assume} semantic is therefore equivalent to the current specification for core language undefined behaviour in C++23 and earlier, thereby offering the required backwards-compatibility as an option when selecting the evaluation semantic for a particular kind of implicit contract assertions.
 
 \subsection{Mapping evaluation semantics to implementation strategies}
 
@@ -245,7 +245,7 @@ The framework proposed here establishes standard vocabulary for all these choice
 \subsection{A better alternative to erroneous behaviour}
 \label{subsec:erroneous}
 
-This proposal entirely replaces the changes proposed in \cite{P2795R5} and the concept of \emph{erroneous behaviour} introduced by that paper.
+This proposal entirely replaces the changes added to the C++26 Working Draft via \cite{P2795R5} and the concept of \emph{erroneous behaviour} introduced by those changes.
 
 Note that when \cite{P2795R5} talks about an operation that \emph{erroneously} does $X$, this is exactly equivalent to saying that $X$ is the safe fallback behaviour of an operation in case its implicit precondition assertion was violated (regardless of whether this assertion was checked). In both cases, we are talking about the behaviour of a program that is known to be in an incorrect state and that behaviour nevertheless being well-defined. The two terms ``erroneous behaviour'' and ``violation of an implicit contract assertion'' to describe such behaviour are therefore essentially interchangeable.
 
@@ -258,7 +258,7 @@ According to \cite{P2795R5}, the implementation is permitted to do any of the fo
 \end{itemize}
 This list of permitted behaviours is a strict subset of the five permitted contract evaluation semantics \tcode{quick_enforce}, \tcode{enforce}, \tcode{observe}, \tcode{ignore}, and \tcode{assume}. Issuing a diagnostic maps to \tcode{observe}; terminating the application with or without such a diagnostic maps to the two enforcing semantics (\tcode{enforce} or \tcode{quick_enforce}, respectively), and doing nothing maps to \tcode{ignore} (silently execute the safe fallback behaviour).
 
-The erroneous behaviour framework contains a subtle difference in its specification of the enforcing semantics. The wording in \cite{P2795R5} specifies that on erroneous behaviour, the implementation is permitted to terminate the execution at an unspecified time after that operation, whereas the enforcing semantics in \cite{P2900R7} do not give permission for the termination to be delayed until an unspecified time. One of the reasons why it is desirable to unify both frameworks, rather than having two separate mechanisms for achieving essentially the same thing, is that we can avoid such subtle divergences in behaviour.
+The erroneous behaviour framework contains a subtle difference in its specification of the enforcing semantics. The wording adopted from \cite{P2795R5} specifies that on erroneous behaviour, the implementation is permitted to terminate the execution at an unspecified time after that operation, whereas the enforcing semantics in \cite{P2900R7} do not give permission for the termination to be delayed until an unspecified time. One of the reasons why it is desirable to unify both frameworks, rather than having two separate mechanisms for achieving essentially the same thing, is that we can avoid such subtle divergences in behaviour.
 
 Note that the erroneous behaviour framework lacks several features of the Contracts framework that can be very useful for handling defects. First, Contracts allow the user to handle the defect programmatically via installing a user-defined violation handler; second, our proposal allows handling of many more kinds of undefined behaviour by also handling cases without a safe fallback behaviour (which we call \emph{non-ignorable} contract violations); and third, our proposal offers the option of full backwards-compatibility with C++23 and earlier via the \tcode{assume} semantic.
 

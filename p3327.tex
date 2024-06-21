@@ -50,12 +50,12 @@ Audience: & SG21, EWG
 \end{tabular}
 
 \begin{abstract}
-In this paper, we explore the design space for an extension to the Contracts MVP proposal \cite{P2900R7} that would allow placing function contract assertions --- \tcode{pre} and \tcode{post} --- directly on pointers to functions and pointers to member functions. We identify three possible design directions for integrating such a feature into the language --- making the function contract assertions a property of the function type, of the pointer value, or of the pointer object --- and highlight the shortcomings of each approach. We conclude that placing function contract assertions on pointers to functions and pointers to member functions is not a viable direction. If we need an indirection mechanism that adds interface contract assertions around a function call, such a mechanism should instead be specified as a separate, new feature, such as the \emph{function usage types} proposed in \cite{P3271R0}.
+In this paper, we explore the design space for an extension to the Contracts MVP proposal \cite{P2900R7} that would allow placing function contract assertions --- \tcode{pre} and \tcode{post} --- directly on pointers to functions and pointers to member functions. We identify two possible choices regarding the basic semantics --- enforcing that the pointer and the function have the same sequence of function contract assertions, or allowing them to be different, meaning that the pointer has its own contract. If we choose the latter, which seems much more useful, then there are three apparent design directions for integrating such a feature into the language --- making the function contract assertions a property of the function type, of the pointer value, or of the pointer object. We analyse all three approaches and highlight the shortcomings of each. We conclude that placing function contract assertions on pointers to functions and pointers to member functions is not a viable direction. If we need an indirection mechanism that adds interface contract assertions around a function call, such a mechanism should instead be specified as a separate, new language feature, such as the \emph{function usage types} proposed in \cite{P3271R0}.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%\tableofcontents*
+\tableofcontents*
 
 %\section*{Revision history}
 
@@ -79,18 +79,18 @@ It has been further suggested in the wake of the discussion around how we could 
 
 To inform these ongoing discussions, the present paper provides an exploration of the available design space for placing \tcode{pre} and \tcode{post} on pointers to functions and pointers to member functions. Our exploration focuses on pointers to functions, however all aspects of this exploration apply equally to pointers to member functions.
 
-We begin our exploration with considering the semantics --- what does it \emph{mean} when a function pointer has precondition or postcondition assertions, and when would these assertions be evaluated? We then consider how these function contract assertions would be integrated into the language, for which there are three apparent options --- making them a property of the function type, of the pointer value, or of the pointer object. We deliberately do not explore the \emph{syntactic} space --- how could we \emph{spell} precondition or postcondition assertions on a function pointer? --- in much detail in this paper as we consider the syntax secondary to the semantic and conceptual concerns. 
+We begin our exploration with considering the semantics --- what does it \emph{mean} when a function pointer has function contract assertions, and when would these assertions be evaluated? We then consider how these function contract assertions would be integrated into the language, for which there are three apparent options --- making them a property of the function type, of the pointer value, or of the pointer object. We deliberately do not explore the \emph{syntactic} space --- how could we \emph{spell} function contract assertions on a function pointer? --- in much detail in this paper as we consider the syntax secondary to the semantic and conceptual concerns. 
 
 Note that none of these ideas are novel. Support for contract assertions on function pointers has been considered multiple times in past proposals for a C++ Contracts facility. Each time, the idea for providing such support was eventually dropped from the proposal. In the following discussion, we will provide references to these past proposals where appropriate.
 
-\section{Semantics}
-Consider a function that has precondition and postcondition assertions:
+\section{Possible semantics}
+Consider a function that has function contract assertions (\tcode{pre} and \tcode{post}):
 \begin{codeblock}
 int f(int i)
   pre (i % 2 == 0)
   post (r: r % 2 == 0);
 \end{codeblock}
-Now let us assume that we can define a pointer to function \tcode{fp} compatible with \tcode{f}, and that we can specify precondition and postcondition assertions that apply to \tcode{fp} and not to \tcode{f} (ignoring, for now, the question whether the syntax we use below would actually work with the C++ grammar):
+Now let us assume that we can define a pointer to function \tcode{fp} compatible with \tcode{f}, and that we can specify function contract assertions that apply to \tcode{fp} and not to \tcode{f} (ignoring, for now, the question whether the syntax we use below would actually work with the C++ grammar):
 \begin{codeblock}
 int (*fp)(int i) 
   pre (i > 0) 
@@ -103,7 +103,11 @@ void test(int i) {
   fp(i);
 }
 \end{codeblock}
-There are fundamentally two possible choices regarding how this call should behave: either we enforce that the contract of the function and that of a pointer allowing us to call that function are the \emph{same} contract (meaning that the above code is incorrect as the contracts do not match, nd should be specified as ill-formed, or perhaps as undefined behaviour or erroneous behaviour), or we allow the contract of the function and that of the pointer to be \emph{different} (meaning that the above code is correct, and we need to specify exactly how it should behave). We discuss both options below.
+There are fundamentally two possible choices regarding how this call should behave, both of which we discuss in this section.
+
+The first possibility is to enforce that the contract of the function and that of a pointer allowing us to call that function are the \emph{same} contract. This would mean that the above code is incorrect as the contracts do not match, and should be specified as ill-formed (or perhaps, somewhat less plausibly, as undefined behaviour or erroneous behaviour).
+
+The second possibility is that we allow the contract of the function and that of the pointer to be \emph{different}. This would mean that the above code is correct, and we need to specify exactly how it should behave.
 
 \subsection{Pointer must have the same contract as the function}
 
@@ -129,21 +133,24 @@ This separation in interface and implementation contract works in the same way f
 \end{enumerate}
 While these semantics seem useful, the question remains whether there is actually any possible way to specify and implement a feature that enables such semantics. Unfortunately, if the interface is a pointer to function or a pointer to member function, it is not straightforward at all how this could be achieved. We explore the possible strategies in the following section.
 
-\section{Design strategies}
+\section{Possible design strategies}
 
 In order to be able to evaluate the contract assertions attached to a pointer to function whenever any function is called through that pointer, information about these contract assertions has to be encoded somewhere in the program. There are three potential places where this information can be stored --- in the type system, in the value representation, or in the object model. In other words, the contract assertions attached to the pointer can be a property of the function type, of the pointer value, or of the pointer object. Choosing any of these three strategies has wide-reaching consequences which we will discuss below.
 
-\subsection{Make \tcode{pre} and \tcode{post} part of the function type}
+\subsection{Make \tcode{pre} and \tcode{post} a part of the type system}
 
-If the precondition and postcondition assertions applied to a pointer to function are part of the function type, this means that two pointers that have different precondition and postcondition assertions would be of different type, even if they are otherwise the same (again, ignoring for the purposes of this discussion whether the below syntax would actually work):
+If the function contract assertions that apply to a pointer to function are part of the function type, this means that two pointers that have a different sequence of function contract assertions would be of different type, even if they are otherwise the same (again, ignoring for the purposes of this discussion whether the below syntax would actually work):
 \begin{codeblock}
 void(*fp1)(int i) pre (i > 0);
 void(*fp2)(int i) pre (i != 0);
 static_assert(std::is_same_v<decltype(fp1), decltype(fp2)>);  // must be \tcode{false}
 \end{codeblock}
-This immediately raises questions about how these new types should interact. Should these two pointer types be implicitly or explicitly convertible to each other? Should they be convertible to a pointer type \emph{without} precondition and postcondition assertions or vice versa? But the problem goes much deeper than that.
+This immediately raises questions about how these new types should interact. Should these two pointer types be implicitly or explicitly convertible to each other? Should they be convertible to a pointer type \emph{without} function contract assertions or vice versa? But the problem goes much deeper than that.
 
-Any attempt to make contract assertions part of the type system would have to do so consistently --- meaning that regardless of the existence of pointers to functions, the types of \emph{functions} with different precondition and postcondition assertions would have to be different, too:
+Any attempt to make contract assertions part of the type system would have to do so consistently --- meaning that regardless of the existence of pointers to functions, the types of \emph{functions} with a different sequence of function contract assertions would have to be different, too:
+
+\pagebreak % Don't span a codeblock across multiple pages!
+
 \begin{codeblock}
 void f1(int i) pre (i > 0);
 void f2(int i) pre (i != 0);
@@ -183,15 +190,15 @@ f(&r);  // which f overload is called? Overload 1 seems likely
 f(&s);  // which f overload is called? Overload 2 seems likely
 f(&t);  f(&u);  f(&v); // now what?
 \end{codeblock}
-We could also consider making declaring two functions with the same name and signature but different function contract assertions be ill-formed, as it is the case today for \tcode{noexcept(true)} vs. \tcode{noexcept(false)}, to avoid contract assertions becoming part of overload resolution, but that again limits the use cases such a feature could satisfy.
+We could also consider making declaring two functions with the same name and signature but different function contract assertions be ill-formed, as it is the case today for two functions that only differ in whether they are \tcode{noexcept(true)} or \tcode{noexcept(false)}, to avoid contract assertions becoming part of overload resolution, but that would again limit the use cases that such a feature could satisfy.
 
 Ultimately, it seems that for all of the above reasons making function contract assertions an explicit part of the type system is not a viable strategy. This has been realised as early as in \cite{N4110} --- an exploration of the Contracts design space published in 2014 that mentioned many of the thoughts covered above --- and reiterated in \cite{N4415}, \cite{P0246R0}, \cite{P0247R0}, \cite{P0287R0}, \cite{P0380R1}, and \cite{P0542R5}.
 
 \subsection{Encode \tcode{pre} and \tcode{post} in the pointer value}
 
-If we cannot encode the precondition and postcondition assertions applied to a pointer to function in the type of the function or the pointer, the next option is to encode this information in the pointer value. Right off the bat this seems like a less natural choice: the value of a pointer is, in general, a dynamic property that can change at runtime, however we do not consider the function contract assertions of a pointer to function to be such a dynamic property conceptually. Moreover, making the function contract assertions a dynamic property means that their mere existence, regardless of whether we actually want to \emph{check} these assertions, will unavoidably have some overhead, violating another important design principle of \cite{P2900R7}.
+If we cannot encode the function contract assertions applied to a pointer to function in the type of the function or the pointer, the next option is to encode this information in the pointer value. Right off the bat this seems like a less natural choice: the value of a pointer is, in general, a dynamic property that can change at runtime, however we do not consider the function contract assertions of a pointer to function to be such a dynamic property conceptually. Moreover, making the function contract assertions a dynamic property means that their mere existence, regardless of whether we actually want to \emph{check} these assertions, will unavoidably have some overhead, violating another important design principle of \cite{P2900R7}.
 
-Let us take a closer look at how we could make the precondition and postcondition assertions apply to a pointer part of that pointer's value.
+Let us take a closer look at how we could make the function contract assertions that apply to a pointer a property of that pointer's value.
 
 One option would be to somehow encode the assertions directly in the object representation of the pointer, but that would inevitably mean that the pointer value will no longer fit into a pointer-sized chunk of memory (8 bytes on a 64-bit system).
 
@@ -201,7 +208,10 @@ Overall, it seems that such an indirection mechanism wrapping a function call wi
 
 \subsection{Make \tcode{pre} and \tcode{post} a property of the pointer object}
 
-The final possibility for encoding the information needed to specify precondition and postcondition assertions appertaining to a pointer to function is to make these assertions a property of the pointer object. This means that this information is neither part of the type, nor part of the value, but only exists in an ephemeral fashion in the compiler's AST while the program is being compiled. Consider the following code:
+The final possibility for encoding the information needed to specify function contract assertions that apply to a pointer to function is to make these assertions a property of the pointer object. This means that this information is neither part of the type, nor part of the value, but only exists in an ephemeral fashion in the compiler's AST while the program is being compiled. Consider the following code:
+
+\pagebreak % Don't span a codeblock across multiple pages!
+
 \begin{codeblock}
 void f(int i);
 

@@ -158,7 +158,7 @@ On the one hand, it seems like \tcode{fp1} is not part of this call, so it is ir
 Note that the situation seems isomorphic to intermediate contracts on virtual functions in an inheritance hierarchy, but there is an important difference that has a huge impact on possible implementation strategies: while the inheritance hierarchy, and thus the function contract assertions of all overridden functions in the chain, is fully known at compile time, the same is not generally true for pointers whose value can change at runtime, unless we make runtime conversions between pointers with different function contract assertions ill-formed, a possibility we discuss in Section~\ref{subsec:conv}.
 
 \section{Possible semantics}
-\label{sec:semanics}
+\label{sec:semantics}
 
 \subsection{Pointer can have contract different from the function}
 \label{subsec:diffcontract}
@@ -207,19 +207,19 @@ This design direction restricts the ways in which functions with contract assert
 
 This design direction also does not support even basic use cases such as passing a pointer to function that has function contract assertions to a legacy API that expects a pointer to function without such assertions. This is especially unfortunate because function pointers are particularly common in code that interacts with such legacy APIs --- in a codebase written entirely in modern C++, indirect call mechanisms more ergonomic than pointers to function and pointers to member function are readily available.
 
-However, the tradeoff is that  this design direction might make it easier to specify and implement an extension that allows function contract assertions on pointers to function (see Section~\ref{sec:specstrat}). Compared to the status quo in \cite{P2900R7}, such an extension would a mechanism to enable caller-side checking of the precondition and postcondition assertions declared on the function in cases where this would not be possible with the status quo. Consider:
+However, the tradeoff is that this design direction might make it easier to specify and implement an extension that allows function contract assertions on pointers to function (see Section~\ref{sec:specstrat}). Compared to the status quo in \cite{P2900R7}, such an extension would be a mechanism to enable caller-side checking of the precondition and postcondition assertions declared on the function in cases where this would not be possible with the status quo. Consider:
 \begin{codeblock}
-void f(int x) pre(x >= 0);
-void g(void (*fp)(int x) pre (int x >=0)); // definition in another TU
+int f(int x) pre(x >= 0);
+int g(void (*fp)(int x) pre (int x >=0)); // definition in another TU
 
-void usingCode() {
-   void (*fp)(int x) pre(x >= 0) = f;
+int usingCode() {
+   int (*fp)(int x) pre(x >= 0) = f;
    g(fp);
 }
 \end{codeblock}
 In this scenario, the definition of \tcode{g} might not know that the function that ends up being called is \tcode{f}, and might not see its declaration and its function contract assertions. However, by using the pointer \tcode{fp} that has a matching sequence of function contract assertions, \tcode{g} is still able to perform caller-side checking of \tcode{f}'s function contract assertions if this is desired by the owner of the program. In essence, this gives us a way to propagate information about the function contract assertions of \tcode{f} to other parts of the program separately from the declaration of \tcode{f} itself.
 
-It is somewhat unclear how useful this design would actually be in practice. It seems that a function pointer that is required to have the same sequence of function contract assertions as any function that it can point at would only be particularly useful if we were dealing with a whole group of functions that all have the same contract. However, any two functions that are supposed to do different things will normally have different contracts. Consider two functions \tcode{f1} and \tcode{f2}. If \tcode{f1} and \tcode{f2} have the exact same preconditions and postconditions, then it follows that \tcode{f1} and \tcode{f2} have the same essential behaviour, and thus are actually the same function.
+It is somewhat unclear how useful this design would actually be in practice. It seems that a function pointer that is required to have the same sequence of function contract assertions as any function that it can point at would only be particularly useful if we were dealing with a whole group of functions that all have the same contract. While such cases are plausible, they are not particularly common. Normally, any two functions that are supposed to do different things will have different contracts. Consider two functions \tcode{f1} and \tcode{f2}. If \tcode{f1} and \tcode{f2} have the exact same preconditions and postconditions, then it follows that \tcode{f1} and \tcode{f2} have the same essential behaviour, and thus are actually the same function.
 
 For example, consider two functions, \tcode{sqrt} and \tcode{fourthrt}, computing the square root and fourth root of a real number, respectively. At first glance, it seems that you might want to apply the same sequence of function contract assertions to both functions --- they both require a positive number and return a positive number:
 \begin{codeblock}
@@ -231,7 +231,7 @@ However, if we consider the full contract of these functions, we realise that th
 float sqrt (float x) post (r : r * r == x);
 float fourthrt (float x) post (r : r * r * r * r == x);
 \end{codeblock}
-It is conceivable that there might be cases where \tcode{f1} and \tcode{f2} are distinct functions, and therefore have different contracts, but the subset of \tcode{f1}'s contract that can be expressed via precondition and postcondition assertions might be identical to the corresponding subset of \tcode{f2}'s contract, and the ``function contract assertions must be the same'' model can be applied to those functions. An example of this are two functions \tcode{f1} and \tcode{f2} that are guaranteed to return the same value given the same input, but differ in their guaranteed side effects (for example, one is specified to perform logging while the other is not), and those side effects are not easily checkable with contract assertions. Note however that future extensions to Contracts might introduce new and more powerful ways to express function contract assertions, such as \emph{procedural interfaces} as proposed in \cite{P0465R0}, which will make it less likely that two different functions that are supposed to do different things could end up having the exact same function contact assertions.
+Admittedly, there are cases where \tcode{f1} and \tcode{f2} are distinct functions, and therefore have different contracts, but the subset of \tcode{f1}'s contract that can be expressed via precondition and postcondition assertions might be identical to the corresponding subset of \tcode{f2}'s contract, and the ``function contract assertions must be the same'' model might be useful to select, at runtime, one function from such a group. Consider two functions \tcode{f1} and \tcode{f2} that are guaranteed to return the same value given the same input, but differ in their guaranteed side effects, where those side effects are not easily checkable with contract assertions. One example would be two functions where one is specified to perform logging, while the other is not. Another example are two functions that compute the same thing --- e.g., perform numerical integration or sorting --- but use two different algorithms to achieve this. However, such groups of functions seem to be special cases rather than the norm. Note also that future extensions to Contracts might introduce new and more powerful ways to express function contract assertions, such as \emph{procedural interfaces} as proposed in \cite{P0465R0}, which will make it even less likely that two different functions that are supposed to do different things could end up having the exact same function contact assertions once you consider the strongest possible set of expressible precondition and postcondition assertions.
 
 As a separate concern, requiring to repeat the function contract assertions on each pointer makes it more laborious to make the code compile, and makes the code itself more verbose, since the user is required to repeat the function contract assertions everywhere where there is a pointer that might point to that function.
 
@@ -259,14 +259,14 @@ There are three potential places where this information can be stored --- in the
 
 If the function contract assertions that apply to a pointer to function are part of the function type, this means that two pointers that have a different sequence of function contract assertions would be of different type, even if they are otherwise the same (again, ignoring for the purposes of this discussion whether the below syntax would actually work):
 \begin{codeblock}
-void(*fp1)(int i) pre (i > 0);
-void(*fp2)(int i) pre (i != 0);
+int(*fp1)(int i) pre (i > 0);
+int(*fp2)(int i) pre (i != 0);
 static_assert(std::is_same_v<decltype(fp1), decltype(fp2)>);  // must be \tcode{false}
 \end{codeblock}
 Since the address of a function is itself a function pointer, any attempt to make contract assertions part of the type system would have to do so consistently --- meaning that the types of \emph{functions} with a different sequence of function contract assertions would have to be different, too:
 \begin{codeblock}
-void f1(int i) pre (i > 0);
-void f2(int i) pre (i != 0);
+int f1(int i) pre (i > 0);
+int f2(int i) pre (i != 0);
 static_assert(std::is_same_v<decltype(f1), decltype(f2)>);  // must be \tcode{false}
 \end{codeblock}
 Introducing such an observable change in type would directly violate several key design principles of \cite{P2900R7}.
@@ -279,10 +279,10 @@ Note that this is true regardless of whether we allow function pointers to have 
 
 There are numerous other problems with the type system approach. For example, what should \tcode{operator \&} do, and how should that will interact with type deduction? If we were to ever have \tcode{operator \&} changed to return ``pointer to function with that function's contract assertions'', this would break code like the following:
 \begin{codeblock}
-void f1() post (r: r > 0);
-void f2() post (r: r < 0);
+int f1() post (r: r > 0);
+int f2() post (r: r < 0);
 
-void x() {
+int x() {
   auto* f = &f2;   // pointer with assertion \tcode{post (r: r > 0)}
   if (rand()) {
     f = &f1;  // assigning to a function with a different, incompatible postcondition
@@ -290,20 +290,20 @@ void x() {
   f();  // violation if branch was taken! Certainly not the intent of the original code.
 }
 \end{codeblock}
-But the most severe practical consequence of making the function contract assertions part of the type system would be that this would necessarily lead to an explosion of types. As we already discussed in Section~\ref{subsec:samecontract}, any two functions that are supposed to do different things will normally have different contracts: if they have the same contract, then it follows that they have the same essential behaviour, and thus are, in most cases, the same function. The consequence is that practically every function with function contract assertions will have its own unique type. Any template that takes a function type as a template argument --- consider \tcode{std::sort} or \tcode{std::map} --- would have a separate instantiation for each function provided, leading to significant code bloat that many users will find unacceptable. Making \tcode{noexcept} a part of the type system has --- in the worst case --- doubled the amount of template instantiations; making the function contract assertions a part of the type system would be much worse than that.
+But the most severe practical consequence of making the function contract assertions part of the type system would be that this would necessarily lead to an explosion of types. As we already discussed in Section~\ref{subsec:samecontract}, any two functions that are supposed to do different things will normally have different contracts: if they have the same contract, then it follows that they have the same essential behaviour, and thus are, in most cases, the same function (exceptions to that rule notwithstanding). The consequence is that for most functions with function contract assertions, each function will have its own unique type. Any template that takes a function type as a template argument --- consider \tcode{std::sort} or \tcode{std::map} --- would have a separate instantiation for each function provided, leading to significant code bloat that many users will find unacceptable. Making \tcode{noexcept} a part of the type system has --- in the worst case --- doubled the amount of template instantiations; making the function contract assertions a part of the type system would be much worse than that.
 
 Further, the compiler would have to do additional work whenever we use a function type with function contract assertions as a template parameter, and/or whenever it needs to be determined whether two function types are the same. It follows that the sequence of function contract assertions must inevitably become a part of the name mangling. This would also make them an explicit part of the ABI --- another complication with wide-ranging consequences that \cite{P2900R7} explicitly seeks to avoid.
 
 Finally, the question arises whether making function contract assertions a part of the function's type would mean that you could \emph{overload} on different function contract assertions., and if so, how the overload resolution would work in this case:
 \begin{codeblock}
-void f(void (*)(int x) pre(x == 0));  // Overload 1
-void f(void (*)(int x) pre(x > 0));   // Overload 2
+void f(int (*)(int x) pre(x == 0));  // Overload 1
+void f(int (*)(int x) pre(x > 0));   // Overload 2
 
-void r(int x) pre(x == 0);
-void s(int x) pre(x > 0);
-void t(int x);
-void u(int x) pre(x == 0) pre(x == 0);
-void v(const int x) pre(x == 0) post(x == 0);
+int r(int x) pre(x == 0);
+int s(int x) pre(x > 0);
+int t(int x);
+int u(int x) pre(x == 0) pre(x == 0);
+int v(const int x) pre(x == 0) post(x == 0);
 
 f(&r);  // which f overload is called? Overload 1 seems likely
 f(&s);  // which f overload is called? Overload 2 seems likely
@@ -322,7 +322,7 @@ If we cannot encode the function contract assertions applied to a pointer to fun
 
 Nevertheless, let us consider how we could make the function contract assertions that apply to a pointer a property of that pointer's value.
 
-One option would be to generate a thunk that checks the interface contract assertions and then calls the underlying function, and to store the address of that thunk in the pointer. This approach  invalidates the assumption that the value of the pointer is the equal to the address of the function it points to.\footnote{While the C++ Standard tries to guarantee this, in practice, there are already cases where this assumption is invalidated, so this does not seem like the biggest obstacle. For example, if you use dynamic linking, load a function \tcode{f} from a dynamic library, and ask for the address of \tcode{f}, you will in practice get two different answers inside and outside of that dynamic library.} Moreover, it requires devising a strategy for when to allocate and deallocate those thunks. Depending on the semantics we wish to support (allow pointers to have function contract assertions different from the function they point to and/or other pointers that might point to that function, checking intermediate contracts, etc.), we might be able to allocate all possible thunks statically, or we might have to do this dynamically, raising questions about how we would then deallocate them, given that there might not be a general way to keep track of the lifetime of those thunks.
+One option would be to generate a thunk that checks the interface contract assertions and then calls the underlying function, and to store the address of that thunk in the pointer. This approach  invalidates the assumption that the value of the pointer is equal to the address of the function it points to.\footnote{While the C++ Standard tries to guarantee this, in practice, there are already cases where this assumption is invalidated, so this does not seem like the biggest obstacle. For example, if you use dynamic linking, load a function \tcode{f} from a dynamic library, and ask for the address of \tcode{f}, you will in practice get two different answers inside and outside of that dynamic library.} Moreover, it requires devising a strategy for when to allocate and deallocate those thunks. Depending on the semantics we wish to support (allow pointers to have function contract assertions different from the function they point to and/or other pointers that might point to that function, checking intermediate contracts, etc.), we might be able to allocate all possible thunks statically, or we might have to do this dynamically, raising questions about how we would then deallocate them, given that there might not be a general way to keep track of the lifetime of those thunks.
 
 Alternatively, we could consider somehow encoding the assertions directly in the object representation of the pointer. However, that would inevitably mean that the pointer value will no longer fit into a pointer-sized chunk of memory (8 bytes on a 64-bit system). Further, since the sequence of function contract assertions and the complexity of the predicate expressions is unbounded, we could never encode the \emph{entire} information directly in the object representations (otherwise, what would \tcode{sizeof(fp)} be?), and would have to partially place it outside, which effectively means that we will end up with something similar to the thunk approach anyway.
 

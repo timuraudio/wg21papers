@@ -44,7 +44,7 @@
 
 \begin{tabular}{ll}
 Document \#: & D3327R0 \\
-Date: &2024-06-25 \\
+Date: &2024-06-26 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -395,9 +395,9 @@ int takes_and_returns_positive_numbers(int i) usage
   pre (i > 0)
   post (r: r > 0);
 \end{codeblock}
-There is then more novel syntax to attach a usage type to a function, pass it around, call a function through it, etc.
+You can then declare a pointer to a function usage type, assign the address of a function to that pointer, and call it through that pointer. Note that in this model, there are no contract assertions on the pointer itself.
 
-While function usage types elegantly avoid many of the limitations discussed in this paper, they are, by virtue of being a new kind of entity, neither API nor ABI compatible with pre-Contracts code --- just like the specification strategies discussed in Sections~\ref{subsec:maketype} and \ref{subsec:makevalue}, but unlike the specification strategy discussed in Section~\ref{subsec:makeobject}.
+While function usage types elegantly avoid some of the limitations discussed in this paper, they are, by virtue of being a new kind of entity, neither API nor ABI compatible with pre-Contracts code --- just like the specification strategies discussed in Sections~\ref{subsec:maketype} and \ref{subsec:makevalue}, but unlike the specification strategy discussed in Section~\ref{subsec:makeobject}.
 
 If we end up realising indirect calls with interface contracts via a novel feature distinct from pointers to function and pointers to member function, and abandoning the idea of adding function contract assertions to such pointers directly, then proposals such as \cite{P3221R0} and \cite{P3250R0} are no longer relevant. These proposals seek to impose limitations on the specification in \cite{P2900R7} on how function contract assertions interact with function addresses and pointers to functions --- proposing to make it ill-formed to take the address of a function that has function contract assertions, and to make it ill-formed to deduce the type of such a function, respectively --- in an attempt to reserve design space for adding function contact assertions to pointers. If we do not add function contract assertions to pointers directly, no such carve-out of design space is necessary in this area, meaning that the specification in \cite{P2900R7} on how function contract assertions interact with function addresses and pointers to functions is sufficiently future-proof and correct in its current form.
 

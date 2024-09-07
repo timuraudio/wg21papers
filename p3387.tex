@@ -135,7 +135,10 @@ When the ramp function is invoked, after initialising the function parameters (a
 
 However, this changes if we refer to a function parameter in \tcode{post}. Since \tcode{post} will be evaluated after the move-from has happened, an \emph{id-expression} that refers to a parameter in the predicate of \tcode{post} may now refer to a moved-from value, even if the parameter object is \tcode{const}, making an implementation detail of C++ coroutines observable to the user in a potentially unexpected and undesirable way.
 
-There are different possible solutions to this problem. In order from least to most consistent with the principle that coroutine-ness should be an implementation detail, these are:
+\section {Discussion}
+
+\subsection{The solution space}
+There are different possible solutions to the moved-from parameter problem. In order from least to most consistent with the principle that coroutine-ness should be an implementation detail, these are:
 \begin{enumerate}
 \item Do not allow \tcode{pre} or \tcode{post} on coroutines at all (status quo in \cite{P2900R8});
 \item Allow \tcode{pre} on coroutines, but not \tcode{post} (proposed in \cite{P2957R1} and in \cite{P3251R0});
@@ -151,9 +154,9 @@ There are different possible solutions to this problem. In order from least to m
 
 If our only concern was to optimise for the design goal that coroutine-ness is an implementation detail, it seems that 5c would be the correct solution. However, in order to make the proposed Contracts facility as user-friendly as possible, we might wish to consider other design goals as well, making the choice of the correct solution a non-trivial task. We discuss these other design goals in the following section.
 
-\section{Design goals}
+\subsection{Design goals}
 
-\subsection{The Contracts Prime Directive}
+\subsubsection{The Contracts Prime Directive}
 
 The most fundamendal design principle of the Contracts MVP, the so-called Contracts Prime Directive (\cite{P2900R8}, Section 3.1, Principle 1) states that adding \tcode{pre} or \tcode{post} to an existing program should not alter the correctness of that program, as this would undermine the purpose of contract assertions --- instead of checking the correctness of the program you wrote, they would check the correctness of some other program, potentially leading to so-called ``Heisenbugs'' as well as other problems.
 
@@ -163,7 +166,7 @@ Solution 4 violates that principle. While making parameters in \tcode{post} refe
 
 Solution 5a violates this principle as well, as adding \tcode{post} to a coroutine would incur an additional copy, even if the \emph{ignore} semantic is used and predicate is never checked. For the same reason, we made it ill-formed in \cite{P2900R8} for a contract assertion to trigger an implicit lambda capture.
 
-\subsection{Do not refer to moved-from \tcode{const} parameters}
+\subsubsection{Do not refer to moved-from \tcode{const} parameters}
 
 On the one hand, exposing the moved-from parameter value in \tcode{post} is the ``honest'' choice, as it simply reflects what is going on under the hood. On the other hand, it exposes an implementation detail of C++ coroutines to the caller that is currently not being exposed. This not only violates the principle that the coroutine-ness of a function should be an implementation detail, but is also likely to be surprising to the user, and can lead to unexpected behaviour and unintended bugs that will be very difficult to diagnose.
 
@@ -171,7 +174,7 @@ Furthermore, it does not seem useful to be able to write a postcondition on a pa
 
 It is therefore a reasonable design goal to avoid this scenario. Solution 5c directly violates this design goal.
 
-\subsection{Do not make contracts or coroutines more complex}
+\subsubsection{Do not make contracts or coroutines more complex}
 
 A well-designed Contracts feature will naturally compose with other C++ language features, including coroutines. We should avoid introducing additional complexity into either feature, such as new special rules or exceptions, in particular in ways that could be surprising to the user and hinder effective usage and wider adoption of Contracts and coroutines.
 
@@ -185,7 +188,7 @@ Solution 5b violates this principle because it would create a new dependency bet
 
 Finally, Solution 5c violates this principle because it introduces another new inconsistency between \tcode{pre} and \tcode{post}: an \emph{id-expression} referring to the same parameter might see different values in \tcode{pre} and \tcode{post}, respectively, even if the parameter in question is \tcode{const}. This is highly unintuitive and cannot happen with \tcode{pre} and \tcode{post} as specified in \cite{P2900R8} today.
 
-\subsection{Support caller-side checking of \tcode{post}}
+\subsubsection{Support caller-side checking of \tcode{post}}
 
 The Contracts MVP has been designed from the start to accommodate a wide range of implementation strategies and usage scenarios. In particular, it allows implementations to check precondition and postcondition assertions caller-side and/or callee-side, and enables the two translation units involved to make the decision on contract evaluation semantics independently.
 
@@ -193,7 +196,7 @@ In particular, if one has deployed a pre-built library with all contracts ignore
 
 However, in order to be able to enable caller-side postcondition checks, the predicate of \tcode{post} cannot depend on anything that is not accessible caller-side and only known callee-side. For coroutines, it means that \tcode{post} cannot refer to the coroutine frame copies of parameter objects. Solution 4 is therefore not compatible with caller-side checking of \tcode{post}.
 
-\section{Proposed solution}
+\subsection{Proposed solution}
 
 Having formulated our design goals, we can now construct a decision matrix that visualises which possible solutions in the available design space satisfy which design goals:
 

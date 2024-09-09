@@ -72,6 +72,8 @@ post (r: /*...*/) {
 %  There is no question as to whether pre or post apply to the original or copies of parameters - only the originals are visible to this function.  (Actually, only parameters that will be forwarded to initialize the pre-copy parameters will be available in this function)
 
 %TD: That all makes sense but is a bit too early to explain here as we haven't even mentioned the parameter weirdness at this point. I am mentioning all this at the end of section 4.3 now, please have a look, is that OK?
+
+%JMB: I still think that it should be menionted that this workaround is fundamentally different from what happens when you don't introduce this wrapping layer.  C++ doesn't have perfect forwrding, and coroutines make it even less perfect.
 Given the existence of this workaround, we might as well provide the ability to place \tcode{pre} and \tcode{post} on \tcode{f} directly, which achieves the same functionality in a less user-hostile way.
 
 \section{Prior work}
@@ -181,6 +183,17 @@ It is therefore a reasonable design goal to avoid this scenario. Solution 5c dir
 
 %TD: I don't agree with this characterisation. If your type doesn't have a non-trivial move constructor, there is literally no way to "move-from" an object of this type, as this operation does not exist for this type, so moved-from values cannot exist either. Note that `int i = 42; int j = std::move(i);` is exactly equivalent to `int i = 42; int j = i;` and it is guaranteed by the Standard that it is exactly equivalent. Same for non-trivial types that have a user-provided copy constructor but no move constructor: the Standard guarantees that when you try to move-from, what actually happens is a normal copy. So I don't see how 5b violates this design goal, and I don't see how your statement "you are still unquestionably using an object that has been moved-from" can be true for those types.
 
+%JMB: The fact that a trivially moveable thign leaves its moved-from object in an empty state is just the result of an optimization --- it's still moved-from.   `int` might promise not to change the source when doing a move, but my type that happens to be trivially movable today shouldn't ever be beholden to that promise going forward just becuase a memcpy suffices today.
+% If I write this code:
+%   void f(T t)
+%   {
+%       g(std::move(t));
+%       h(std::move(t));
+%   }
+% Your response should be "that's broken", not "that's OK if T happens to be trivially movable".
+%
+% THis is the same thing.
+
 \subsubsection{Do not introduce additional inconsistencies between \tcode{pre} and \tcode{post}}
 
 A well-designed Contracts feature will naturally compose with other C++ language features, including coroutines. We should avoid adding more complexity to make Contracts and coroutines work together. In particular, we should avoid introducing new inconsistencies between \tcode{pre} and \tcode{post} that do not exist in the current design, as that could be surprising to the user and hinder effective usage and wider adoption of Contracts.
@@ -264,6 +277,20 @@ Modify [dcl.contract.func], paragraph 8:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) \added{a parameter of that function, the function shall not be a coroutine ([dcl.fct.def.coroutine]); if that parameter is not a reference, it }\removed{a non-reference parameter of that function, that parameter} shall be declared \tcode{const} and shall not have array or function type.
 \end{adjustwidth}
+
+%JMB: dcl.fct.def.coroutine p5 already says the same as what you originally said about throwing.   In all ways the coroutine behaevs as-if the function body was the replacement, not the original.
+%    The thing that is missing in that section, in think, is clearly stating that the allocation function and the copy initialization all happen as part of the replacement body.  If we do that, then we get all the other orderings that we want.
+%
+%Modify dcl.fct.def.coroutine p5:  (new bullet at teh staart of the list, because it's the first thing that happens):
+%  ... 
+%  * Allocation of the coroutine state and initialization of parameter copies (described below) occurs at the beginning of this replacement body.
+%
+% That covers what we need normatively.
+%
+% The thing you have about p13 I think should be a note --- it also covers only half the question, as when we evaluate the allocation function is also not answered unless we go with incoroporating these into the function-body-replacement like i did above.
+%
+% The notes about exception handling for function-try-block are specific because a function-try-block catches any other exception emitted by a function body, coroutines don't have such a special relationship with exceptions.
+% I would leave out notes for now --- intro.execution doesn't have special notes about coroutines and their replacement body.
 
 Modify [dcl.fct.def.coroutine], paragraph 13:
 \begin{adjustwidth}{0.5cm}{0.5cm}

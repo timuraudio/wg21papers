@@ -74,6 +74,8 @@ post (r: /*...*/) {
 %TD: That all makes sense but is a bit too early to explain here as we haven't even mentioned the parameter weirdness at this point. I am mentioning all this at the end of section 4.3 now, please have a look, is that OK?
 
 %JMB: I still think that it should be menionted that this workaround is fundamentally different from what happens when you don't introduce this wrapping layer.  C++ doesn't have perfect forwrding, and coroutines make it even less perfect.
+
+% TD: I get what you're saying, but don't know how to do that here, as the things you refer to have not yet been explained at this point. I have softened the language a bit, removed the notion that the workaround is "straightforward" and the comment that we can provide "the same functionality". Is this enough? Or, if you want me to be more specific at this point of the paper, can you provide the wording?
 Given the existence of this workaround, we might as well provide the ability to place \tcode{pre} and \tcode{post} on \tcode{f} directly.
 
 \section{Prior work}
@@ -193,6 +195,8 @@ It is therefore a reasonable design goal to avoid this scenario. Solution 5c dir
 % Your response should be "that's broken", not "that's OK if T happens to be trivially movable".
 %
 % THis is the same thing.
+
+% TD: I think this is a purely philosophical debate. My reply to your code above is indeed "that's OK if T happens to be trivially movable" because that's just what falls out of the current specification. I suggest we don't spend more time on this here as whether or not 5b gets a green mark or a red cross in this row is pretty much irrelevant, because we are already discarding 5b as a viable solution due to it violating the "do not facilitate remote code breakage" design goal. Are you OK with leaving this discussion be for now, in the interest of getting the paper out sooner?
 
 \subsubsection{Do not introduce additional inconsistencies between \tcode{pre} and \tcode{post}}
 

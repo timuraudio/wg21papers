@@ -58,7 +58,7 @@ It has been argued that coroutines are complex and that therefore, their interac
 
 The fundamental design principle of coroutines is that whether \tcode{f} is a coroutine is an implementation detail that is not known at the declaration of \tcode{f}, or at a call to \tcode{f}. This design principle should be applied to Contracts as well. If a Contracts proposal introduces new ways in which coroutines are different from other functions --- such as disallowing the usage of \tcode{pre} and \tcode{post} on them --- then such a design is in contradiction with how coroutines are designed and specified in C++ today. Ideally, coroutines should work exactly the same as other functions with respect to Contracts.
 
-As \cite{P3251R0} points out, there is a straightforward workaround to achieve this behaviour with \cite{P2900R8}. Instead of applying function contract assertions on the coroutine \tcode{f} directly, we can wrap \tcode{f} into a non-coroutine wrapper \tcode{g}, and apply the function contract assertions to \tcode{g}:
+As \cite{P3251R0} points out, there is a workaround to achieve such behaviour with \cite{P2900R8}. Instead of applying function contract assertions on the coroutine \tcode{f} directly, we can wrap \tcode{f} into a non-coroutine wrapper \tcode{g}, and apply the function contract assertions to \tcode{g}:
 \begin{codeblock}
 auto g()  // not a coroutine
 pre (/*...*/) 
@@ -74,7 +74,7 @@ post (r: /*...*/) {
 %TD: That all makes sense but is a bit too early to explain here as we haven't even mentioned the parameter weirdness at this point. I am mentioning all this at the end of section 4.3 now, please have a look, is that OK?
 
 %JMB: I still think that it should be menionted that this workaround is fundamentally different from what happens when you don't introduce this wrapping layer.  C++ doesn't have perfect forwrding, and coroutines make it even less perfect.
-Given the existence of this workaround, we might as well provide the ability to place \tcode{pre} and \tcode{post} on \tcode{f} directly, which achieves the same functionality in a less user-hostile way.
+Given the existence of this workaround, we might as well provide the ability to place \tcode{pre} and \tcode{post} on \tcode{f} directly.
 
 \section{Prior work}
 

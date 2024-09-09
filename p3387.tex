@@ -245,8 +245,12 @@ Note that with Solution 3, if it is really necessary to refer to the function pa
 
 The proposed wording is relative to \cite{P2900R8}.
 
-Modify [dcl.contract.func], paragraph 6:
+Modify [basic.contract.eval], paragraph 15:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If a contract-violation handler invoked from the evaluation of a function contract assertion exits via an exception, the behavior is as if the function body\added{, or if the function is a coroutine ([dcl.fct.def.coroutine]), the replacement of the function body, }exits via that same exception.
+\end{adjustwidth}
 
+Modify [dcl.contract.func], paragraph 6:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 A \removed{coroutine ([dcl.fct.def.coroutine]), }a deleted function ([dcl.fct.def.delete])\removed{,} or a function defaulted on its first declaration ([dcl.fct.def.default]) may not have a \emph{function-contract-specifier-seq}.
 \end{adjustwidth}
@@ -256,22 +260,10 @@ Modify [dcl.contract.func], paragraph 8:
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) \added{a parameter of that function, the function shall not be a coroutine ([dcl.fct.def.coroutine]); if that parameter is not a reference, it }\removed{a non-reference parameter of that function, that parameter} shall be declared \tcode{const} and shall not have array or function type.
 \end{adjustwidth}
 
-Modify [basic.contract.eval], paragraph 15:
+Modify [dcl.fct.def.coroutine], paragraph 13:
 \begin{adjustwidth}{0.5cm}{0.5cm}
-If a contract-violation handler invoked from the evaluation of a function contract assertion exits via an exception, the behavior is as if the function body exits via that same exception. \added{\begin{note}If the function is a coroutine ([dcl.fct.def.coroutine]), this rule applies to the generated body that replaces the \grammarterm{function-body}, not to the \grammarterm{function-body} itself.\end{note}} % TD: this is probably badly worded but I don't know how to do it better, please help!
+When a coroutine is invoked, after initializing its parameters ([expr.call])\added{ and evaluating its precondition assertions ([dcl.contract.func])}, a copy is created for each coroutine parameter. For a parameter of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.
 \end{adjustwidth}
-
-// TODO: changes related to point of evaluation //
-
-%JMB: I think something needs to be changed in dcl.fct.def.coroutine to make it clear what the order of operations is, in particular when the allocation function is called and when the copies are made --- and that all of htat is considered to be part of the body of the ramp function.
-
-% TD: Hm, I'm not sure dcl.fct.def.coroutine is the place that needs changing, or at least it's not the only place? Here are all the places I can see where we talk about point of evaluation in P2900:
-% * intro.execution p11: "...are sequenced before every precondition assertion of f, which in turn is sequenced before..."
-% * expr.call p6: "When a function is called, each parameter ([dcl.fct]) is initialized ([dcl.init], [class.copy.ctor]) with its corresponding argument, and each precondition assertion of the  function call is evaluated."
-% * stmt.return p3: All postcondition assertions ([dcl.contract.func]) of the function call ([expr.call]) are evaluated in sequence. The destruction of all local variables within the function body is sequenced before the evaluation of any postcondition assertions. [ Note: Postcondition assertions are, in turn, sequenced before the destruction of function parameters. — end note ]
-% * stmt.return p5: [ Note: These operations, in turn, are sequenced before the destruction of local variables in each remaining enclosing block of the function, then the evaluation of postcondition assertions of the function call ([expr.call]), then the destruction of function parameters. — end note ]
-% It seems that these places might need tweaking? TBH I'm a bit confused by how all this point of evaluation wording in P2900 is organised, can you help?
-
 
 %JMB: Andrzej did have a good point on the reflector that this is yet another case of SG21 producing too many papers.  I think that a consolidated paper that includes you, gor, peter, andrzej, and iain would be good.  I think it would be very good to have the disucssion on one paper and not have "let's talk about this issue and see 3 people present basically the same thing" again like we did when we first started tackling virtual functions.   Whether that means folding this into andrzej and iain's paper, or folding their points into this paper, is up to you guys --- but i would suggest doing one of those two things.
 % TD: agreed!

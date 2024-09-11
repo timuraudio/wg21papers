@@ -110,7 +110,7 @@ In \cite{P3173R0}, seen by EWG in Tokyo (February 2023), support for coroutines 
 
 Subsequently, it was proposed in \cite{P2957R1} and in \cite{P3251R0} that we should allow \tcode{pre} on coroutines, but not \tcode{post}, to avoid the known problem regarding moved-from parameters in \tcode{post}. Neither paper has yet been seen by SG21 at the time of writing.
 
-This paper incorporates the material from \cite{P3251R0}. It also builds on \cite{P2957R1} and has significant overlap with it, but approaches the problem with a design goal-driven approach and seeks to provide a more exhaustive analysis of the available solution space. 
+This paper incorporates some material from \cite{P3251R0}. It also builds on \cite{P2957R1} and has significant overlap with it, but approaches the problem with a design goal-driven approach and seeks to provide a more exhaustive analysis of the available solution space. 
 % TODO: merge P2957R1 into this paper if the authors agree, and rephrase this paragraph
 
 \section{Discussion}
@@ -131,21 +131,27 @@ generator<int> iota(int n) {
     co_yield n++;
 }
 \end{codeblock}
-or whether \tcode{iota} is a non-coroutine function wrapping a coroutine as follows:
+or whether \tcode{iota} is a non-coroutine function wrapping a coroutine \tcode{iota_coro_impl} as follows:
 \begin{codeblock}
 generator<int> iota(int n) {
-  return iota_impl(n);
+  return iota_coro_impl(n);
 }
 \end{codeblock}
-or whether no coroutines are involved at all, and \tcode{iota} is a non-coroutine function that manually initialises an object of type \tcode{generator<int>} and returns it, without using any of the C++ coroutine machinery. Ideally, \tcode{pre} and \tcode{post} should behave the same in all of the above cases.
+or whether no coroutines are involved at all, and \tcode{iota} is a non-coroutine function that manually initialises an object of type \tcode{generator<int>} and returns it, without using any of the C++ coroutine machinery. In all of the above cases, \tcode{pre} and \tcode{post} on the function declaration of \tcode{iota} should mean the same thing and have the same behaviour.
 
-\subsection{Contracts on the coroutine function interface}
+\subsection{The interface of a coroutine}
 
-It follows directly from the above design principle that when \tcode{pre} and \tcode{post} are applied to the declaration of a coroutine, then the function they effectively apply to is the so-called \emph{ramp function} creating the coroutine frame, whose function body is defined by ([\href{https://eel.is/c++draft/dcl.fct.def.coroutine#5}{dcl.fct.def.coroutine.5}]), and \emph{not} to the coroutine body, i.e. the function body that the user wrote. Therefore, \tcode{pre} on a coroutine is an assertion on the parameters passed into the ramp function, \emph{before} the coroutine frame is constructed, and the state of the program at that point; \tcode{post} on a coroutine is an assertion on the object that the ramp function returns to the caller at the point of first suspension, and the state of the program at that point.
+The full interface of a coroutine consists of two parts. First, there is the coroutine function interface, which is exposed to the caller through the function declaration. This interface covers the initial function call and the returned state at the point of first suspension. From the caller's perspective, the function call behaves like a factory function that creates a coroutine return object; current implementations call this factory function a \emph{ramp function}.
 
-This might seem confusing if one is not familiar with how coroutines work. According to one of the design principles of the Contracts MVP (\cite{P2900R8}, Section 3.1, Design Principle 11), \tcode{pre} and \tcode{post} sit at the boundary of the interface and the implementation of a function, and serve both sides equally. However, for coroutines, there is a certain disconnect between the function interface (i.e. the coroutine declaration) and the implementation (i.e. the coroutine body that the user wrote) that does not exist for non-coroutine functions: the coroutine body may resume long after the postconditions that apply to the declaration are checked, or finish long before then\footnote{Note that a coroutine frame can be destroyed on initial suspend, which would be before \tcode{post} is checked.}, and may even run on another thread. It is important to realise that this disconnect is a fundamental property of coroutines in C++ and is not changed or made any worse by adding Contracts.
+In addition, the coroutine has an extended interface, which covers the additional resume and suspend points of the coroutine and is implemented in the coroutine body and the promise type.  Through this extended interface, one can repeatedly yield values via \tcode{co_yield}, await such values via \tcode{co_await}, and return a final value via \tcode{co_return}.
 
-\subsection{Point of evaluation}
+From the design principle that coroutine-ness is an implementation detail it follows directly that the function contract assertions --- \tcode{pre} and \tcode{post} --- on a coroutine declaration must specify a contract on the ramp function. One of the design principles of the Contracts MVP (\cite{P2900R8}, Section 3.1, Design Principle 11) is that \tcode{pre} and \tcode{post} serve both caller and callee. In this case, the callee is the ramp function body as defined by ([\href{https://eel.is/c++draft/dcl.fct.def.coroutine#5}{dcl.fct.def.coroutine.5}]): \tcode{pre} on a coroutine is an assertion on the parameters passed into the ramp function when it is called, \emph{before} the coroutine frame is constructed, and the state of the program at that point; \tcode{post} on a coroutine is an assertion on the object that the ramp function returns to the caller at the point of first suspension, and the state of the program at that point.
+
+Importantly, the callee of \tcode{pre} and \tcode{post} on the coroutine declaration is \emph{not} the coroutine body --- the function body that the user wrote. The coroutine body may run on another thread, resume long after the postconditions that apply to the declaration are checked, or even finish before then\footnote{Note that a coroutine frame can be destroyed on initial suspend, which would be before \tcode{post} is checked.}. It is important to realise that this non-obvious disconnect between function declaration and function body is a unique property of coroutines in C++ and is not changed or made any worse by adding contract assertions to the former.
+
+One might want to also add contract assertions on the extended coroutine interface to specify precondition and postcondition assertions on the values yielded from the coroutine and the state of the program at its suspend and resume points. However, since it is not visible on the function declaration whether a function is a coroutine, contract assertions on this extended interface cannot be specified on the function declaration, at least not without modifying the basic design of coroutines (which we do not contemplate in this paper). We can, of course, consider a novel language feature to express such assertions, as a hypothetical post-MVP extension to Contracts. However, many use cases for such assertions can already be accomplished with the existing functionality in \cite{P2900R8} by using \tcode{contract_assert} inside the coroutine body or, for contracts that hold for anything using a given promise type, by applying \tcode{pre} and/or \tcode{post} to the various callback functions in the promise type. This latter approach is described in more detail in \cite{P3251R0}. For the remainder of this paper, we focus solely on the coroutine function interface.
+
+\subsection{Point of evaluation of \tcode{pre} and \tcode{post}}
 
 As pointed out in \cite{P2957R1}, the way in which the point of evaluation of \tcode{pre} and \tcode{post} is defined in \cite{P2900R8} needs some slight clarifications for coroutines, however, according to the mental model described in the previous section, this does not conceptually change the point of evaluation itself or compromise the equivalence between coroutines and non-coroutine functions.
 
@@ -304,28 +310,6 @@ Modify [dcl.fct.def.coroutine], paragraph 13:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 When a coroutine is invoked, \removed{after initializing its parameters ([expr.call])}\added{at the beginning of the replacement body}, a copy is created for each coroutine parameter. For a parameter of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.
 \end{adjustwidth}
-
-% TODO: Wording might need more work; the last wording blob above might not be correct or sufficient to specify the point of evaluation correctly.
-
-\section{Further considerations}
-
-\subsection{Contracts on the extended coroutine interface}
-
-In this paper, we focus on the function contract assertions of a coroutine declaration, i.e. the function interface of a coroutine. However, a coroutine also has an extended interface, which goes beyond the initial function call and the returned state at the point of first suspension. This extended interface offers the ability to yield multiple values via \tcode{co_yield}, to await these values via \tcode{co_await}, as well as to return a final value via \tcode{co_return}. It would be desirable for the coroutine author to be able to specify precondition and postcondition assertions on these values and the state of the program at these points in some way. 
-
-Since it is not visible on the function declaration whether a function is a coroutine, contract assertions on this extended interface cannot be specified on the function declaration, at least not without modifying the basic design of coroutines (which we do not contemplate in this paper). 
-
-We could certainly consider a novel feature to specify such contract assertions. Such a feature would be a pure extension of the proposal in this paper with no impact on the existing design of \tcode{P2900R8} or the modifications proposed here. Such a feature is also not necessary to achieve consistency between coroutines and non-coroutine functions with regards to \tcode{pre} and \tcode{post}. Finally, we might not even need a new feature to specify contracts assertions on the extended coroutine interface.
-
-Note that \cite{P2900R8} already allows the usage of \tcode{contract_assert} inside a coroutine body, which can be used to express contract assertions on the suspend and resume points inside a coroutine. Alternatively, we can have the coroutine's awaitable and promise type bear the responsibility of carrying the postcondition contract for the values being returned. The latter is a general solution that does not even require the function to be a coroutine, but instead specifies what the yielded and/or returned value are to be constrained to.
-
-The coroutine's returned type plus its associated promise type have the concrete functions that would, in a theoretical setup, be the ones to which the contract assertions would naturally be applied. The promise type's \tcode{yield_value} and \tcode{return_value} functions receive the yielded or returned values and are in an ideal position to bear an assertion as a precondition over them, where the future type's retrieval functions (such as \tcode{await_resume}) carry the same assertion as postcondition. These places are already eligible to receive a precondition and/or postcondition assertions, and the ability to do this requires no change to \cite{P2900R8}.
-
-In effect, this technique places a precondition/postcondition pair on the awaitable as functioning as a channel for the value it carries, with the contract on one hand being asserted on the generating side, and on the other side being made available on the receiving side. This both ensures that if the contract is violated we are made aware at the generating side, and that the contract being valid is available to the compiler on the receiving side for optimisation (if applicable). We can make the assertion to be used on the yielded or returned value(s) a part of the returned type, for example by making it a custom returned type with the contracts asserted, or as template parameters used in a general type to represent the contracts that is carried into the pre- and postcondition. 
-
-\subsection{Coroutine invariants}
-
-Coroutines may have invariants that hold during the execution of the coroutine. As a simple example, a generator could assert that the values generated are strictly increasing. Such an invariant os, similar to the above concept of returned and yielded values having a postcondition that is passed into the return type as a template parameter, a contract that is applied by the promise type on the suspend and resume points. It can similarly be passed into the promise type as a template parameter, made available to the promise type in some other way, or instead asserted with \tcode{contract_assert} directly in the coroutine body.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

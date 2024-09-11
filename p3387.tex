@@ -295,9 +295,14 @@ Modify [dcl.contract.func], paragraph 8:
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) \added{a parameter of that function, the function shall not be a coroutine ([dcl.fct.def.coroutine]); if that parameter is not a reference, it }\removed{a non-reference parameter of that function, that parameter} shall be declared \tcode{const} and shall not have array or function type.
 \end{adjustwidth}
 
+Modify [dcl.fct.def.coroutine], paragraph 9:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+An implementation may need to allocate additional storage for a coroutine. This storage is known as the \emph{coroutine state} and is obtained by calling a non-array allocation function ([basic.stc.dynamic.allocation])\added{ as part of the replacement body}. The allocation function's name is looked up by searching for it in the scope of the promise type.
+\end{adjustwidth}
+
 Modify [dcl.fct.def.coroutine], paragraph 13:
 \begin{adjustwidth}{0.5cm}{0.5cm}
-When a coroutine is invoked, after initializing its parameters ([expr.call])\added{ and evaluating its precondition assertions ([dcl.contract.func])}, a copy is created for each coroutine parameter. For a parameter of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.
+When a coroutine is invoked, \removed{after initializing its parameters ([expr.call])}\added{at the beginning of the replacement body}, a copy is created for each coroutine parameter. For a parameter of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.
 \end{adjustwidth}
 
 % TODO: Wording might need more work; the last wording blob above might not be correct or sufficient to specify the point of evaluation correctly.

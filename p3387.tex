@@ -159,7 +159,7 @@ We can, of course, consider a novel language feature to express such assertions,
 
 \subsection{Point of evaluation of \tcode{pre} and \tcode{post}}
 
-As pointed out in \cite{P2957R1}, the way in which the point of evaluation of \tcode{pre} and \tcode{post} is defined in \cite{P2900R8} needs some slight clarifications for coroutines, however, according to the mental model described in the previous section, this does not conceptually change the point of evaluation itself or compromise the equivalence between coroutines and non-coroutine functions.
+As pointed out in \cite{P2957R1}, correctly specifying the point of evaluation of \tcode{pre} and \tcode{post} needs some slight clarifications for coroutines, however, according to the mental model described in the previous section, this does not conceptually change the point of evaluation itself or compromise the equivalence between coroutines and non-coroutine functions.
 
 \cite{P2900R8} specifies that the precondition assertions are evaluated ``immediately after function parameters are initialised and before entering the function body''. For a coroutine, by ``function body'', we do \emph{not} mean the coroutine body that the user wrote, but the body of the ramp function that the compiler generated. Therefore, the precondition assertions of a coroutine are evaluated \emph{before} any of the coroutine-specific events that happen in the ramp function, such as creating a copy of the parameters, allocating the coroutine frame, initialising the promise object, etc.
 

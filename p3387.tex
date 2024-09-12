@@ -165,6 +165,8 @@ As pointed out in \cite{P2957R1}, the way in which the point of evaluation of \t
 
 \cite{P2900R8} further specifies that the postcondition assertions are evaluated ``after the return value has been initialised and local automatic variables have been destroyed but prior to the destruction of function parameters''. Again, for a coroutine, this specification should be applied to the body of the ramp function and not the coroutine body, meaning that the ``return value'' is that of the ramp function (and not any values yielded by the coroutine), and its type is the declared return type of the coroutine; and likewise, the ``local variables'' are those created by the ramp function (and \emph{not} the local variables in the coroutine body).
 
+Our wording strategy to achieve the above (see Section \ref{wording}) is to not change or add anything to the specification of the point of evaluation of \tcode{pre} and \tcode{post} in \cite{P2900R8}, but instead to clarify that all operations that are specific to the compiler-generated ramp function, in particular creating a copy of the parameters and allocating the coroutine frame, is considered part of the function body. With this wording clarification, the sequencing of evaluating \tcode{pre} and \tcode{post} relative to these coroutine-specific operations directly follows from the existing wording in \cite{P2900R8}.
+
 \subsection{The problem: referring to parameters in \tcode{post}}
 \label{paramsinpost}
 
@@ -295,6 +297,7 @@ The decision matrix reveals that the only possible solution that satisfies all o
 Note that with Solution 3, if it is really necessary to refer to the function parameters in the postcondition, a workaround exists: one can wrap the coroutine into a non-coroutine wrapper as shown in Section \ref{intro}. With such a wrapper, the user themselves has to make the choice whether to copy or move a parameter, and there is no question as to whether \tcode{post} applies to the original or copy of the parameter, as only the original is visible to the wrapper. The situation will become even simpler once we get postcondition captures \cite{P3098R0} as a post-MVP extension, as parameters can be explicitly copied for later use in the postcondition, and the need for a wrapper will go away.
 
 \section{Proposed wording}
+\label{wording}
 
 The proposed wording is relative to \cite{P2900R8}.
 

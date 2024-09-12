@@ -96,9 +96,13 @@ auto g()  // not a coroutine
 \end{codeblock}
 With such an indirection, the contracts applied to the wrapper function \tcode{g} will necessarily do exactly what they would be doing on \tcode{f}. This observation is key to the question how we should specify \tcode{pre} and \tcode{post} on coroutines directly. 
 
-The only exception to the above is that in a coroutine, function parameters are effectively always non-\tcode{const} objects, and may be moved from by the implementation, even if they are declared \tcode{const}, which is not true for a non-coroutine function. Therefore, the question arises whether \tcode{post} on a coroutine should see the original parameter objects (which may have moved-from values), the parameter copies created by the implementation for the coroutine (which the original values will have been moved to), or whether something else should happen. In the non-coroutine wrapper \tcode{g}, this question cannot arise, as only the original parameter objects are visible to \tcode{g}, and the choice of copying or moving parameters that might be used in \tcode{post} is up to the user and not the compiler.
+There is just one potential complication to the above. In \cite{P2900R8}, in order to odr-use a function parameter in \tcode{post}, it has to be declared \tcode{const} on every declaration of the function, so that we can reason about the parameter value not having been modified before \tcode{post} is evaluated. However, in a coroutine, function parameters are effectively always non-\tcode{const} objects, and may be moved from by the implementation, even  if they are declared \tcode{const} by the user.
 
-In this paper, we discuss this particular issue in more detail and propose a solution that is consistent with the fundamental design principles of both coroutines and Contracts.
+The question therefore arises whether \tcode{post} on a coroutine should see the original parameter objects (which may have moved-from values despite the parameters being declared \tcode{const}), or the parameter copies created by the implementation for the coroutine state (which the original values will have been moved to), or whether something else should happen.
+
+Note that in the non-coroutine wrapper \tcode{g}, this question cannot arise, because if a function parameter of a user-defined non-coroutine function such as \tcode{g} is declared \tcode{const} on every declaration of \tcode{g}, it cannot be moved from or otherwise modified in the implementation of \tcode{g}; any an attempt to do so would be undefined behaviour as per \href{https://eel.is/c++draft/dcl.type.cv#4.sentence-1}{[dcl.type.cv]/4}.
+
+In this paper, we will discuss this particular question in more detail and propose a solution that is consistent with the fundamental design principles of both coroutines and Contracts.
 
 \section{Prior work}
 
@@ -149,9 +153,9 @@ In addition, the coroutine has an extended interface, which covers the additiona
 
 From the design principle that coroutine-ness is an implementation detail it follows directly that the function contract assertions --- \tcode{pre} and \tcode{post} --- on a coroutine declaration must specify the contract of the function interface, i.e. the ramp function, as this is the only part of the interface known at the site of the function call (which sees only the declaration, not the implementation).
 
-One of the design principles of the Contracts MVP (\cite{P2900R8}, Section 3.1, Design Principle 11) is that \tcode{pre} and \tcode{post} serve both caller and callee. In this case, the callee is the compiler-generated body of the ramp function (see [\href{https://eel.is/c++draft/dcl.fct.def.coroutine#5}{dcl.fct.def.coroutine.5}]): \tcode{pre} on a coroutine is an assertion on the parameters passed into the ramp function when it is called, \emph{before} the coroutine frame is constructed, and the state of the program at that point; \tcode{post} on a coroutine is an assertion on the object that the ramp function returns to the caller at the point of first suspension, and the state of the program at that point.
+One of the design principles of the Contracts MVP (\cite{P2900R8}, Section 3.1, Design Principle 11) is that \tcode{pre} and \tcode{post} serve both caller and callee. In this case, the callee is the compiler-generated body of the ramp function (see \href{https://eel.is/c++draft/dcl.fct.def.coroutine#5}{[dcl.fct.def.coroutine]/5}): \tcode{pre} on a coroutine is an assertion on the parameters passed into the ramp function when it is called, \emph{before} the coroutine state is constructed, and the state of the program at that point; \tcode{post} on a coroutine is an assertion on the object that the ramp function returns to the caller at the point of first suspension, and the state of the program at that point.
 
-Crucially, the callee of \tcode{pre} and \tcode{post} on the coroutine declaration is \emph{not} the coroutine body --- the function body that the user wrote --- and \tcode{pre} and \tcode{post} on the coroutine declaration do not assert anything directly related to that body. The coroutine body may run on another thread, resume long after the postconditions that apply to the declaration are checked, or even finish before then.\footnote{A coroutine frame can be destroyed on initial suspend, which happens before \tcode{post} is checked.} Furthermore, the coroutine body never directly sees the object being returned from the function.
+Crucially, the callee of \tcode{pre} and \tcode{post} on the coroutine declaration is \emph{not} the coroutine body --- the function body that the user wrote --- and \tcode{pre} and \tcode{post} on the coroutine declaration do not assert anything directly related to that body. The coroutine body may run on another thread, resume long after the postconditions that apply to the declaration are checked, or even finish before then.\footnote{The coroutine state can be destroyed on initial suspend, which happens before \tcode{post} is checked.} Furthermore, the coroutine body never directly sees the object being returned from the function.
 
 This lack of a direct connection between function declaration and function body may seem strange and unintuitive to users not familiar with coroutines; but it is a fundamental part of their design. Adding \tcode{pre} and \tcode{post} to the function declaration does not change this design and does not make things any more complex than they already are.
 
@@ -163,61 +167,103 @@ We can, of course, consider a novel language feature to express such assertions,
 
 As pointed out in \cite{P2957R1}, correctly specifying the point of evaluation of \tcode{pre} and \tcode{post} needs some slight clarifications for coroutines, however, according to the mental model described in the previous section, this does not conceptually change the point of evaluation itself or compromise the equivalence between coroutines and non-coroutine functions.
 
-\cite{P2900R8} specifies that the precondition assertions are evaluated ``immediately after function parameters are initialised and before entering the function body''. For a coroutine, by ``function body'', we do \emph{not} mean the coroutine body that the user wrote, but the body of the ramp function that the compiler generated. Therefore, the precondition assertions of a coroutine are evaluated \emph{before} any of the coroutine-specific events that happen in the ramp function, such as creating a copy of the parameters, allocating the coroutine frame, initialising the promise object, etc.
+\cite{P2900R8} specifies that the precondition assertions are evaluated ``immediately after function parameters are initialised and before entering the function body''. For a coroutine, by ``function body'', we do \emph{not} mean the coroutine body that the user wrote, but the body of the ramp function that the compiler generated. Therefore, the precondition assertions of a coroutine are evaluated \emph{before} any of the coroutine-specific events that happen in the ramp function, such as creating a copy of the parameters, allocating the coroutine state, initialising the promise object, etc.
 
 \cite{P2900R8} further specifies that the postcondition assertions are evaluated ``after the return value has been initialised and local automatic variables have been destroyed but prior to the destruction of function parameters''. Again, for a coroutine, this specification should be applied to the body of the ramp function and not the coroutine body, meaning that the ``return value'' is that of the ramp function (and not any values yielded by the coroutine), and its type is the declared return type of the coroutine; and likewise, the ``local variables'' are those created by the ramp function (and \emph{not} the local variables in the coroutine body).
 
-Our wording strategy to achieve the above (see Section \ref{wording}) is to not change or add anything to the specification of the point of evaluation of \tcode{pre} and \tcode{post} in \cite{P2900R8}, but instead to clarify that all operations that are specific to the compiler-generated ramp function, in particular creating a copy of the parameters and allocating the coroutine frame, is considered part of the function body. With this wording clarification, the sequencing of evaluating \tcode{pre} and \tcode{post} relative to these coroutine-specific operations directly follows from the existing wording in \cite{P2900R8}.
-
-\subsection{Referring to parameters in \tcode{post}}
+\subsection{odr-using parameters in \tcode{post}}
 \label{paramsinpost}
 
-There is one implementation detail of coroutines that is unobservable caller-side today, but would be made observable if we allow \tcode{post} to apply to a coroutine declaration, making a proposal to allow function contract assertions on coroutines non-trivial.
+There is one implementation detail of coroutines that is unobservable caller-side today, but has a possible interaction with postcondition assertions and must therefore be considered by any proposal that might allow the latter on coroutines.
 
-When the ramp function is invoked, after initialising the function parameters (and checking the precondition assertions, if we allow them), a copy of each parameter is created in the coroutine frame, and the value of each parameter is moved into that copy ([\href{https://eel.is/c++draft/dcl.fct.def.coroutine#13}{dcl.fct.def.coroutine.13}]), potentially leaving the original parameter object in a moved-from state. This is necessary to make the parameters accessible in the coroutine frame, whose lifetime can extend far beyond the ramp function returning.
+A coroutine behaves as if its body was rewritten by the compiler as defined by \href{https://eel.is/c++draft/dcl.fct.def.coroutine#5}{[dcl.fct.def.coroutine]/5}; this compiler-generated function body is called the ramp function.
 
-Notably, this moving-from a parameter happens even if that parameter is declared \tcode{const}: the ramp function removes the top-level \tcode{const} from the parameter, and then modifies that parameter by using it to move-construct the copy. By contrast, in a non-coroutine function, such an attempt to move from a parameter declared \tcode{const} (e.g., by using a \tcode{const_cast}) would be undefined behaviour as per \href{https://eel.is/c++draft/dcl.type.cv#4.sentence-1}{[dcl.type.cv.4]}. 
+When this ramp function is invoked, after initialising the function parameters (and checking the precondition assertions, if we allow them), a copy of each parameter is created for the coroutine state, and the value of each parameter is moved into that copy (\href{https://eel.is/c++draft/dcl.fct.def.coroutine#13}{[dcl.fct.def.coroutine]/13}), potentially leaving the original parameter object in a moved-from state. This is necessary to make the parameters accessible inside the coroutine body, whose lifetime can extend far beyond the ramp function returning.
 
-Effectively, in a coroutine, a parameter object is never actually \tcode{const}, even if declared \tcode{const} in the function declaration. This specification may seem strange, but does not cause issues in C++ today because the moved-from parameter values in a coroutine are not exposed or made accessible to the user in any way, consistent with the design principle that coroutine-ness is an implementation detail. However, if we allowed the predicate of \tcode{post} on a coroutine to refer to parameters, we would expose this implementation detail to the caller, as \tcode{post} is evaluated after the move-from has happened, and would see potentially moved-from values, even though such a parameter is declared \tcode{const}. This might be unexpected to users not familiar with how coroutines are implemented under the hood.
+Notably, this moving-from a parameter happens even if that parameter is declared \tcode{const}: the ramp function removes the top-level \tcode{const} from the parameter, and then modifies that parameter by using it to move-construct the copy. In other words, in a coroutine, a parameter object is never actually \tcode{const}, even if declared \tcode{const} in the function declaration.
 
-Going back to the design principle that coroutine-ness is an implementation detail, we are faced with the following situation. Given a function declaration where the return type is awaitable, such a function could be implemented either as a coroutine or as a non-coroutine; the difference is currently unobservable to the caller of the function. However, if we add a \tcode{post} to this function declaration, and let its predicate refer to a parameter, which requires that this parameter be \tcode{const} and assumes that it has not been modified in the body of the function, such a function could be implemented correctly only as a non-coroutine. Any Contracts proposal needs to handle this situation in a consistent and user-friendly way.
+This specification may seem strange, but does not cause issues in C++ today because the moved-from parameter values are not exposed to the user in any way. Upon deeper inspection, it turns out that it is actually fully consistent with the design principle that coroutine-ness is an implementation detail. Consider the following declaration of a function \tcode{f}:
+\begin{codeblock}
+awaitable<int> f(const Widget w);
+\end{codeblock}
+This function has an awaitable return type, meaning that it could be implemented a a coroutine or as a non-coroutine.
+
+Note that according to \href{https://eel.is/c++draft/dcl.fct#4.sentence-2}{[dcl.fct]/4}, the following declaration declares the exact same function as the previous one:
+\begin{codeblock}
+awaitable<int> f(Widget w);
+\end{codeblock}
+Note further that while the function \tcode{f} has the same type in both declarations, the function parameter \tcode{w} does not: it is \tcode{const} in the first declaration, but non-\tcode{const} in the second.
+
+Now, as an implementation detail, the user could choose to provide a non-coroutine definition of \tcode{f} where \tcode{w} is non-\tcode{const}, even if the first declaration of \tcode{f} declares it as \tcode{const}, and modify \tcode{w} inside that definition:
+\begin{codeblock}
+// f.h
+awaitable<int> f(const Widget w);
+
+// f.cpp
+awaitable<int> f(Widget w) {
+  Widget w_copy = std::move(w); // OK
+  // some other code; not a coroutine
+}
+\end{codeblock}
+In this scenario, with the specification in \cite{P2900R8}, one would not be able to odr-use \tcode{w} in the predicate of a \tcode{post} that applies to \tcode{f}, because for that to work, \tcode{w} needs to be declared \tcode{const} on \emph{all} declarations of \tcode{f}.
+
+Now, if the user instead chooses to provide a definition of \tcode{f} that makes \tcode{f} a coroutine, then the implementation of \tcode{f} will not actually be the function body that the user wrote, instead the implementation of \tcode{f} will be the compiler-generated ramp function (which is composed of different bits from the coroutine body, the promise type, etc.), which \emph{implicitly} makes the parameter non-\tcode{const}. However, it might still be declared \tcode{const} on all \emph{user-declared} declarations of \tcode{f}, raising the question how \tcode{post} should behave if such a parameter is odr-used in its predicate. Any viable Contracts proposal needs to handle this situation in a consistent and user-friendly way.
 
 \subsection{The solution space}
 \label{solutions}
 
-There are different possible ways in which the moved-from parameter question for \tcode{post} on coroutines could be addressed. In order from least to most consistent with the principle that coroutine-ness should be an implementation detail, these are:
+We are aware of the following potential solutions for how \tcode{pre} and \tcode{post} should behave on a coroutine, all of which have been formally or informally proposed by a WG21 member at some point:
 \begin{enumerate}
 \item Do not allow \tcode{pre} or \tcode{post} on coroutines at all (status quo in \cite{P2900R8});
 \item Allow \tcode{pre} on coroutines, but not \tcode{post} (first proposed in \cite{P2957R1});
-\item Allow \tcode{post} on coroutines, but do not allow referring to parameters (first mentioned in \cite{P2957R1} as an alternative);
-\item Allow referring to parameters in \tcode{post}; an \emph{id-expression} naming a parameter refers to the copy made for the coroutine frame;
-\item Allow referring to parameters in \tcode{post}; an \emph{id-expression} naming a parameter refers to the original object, and:
+\item Allow \tcode{post} on coroutines, but do not allow odr-using parameters in its predicate (first mentioned in \cite{P2957R1} as an alternative);
+\item Allow odr-using parameters in the predicate of \tcode{post}; an \emph{id-expression} naming a parameter refers to the copy made for the coroutine state;
+\item Allow odr-using parameters in the predicate of \tcode{post}; an \emph{id-expression} naming a parameter refers to the original object, and:
 \begin{enumerate}[label=\alph*.,ref=\theenumi\alph*]
-        \item copy-construct instead of move-construct the copy made for the coroutine frame;
-        \item make it ill-formed to refer to a parameter whose type has a non-trivial move constructor (i.e., the parameter can have a moved-from value);
-        \item do not add any special provision, meaning that the \emph{id-expression} may refer to a moved-from value, even if the parameter type is \tcode{const} (first proposed in \cite{P2957R0}).
+        \item copy-construct instead of move-construct the copy made for the coroutine state;
+        \item make it ill-formed to odr-use a parameter whose type has a non-trivial move constructor (i.e., the parameter can have a moved-from value);
+        \item do not add any special provision, meaning that the \emph{id-expression} may refer to a moved-from value, even if the parameter is declared \tcode{const} (first proposed in \cite{P2957R0}).
 \end{enumerate}
 \end{enumerate}
-
-Of course, in order to make the proposed Contracts facility as user-friendly as possible, optimising for the design principles that coroutine-ness is an implementation detail is not the only concern, and there are other design goals to consider. We discuss these design goals in the following section.
+All of the above handle the question of odr-using parameters in \tcode{post} in different ways. In order to make the proposed Contracts facility as user-friendly as possible, we need to formulate our design goals and determine which of these solutions best satisfies these design goals. This analysis is performed in the following section.
 
 \section{Design goals}
 
-\subsection{The Contracts Prime Directive}
+\subsection{Allow \tcode{pre} and \tcode{post} on coroutines}
+
+The simplest and most practical design goal of this proposal is to allow applying \tcode{pre} and \tcode{post} to coroutines in some form. This allows us to specify contract assertions on the parameters passed into the coroutine when it is called, assertions on the object that this function call returns to the caller at the point of first suspension, as well as assertions on other aspects of the state of the program at those points.
+
+Such assertions can be useful for the same reasons that assertions on any other function can be useful: they allow enhancing the program with configurable checks of its correctness, thereby helping to eliminate program defects.
+
+Solution 1 does not allow \tcode{pre} on coroutines, while Solution 2 does not allow either \tcode{pre} or \tcode{post}; all other solutions satisfy this design goal in some form.
+
+\subsection{Treat coroutine-ness as an implementation detail}
+
+As we already discussed multiple times in this paper, the fundamental design principle of coroutines is that whether \tcode{f} is a coroutine is an implementation detail that is not known at the declaration of \tcode{f}, or at a call to \tcode{f}. Any solution should be consistent with this design principle.
+
+Solutions 1 and 2 violate this principle because they make \tcode{pre} and/or \tcode{post} ill-formed on the declaration of a function depending on an implementation detail (whether the function is a coroutine). So does Solution 5b, with the only difference that \tcode{post} is ill-formed only for certain types. 
+
+Solutions 4 and 5c also violate this principle. Although they do not make \tcode{pre} and/or \tcode{post} ill-formed for a coroutine, they expose coroutine-specific implementation details to the caller, such as the coroutine state (Solution 4) and the moved-from values of the original parameter objects (Solution 5c).
+
+Whether Solution 3 violates this principle seems questionable at first. On the one hand, one can argue that it violates the principle because it makes odr-using a \tcode{const} parameter ill-formed if the function is implemented as a coroutine, and therefore makes that implementation detail observable. On the other hand, there is actually nothing coroutine-specific about it: as discussed in Section \ref{paramsinpost}, any non-coroutine function that has a parameter declared \tcode{const} on its declaration could have an implementation where the same parameter is not declared \tcode{const}, rendering that same \tcode{post} on the declaration ill-formed.
+
+Therefore, making a parameter declared \tcode{const} on the declaration non-\tcode{const} in the definition is indeed an implementation detail that is observable in \tcode{post}, but that is already the case with the specification of \cite{P2900R8} today,\footnote{Note that with \cite{P2900R8} as specified today, if the compiler sees any declaration of a function \tcode{f}, which includes any definition of \tcode{f}, where a given parameter is not \tcode{const}, in any translation unit, it already must diagnose any \tcode{post} on \tcode{f} that odr-uses that parameter as ill-formed, even if that \tcode{post} is on another declaration of \tcode{f} in another translation unit and that declaration declares the parameter as \tcode{const}. Solution 3 therefore does not add any additional implementation burden.} and can happen irrespective of whether the function is a coroutine or not. Solution 3 therefore does not expose the coroutine-ness as such to the caller. The litmus test here is whether Solution 3 would give us a way to detect at the call site of a function whether that function is a coroutine. Unlike Solutions 1, 2, 4, and 5c, Solution 3 does not do that. We conclude therefore that Solution 3 does not violate the principle that coroutine-ness is an implementation detail.
+
+\subsection{Do not expose moved-from parameters in \tcode{post}}
+
+On the one hand, exposing the moved-from parameter value in \tcode{post}, as in Solution 5c, is the ``honest'' choice, as it simply reflects what is going on under the hood. On the other hand, it exposes an implementation detail of C++ coroutines to the caller that is currently not being exposed. Apart from violating the fundamental design principle of coroutines (see previous section), observing such moved-from values when odr-using \tcode{const} parameters is likely to be surprising to the user, and can lead to unexpected behaviour and unintended bugs that will be very difficult to diagnose. It should therefore be a design goal to avoid this, guided by an underlying design principle that Contracts and coroutines should not be unnecessarily user-hostile.
+
+Furthermore, it does not seem useful to be able to write a postcondition on a parameter that can be moved-from, as we cannot reason about the meaning of such a postcondition, in the same way in which we cannot reason about the meaning of a postcondition on a parameter that is not declared \tcode{const} (which is the reason why \cite{P2900R8} makes such postcondition assertions ill-formed).
+
+\subsection{Satisfy the Contracts Prime Directive}
 
 The most fundamendal design principle of the Contracts MVP, the so-called Contracts Prime Directive (\cite{P2900R8}, Section 3.1, Principle 1) states that adding \tcode{pre} or \tcode{post} to an existing program should not alter the correctness of that program, as this would undermine the purpose of contract assertions --- instead of checking the correctness of the program the user wrote, they would check the correctness of some other program, potentially leading to so-called ``Heisenbugs'' as well as other problems.
 
 A corollary of this fundamental principle is that adding \tcode{pre} or \tcode{post} to an existing program should not change the compile-time or run-time semantics of that program (see \cite{P2900R8}, Section 3.1, Principles 2 and 3).
 
-Solution 4 violates this principle. While making parameters in \tcode{post} refer to the object in the coroutine frame seems implementable, it will require changes to the semantics of the coroutine, such as extending its lifetime (otherwise, the coroutine frame may be destroyed during initial suspend, i.e. before \tcode{post} is checked, and the parameter object along with it). Without making changes to the coroutine semantics, there would be no point where the parameter copies and the return value necessarily exist at the same time, and therefore no point at which \tcode{post} could be checked.
+Solution 4 violates this principle. While making parameters in \tcode{post} refer to the parameter copy that is part of the coroutine state seems implementable, it will require changes to the semantics of the coroutine, such as extending its lifetime (otherwise, the coroutine state may be destroyed during initial suspend, i.e. before \tcode{post} is checked, and the parameter object along with it). Without making changes to the coroutine semantics, there would be no point where the parameter copies and the return value necessarily exist at the same time, and therefore no point at which \tcode{post} could be checked.
 
 Solution 5a violates this principle as well, as adding \tcode{post} to a coroutine would incur an additional copy, even if the \emph{ignore} semantic is used and predicate is never checked. For the same reason, we made it ill-formed in \cite{P2900R8} for a contract assertion to trigger an implicit lambda capture.
-
-\subsection{Do not refer to moved-from \tcode{const} parameters}
-
-On the one hand, exposing the moved-from parameter value in \tcode{post} is the ``honest'' choice, as it simply reflects what is going on under the hood. On the other hand, it exposes an implementation detail of C++ coroutines to the caller that is currently not being exposed. This not only violates the principle that the coroutine-ness of a function should be an implementation detail, but is also likely to be surprising to the user, and can lead to unexpected behaviour and unintended bugs that will be very difficult to diagnose.
-
-Furthermore, it does not seem useful to be able to write a postcondition on a parameter that can be moved-from, as we cannot reason about the meaning of such a postcondition, in the same way in which we cannot reason about the meaning of a postcondition on a parameter that is not \tcode{const} (which \cite{P2900R8} makes ill-formed for that reason).
 
 It is therefore a reasonable design goal to avoid this scenario. Solution 5c directly violates this design goal.
 %JMB: 5b violates it too, and relies on what is often not considered a semantic change in a type to decide that it "works" anyway.   Even if there's no move constructor, you are still unquestionably using an object that has been moved-from as a non-const xvalue to initialize another object, and not consistently applying the rule that we don't we the value of such objects is confusing.
@@ -247,7 +293,7 @@ Solution 4 also violates this design goal. Currently, if a function has a \tcode
 
 Finally, Solution 5c violates this design goal because an \emph{id-expression} referring to the same parameter might see different values in \tcode{pre} and \tcode{post}, respectively, even if the parameter in question is \tcode{const}. This is highly unintuitive and cannot happen with \tcode{pre} and \tcode{post} as specified in \cite{P2900R8} today.
 
-Note that Solution 3 does not violate this design goal because it does not introduce a new inconsistency. One of the necessary limitations of \tcode{post}, compared to \tcode{pre}, is that it is ill-formed to refer to non-\tcode{const} non-reference parameters in the predicate of \tcode{post}, as such parameters may be modified in the function body, making it impossible for the caller to reason about the postcondition (see \cite{P2900R8}, Section 3.4.4). A non-reference parameter is not \tcode{const} if it is not declared \tcode{const} in the function declaration. In addition, a non-reference parameter is never \tcode{const} if the function is a coroutine (see ([\href{https://eel.is/c++draft/dcl.fct.def.coroutine#note-2}{dcl.fct.def.coroutine.13 Note 2}]), even if it \emph{is} declared \tcode{const} in the function declaration. Therefore, implementing a function as a coroutine is just another way of making a non-reference parameter non-\tcode{const}.
+Note that Solution 3 does not violate this design goal because it does not introduce a new inconsistency. As already discussed above, one of the necessary limitations of \tcode{post}, compared to \tcode{pre}, is that it is ill-formed to refer to non-\tcode{const} parameters in the predicate of \tcode{post}, as such parameters may be modified in the function body, making it impossible for the caller to reason about the postcondition. However, the parameters of a coroutine are never \tcode{const}, even if declared as such by the user. Therefore, implementing a function as a coroutine is just another way of making a non-reference parameter non-\tcode{const}.
 
 \subsection{Do not facilitate remote code breakage}
 
@@ -261,7 +307,7 @@ The Contracts MVP has been designed from the start to accommodate a wide range o
 
 In particular, if one has deployed a pre-built library with all contracts ignored, and the user of that pre-built library wishes to verify that it is working correctly when used from particular other translation units, enabling caller-side checking of that library's precondition and postcondition assertions can be very useful, for example to validate a new version of such a library before integrating it into the shipping product. In general, any time we cross the boundary between translation units, it is very helpful (and currently intentionally supported by \cite{P2900R8}) to have both sides of that boundary be able to enable contract checks.
 
-However, in order to be able to enable caller-side checking of \tcode{pre} and \tcode{post}, the predicate cannot depend on anything that is not accessible caller-side and only known callee-side. For coroutines in particular, it means that \tcode{post} cannot refer to the coroutine frame copies of parameter objects. Solution 4 is therefore not compatible with caller-side checking of \tcode{post}, even though it does allow caller-side checking of \tcode{pre}.
+However, in order to be able to enable caller-side checking of \tcode{pre} and \tcode{post}, the predicate cannot depend on anything that is not accessible caller-side and only known callee-side. For coroutines in particular, it means that \tcode{post} cannot refer to the copies of parameter objects that belong to the coroutine state. Solution 4 is therefore not compatible with caller-side checking of \tcode{post}, even though it does allow caller-side checking of \tcode{pre}.
 
 On the other hand, we are aware of fewer use cases for caller-side checking of \tcode{post} than there are for \tcode{pre}, so the former seems less important to support than the latter, and might not even be implementable on some platforms.\footnote{Notably, the Microsoft ABI performs argument destruction callee-side, not caller-side. Since postcondition assertions are specified in \cite{P2900R8} to be evaluated before argument destruction happens, they cannot be checked caller-side on this platform without an ABI break.}
 
@@ -275,7 +321,7 @@ Having formulated our design goals, we can now construct a decision matrix that 
 \newcommand{\no}{\includegraphics[width=4mm]{images/no.png}}
 %\vspace{4mm}
 \begin{table}[!h]
-\begin{tabular}{|p{6.7cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|}
+\begin{tabular}{|p{7.4cm}|p{0.8cm}|p{0.8cm}|p{0.8cm}|p{0.8cm}|p{0.8cm}|p{0.8cm}|p{0.8cm}|}
 \hline 
  & $1$ & $2$ & $3$ & $4$ & $5$a & $5$b & $5$c  \\
 \hline
@@ -283,27 +329,41 @@ Allow \tcode{pre} on coroutines & \no & \yes & \yes & \yes & \yes & \yes & \yes 
 \hline
 Allow \tcode{post} on coroutines  & \no & \no & \yes & \yes & \yes & \yes & \yes  \\
 \hline
+Treat coroutine-ness as implementation detail  & \no & \no & \yes & \no & \yes & \no & \no  \\
+\hline
+Do not expose moved-from parameters  & \yes & \yes & \yes & \yes  & \yes & \yes & \no  \\
+\hline
 Satisfy Contracts Prime Directive & \yes & \yes & \yes & \no & \no & \yes & \yes  \\
 \hline
-Do not expose moved-from parameters & \yes & \yes & \yes & \yes  & \yes & \yes & \no  \\
-\hline
-Do not make \tcode{pre}/\tcode{post} more inconsistent & \yes & \no & \yes & \no & \no & \yes & \no \\
+Do not make \tcode{pre} and \tcode{post} more inconsistent & \yes & \no & \yes & \no & \no & \yes & \no \\
 \hline
 Do not facilitate remote code breakage & \yes & \yes & \yes & \yes & \yes & \no & \yes \\
 \hline
-Support caller-side checking of \tcode{post} & \yes & \yes & \yes & \no & \yes & \yes & \yes  \\
+Support caller-side checking of \tcode{pre} and \tcode{post} & \yes & \yes & \yes & \no & \yes & \yes & \yes  \\
 \hline
 \end{tabular}
 \vspace{2mm}
 \label{table:matrix}
 \end{table}
 
-The decision matrix reveals that the only possible solution that satisfies all our design goals is Solution 3: allow \tcode{pre} and \tcode{post} on coroutines, but make it ill-formed to odr-use a parameter of a coroutine in \tcode{post} (even if that parameter is \tcode{const}). Therefore, we propose to adopt Solution 3 for the Contracts MVP. We are convinced that this is the best option for the C++ language and its users.
+The decision matrix reveals that the only possible solution that satisfies all our design goals is Solution 3: allow \tcode{pre} and \tcode{post} on coroutines, but make it ill-formed to odr-use a parameter of a coroutine in \tcode{post} (even if that parameter is \tcode{const}).
 
-Note that with Solution 3, if it is really necessary to refer to the function parameters in the postcondition, a workaround exists: one can wrap the coroutine into a non-coroutine wrapper as shown in Section \ref{intro}. With such a wrapper, the user themselves has to make the choice whether to copy or move a parameter, and there is no question as to whether \tcode{post} applies to the original or copy of the parameter, as only the original is visible to the wrapper. The situation will become even simpler once we get postcondition captures \cite{P3098R0} as a post-MVP extension, as parameters can be explicitly copied for later use in the postcondition, and the need for a wrapper will go away.
+Therefore, we propose to adopt Solution 3 for the Contracts MVP. We are convinced that this is the best option for the C++ language and its users. It is the only solution that is compatible with the fundamental design principles of both coroutines and Contracts, and as we will see in Section~\ref{wording}, it is also remarkably simple and natural to specify on top of the existing wording.
+
+Note that with Solution 3, if the user really must refer to the function parameters in the postcondition, a workaround exists: one can wrap the coroutine into a non-coroutine wrapper as shown in Section \ref{intro}. With such a wrapper, the user themselves has to make the choice whether to copy or move a parameter. There is no question as to whether \tcode{post} applies to the original or copy of the parameter, or whether that parameter might have been moved from, as only the original parameter object is visible to the wrapper, and that parameter object is not modifiable.
+
+The situation will become even simpler once we get postcondition captures \cite{P3098R0} as a post-MVP extension. Postcondition captures will allow the user to explicitly copy parameters when a function is called, and use these copies later in the predicate of \tcode{post}, with a syntax analogous to lambda captures. With this post-MVP extension, the need for a wrapper will go away completely.
 
 \section{Proposed wording}
 \label{wording}
+
+Our wording strategy for the point of evaluation is to not modify the specification of the point of evaluation of \tcode{pre} and \tcode{post} in \cite{P2900R8} in any way, but instead to clarify that  operations that are specific to the compiler-generated ramp function, in particular creating a copy of the parameters and allocating the coroutine state, are considered part of the function body.
+
+Likewise, our wording strategy for making it ill-formed to odr-use parameters in \tcode{post} is to not modify the specification for odr-using parameters in \tcode{post} in \cite{P2900R8} in any way, but instead to clarify that a coroutine effectively removes \tcode{const} from its parameter declarations. This is already implied by the existing wording for the generated ramp function body, but is not specified clearly enough and contains a somewhat misleading note.
+
+With these wording clarifications in [dcl.fct.def.coroutine], none of which are specific to Contracts, both the point of evaluation of \tcode{pre} and \tcode{post} relative to anything that happens in the ramp function and the prohibition to odr-use coroutine parameters in \tcode{post} simply follow from the existing, non-coroutine-specific wording in \cite{P2900R8}.
+
+Therefore, to specify our proposed solution, the only necessary modification to the actual Contracts wording in \cite{P2900R8} is the removal of the prohibition  for \tcode{pre} and \tcode{post} to apply to a coroutine.
 
 The proposed wording is relative to \cite{P2900R8}.
 
@@ -312,9 +372,10 @@ Modify [dcl.contract.func], paragraph 6:
 A \removed{coroutine ([dcl.fct.def.coroutine]), }a deleted function ([dcl.fct.def.delete])\removed{,} or a function defaulted on its first declaration ([dcl.fct.def.default]) may not have a \emph{function-contract-specifier-seq}.
 \end{adjustwidth}
 
-Modify [dcl.contract.func], paragraph 8:
+Modify [dcl.fct.def.coroutine], paragraph 5:
+
 \begin{adjustwidth}{0.5cm}{0.5cm}
-If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a non-reference parameter of that function, \added{that function shall not be a coroutine ([dcl.fct.def.\allowbreak coroutine]) and }that parameter shall be declared \tcode{const} and shall not have array or function type.
+A coroutine behaves as if \added{the top-level $cv$-qualifiers in all \emph{parameter-declaration}s in the declarator of its \grammarterm{function-definition} were removed, and }its \grammarterm{function-body} were replaced by: [...]
 \end{adjustwidth}
 
 Modify [dcl.fct.def.coroutine], paragraph 9:
@@ -325,6 +386,8 @@ An implementation may need to allocate additional storage for a coroutine. This 
 Modify [dcl.fct.def.coroutine], paragraph 13:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 When a coroutine is invoked, \removed{after initializing its parameters ([expr.call])}\added{at the beginning of the replacement body}, a copy is created for each coroutine parameter. For a parameter of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.
+
+\removed{[ \emph{Note:} An original parameter object is never a const or volatile object ([basic.type.qualifier]). --- \emph{end note} ]}
 \end{adjustwidth}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

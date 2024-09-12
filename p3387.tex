@@ -149,7 +149,7 @@ From the design principle that coroutine-ness is an implementation detail it fol
 
 One of the design principles of the Contracts MVP (\cite{P2900R8}, Section 3.1, Design Principle 11) is that \tcode{pre} and \tcode{post} serve both caller and callee. In this case, the callee is the compiler-generated body of the ramp function (see [\href{https://eel.is/c++draft/dcl.fct.def.coroutine#5}{dcl.fct.def.coroutine.5}]): \tcode{pre} on a coroutine is an assertion on the parameters passed into the ramp function when it is called, \emph{before} the coroutine frame is constructed, and the state of the program at that point; \tcode{post} on a coroutine is an assertion on the object that the ramp function returns to the caller at the point of first suspension, and the state of the program at that point.
 
-Crucially, the callee of \tcode{pre} and \tcode{post} on the coroutine declaration is \emph{not} the coroutine body --- the function body that the user wrote --- and \tcode{pre} and \tcode{post} on the coroutine declaration do not assert anything directly related to that body. The coroutine body may run on another thread, resume long after the postconditions that apply to the declaration are checked, or even finish before then\footnote{A coroutine frame can be destroyed on initial suspend, which happens before \tcode{post} is checked.}. Further, the coroutine body never directly sees the object being returned from the function.
+Crucially, the callee of \tcode{pre} and \tcode{post} on the coroutine declaration is \emph{not} the coroutine body --- the function body that the user wrote --- and \tcode{pre} and \tcode{post} on the coroutine declaration do not assert anything directly related to that body. The coroutine body may run on another thread, resume long after the postconditions that apply to the declaration are checked, or even finish before then.\footnote{A coroutine frame can be destroyed on initial suspend, which happens before \tcode{post} is checked.} Further, the coroutine body never directly sees the object being returned from the function.
 
 This lack of a direct connection between function declaration and function body may seem strange and unintuitive to users not familiar with coroutines; but it is a fundamental part of their design. Adding \tcode{pre} and \tcode{post} to the function declaration does not change this design and does not make things any more complex than they already are.
 
@@ -247,14 +247,15 @@ Our design for how Contracts and coroutines work together should not facilitate 
 
 For example, if the user adds a move constructor to a type that previously only had a copy constructor (something that we explicitly encourage people to do to modernise their code!), this will break clients who happen to use this type as a coroutine parameter. Likewise, if there is a struct with an \tcode{int} and a \tcode{float} data member, and the user adds a \tcode{std::string} data member, this will also break clients who happen to use this type as a coroutine parameter. Such breakage would happen for highly non-obvious reasons, does not have a good workaround (at least not until we get postcondition captures as a post-MVP extensions), and therefore seems user-hostile.
 
-\subsection{Support caller-side checking of \tcode{post}}
+\subsection{Support caller-side checking of \tcode{pre} and \tcode{post}}
 
 The Contracts MVP has been designed from the start to accommodate a wide range of implementation strategies and usage scenarios. In particular, it allows implementations to check precondition and postcondition assertions caller-side and/or callee-side, and enables the two translation units involved to make the decision on contract evaluation semantics independently.
 
 In particular, if one has deployed a pre-built library with all contracts ignored, and the user of that pre-built library wishes to verify that it is working correctly when used from particular other translation units, enabling caller-side checking of that library's precondition and postcondition assertions can be very useful, for example to validate a new version of such a library before integrating it into the shipping product. In general, any time we cross the boundary between translation units, it is very helpful (and currently intentionally supported by \cite{P2900R8}) to have both sides of that boundary be able to enable contract checks.
 
-However, in order to be able to enable caller-side postcondition checks, the predicate of \tcode{post} cannot depend on anything that is not accessible caller-side and only known callee-side. For coroutines, it means that \tcode{post} cannot refer to the coroutine frame copies of parameter objects. Solution 4 is therefore not compatible with caller-side checking of \tcode{post}.
+However, in order to be able to enable caller-side checking of \tcode{pre} and \tcode{post}, the predicate cannot depend on anything that is not accessible caller-side and only known callee-side. For coroutines in particular, it means that \tcode{post} cannot refer to the coroutine frame copies of parameter objects. Solution 4 is therefore not compatible with caller-side checking of \tcode{post}, even though it does allow caller-side checking of \tcode{pre}.
 
+On the other hand, we are aware of fewer use cases for caller-side checking of \tcode{post} than there are for \tcode{pre}, so the former seems less important to support than the latter, and might not even be implementable on some platforms.\footnote{Notably, the Microsoft ABI performs argument destruction callee-side, not caller-side. Since postcondition assertions are specified in \cite{P2900R8} to be evaluated before argument destruction happens, they cannot be checked caller-side on this platform without an ABI break.}
 
 \section{Proposed solution}
 
@@ -320,7 +321,8 @@ When a coroutine is invoked, \removed{after initializing its parameters ([expr.c
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %\section*{Acknowledgements}
-% TODO - nothing here yet
+% TODO 
+% - acknowledge Ville for the "caller side checking of pre is more important than post" comment?
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

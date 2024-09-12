@@ -102,13 +102,13 @@ The only exception to the above is that in a coroutine, function parameters may 
 
 The C++2a Contracts proposal \cite{P0542R5} did not take coroutines into account because they were not yet part of the C++ Standard at the time.
 
-Post-C++20, SG21 decided to not support \tcode{pre} and \tcode{post} in the Contracts MVP proposal ``until we have a more complete picture of what we intend to provide'' (see \cite{P2932R3}).
+Post-C++20, SG21 decided to not support \tcode{pre} and \tcode{post} on coroutines in the Contracts MVP proposal ``until we have a more complete picture of what we intend to provide'' (see \cite{P2932R3}).
 
-Later, \cite{P2957R0} proposed to add support for \tcode{pre} and \tcode{post} on coroutines, with semantics analogous to non-coroutine functions (see Section \ref{impldetail}). This paper was seen by SG21 in Kona (November 2022) and rejected due to uncertainty about the semantics of referring to parameters in \tcode{post}, which might be moved into the coroutine frame and become moved-from values even if the parameter is \tcode{const} (see Section \ref{paramsinpost}).
+Later, \cite{P2957R0} proposed to add support for \tcode{pre} and \tcode{post} on coroutines. This paper was seen by SG21 in Kona (November 2022). The proposed solution was rejected due to uncertainty on how \tcode{pre} and \tcode{post} should interact with coroutines and whether making them apply to the ramp function, as proposed in the paper, was the correct design direction.
 
-In \cite{P3173R0}, seen by EWG in Tokyo (February 2023), support for coroutines was named by a major compiler vendor as one of the criteria for the viability of a Contracts MVP proposal.
+In \cite{P3173R0}, seen by EWG in Tokyo (February 2023), support for \tcode{pre} and \tcode{post} on coroutines was named by a major compiler vendor as one of the criteria for the viability of a Contracts MVP proposal.
 
-Subsequently, it was proposed in \cite{P2957R1} and in \cite{P3251R0} that we should allow \tcode{pre} on coroutines, but not \tcode{post}, to avoid the known problem regarding moved-from parameters in \tcode{post}. Neither paper has yet been seen by SG21 at the time of writing.
+Subsequently, it was proposed in \cite{P2957R1} and in \cite{P3251R0} that we should allow \tcode{pre} on coroutines, and make it apply to the ramp function, but not allow \tcode{post}, to avoid the known problem that a coroutine may move from its function parameters even if they are declared \tcode{const}. Neither paper has yet been seen by SG21 at the time of writing.
 
 This paper incorporates some material from \cite{P3251R0}. It also builds on \cite{P2957R1} and has significant overlap with it, but approaches the problem with a design goal-driven approach and seeks to provide a more exhaustive analysis of the available solution space. 
 % TODO: merge P2957R1 into this paper if the authors agree, and rephrase this paragraph

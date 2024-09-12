@@ -225,7 +225,7 @@ We are aware of the following potential solutions for how \tcode{pre} and \tcode
         \item do not add any special provision, meaning that the \emph{id-expression} may refer to a moved-from value, even if the parameter is declared \tcode{const} (first proposed in \cite{P2957R0}).
 \end{enumerate}
 \end{enumerate}
-All of the above handle the question of odr-using parameters in \tcode{post} in different ways. In order to make the proposed Contracts facility as user-friendly as possible, we need to formulate our design goals and determine which of these solutions best satisfies these design goals. This analysis is performed in the following section.
+All of the above solutions handle the question of odr-using parameters in \tcode{post} in different ways. In order to make the proposed Contracts facility as user-friendly as possible, we need to formulate our design goals and determine which of these solutions best satisfies these design goals. This analysis is performed in the following section.
 
 \section{Design goals}
 
@@ -348,9 +348,9 @@ Support caller-side checking of \tcode{pre} and \tcode{post} & \yes & \yes & \ye
 
 The decision matrix reveals that the only possible solution that satisfies all our design goals is Solution 3: allow \tcode{pre} and \tcode{post} on coroutines, but make it ill-formed to odr-use a parameter of a coroutine in \tcode{post} (even if that parameter is \tcode{const}).
 
-Therefore, we propose to adopt Solution 3 for the Contracts MVP. We are convinced that this is the best option for the C++ language and its users. It is the only solution that is compatible with the fundamental design principles of both coroutines and Contracts, and as we will see in Section~\ref{wording}, it is also remarkably simple and natural to specify on top of the existing wording.
+Therefore, we propose to adopt Solution 3 for the Contracts MVP. We are convinced that this is the best option for the C++ language and its users. It is the only solution that is compatible with the fundamental design principles of both coroutines and Contracts. Further, as we will see in Section~\ref{wording}, Solution 3 is also remarkably simple to specify on top of the existing Contracts and coroutines wording, which is a further strong hint that it is indeed the most natural and consistent composition of the Contracts and coroutines features.
 
-Note that with Solution 3, if the user really must refer to the function parameters in the postcondition, a workaround exists: one can wrap the coroutine into a non-coroutine wrapper as shown in Section \ref{intro}. With such a wrapper, the user themselves has to make the choice whether to copy or move a parameter. There is no question as to whether \tcode{post} applies to the original or copy of the parameter, or whether that parameter might have been moved from, as only the original parameter object is visible to the wrapper, and that parameter object is not modifiable.
+Note that if the user really must refer to the function parameters in the postcondition, a workaround exists: one can wrap the coroutine into a non-coroutine wrapper as shown in Section \ref{intro}. With such a wrapper, the user themselves has to make the choice whether to copy or move a parameter. There is no question as to whether \tcode{post} applies to the original or copy of the parameter, or whether that parameter might have been moved from, as only the original parameter object is visible to the wrapper, and that parameter object is not modifiable.
 
 The situation will become even simpler once we get postcondition captures \cite{P3098R0} as a post-MVP extension. Postcondition captures will allow the user to explicitly copy parameters when a function is called, and use these copies later in the predicate of \tcode{post}, with a syntax analogous to lambda captures. With this post-MVP extension, the need for a wrapper will go away completely.
 

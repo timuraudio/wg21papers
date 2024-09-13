@@ -182,6 +182,8 @@ When this ramp function is invoked, after initialising the function parameters (
 
 Notably, this moving-from a parameter happens even if that parameter is declared \tcode{const} by the user: the ramp function removes the top-level \tcode{const} from the parameter, and then modifies that parameter by using it to move-construct the copy. In other words, in a coroutine, a parameter object is never actually \tcode{const}, even if declared \tcode{const} in the function declaration.
 
+%JMB: Put another way, "the ramp function also behaves as if its defining declaration was rewritten to have any top-levl cv-qualifiers stripped from parameter declarations."   Maybe footnote that this is a core wording clarification of reality that we intend to see adopted.
+
 This specification may seem strange, but does not cause issues in C++ today because the moved-from parameter values are not exposed to the user in any way. Upon deeper inspection, it turns out that it is actually fully consistent with the design principle that coroutine-ness is an implementation detail. Consider the following declaration of a function \tcode{f}:
 \begin{codeblock}
 awaitable<int> f(const Widget w);
@@ -209,6 +211,8 @@ In this scenario, with the specification in \cite{P2900R8}, one would not be abl
 
 Now, if the user instead chooses to provide a definition of \tcode{f} that makes \tcode{f} a coroutine, then the implementation of \tcode{f} will not actually be the function body that the user wrote, instead the implementation of \tcode{f} will be the compiler-generated ramp function (which is composed of different bits from the coroutine body, the promise type, etc.), which \emph{implicitly} makes the parameter non-\tcode{const}. However, it might still be declared \tcode{const} on all declarations of \tcode{f} that the user wrote, raising the question how \tcode{post} should behave if such a parameter is odr-used in its predicate. Any viable Contracts proposal needs to handle this situation in a consistent and user-friendly way.
 
+%JMB: Maybe work into this paragraph that the ramp function's declaration will, just like the last implementation of f, have a non-const widget as a parameter.  
+
 \subsection{The solution space}
 \label{solutions}
 
@@ -226,6 +230,10 @@ We are aware of the following potential solutions for how \tcode{pre} and \tcode
 \end{enumerate}
 \end{enumerate}
 All of the above solutions handle the question of odr-using parameters in \tcode{post} in different ways. In order to choose the correct solution, we need to formulate our design goals and determine which of these solutions best satisfies these design goals. This analysis is performed in the following section.
+
+%JMB: So the solution we seem to be heading towards is actually not one of the above.  If we simply clarify the definitions of corutines, and make it so the (non-user-controlled but still important) ramp function declaration has cv-qualifiers of non-reference parameters stripped off, then we just enforce our existing postcondition rules and you have no way to odr-use a non-refernece parameter from the postcondition of a coroutine.
+% References are fine --- coroutines shouldn't be strippping const from them, and postconditions don't care about using them.
+% I would really qualify this as "clarify the coroutine wording that hte ramp function's declaration is rewritten and enforce that it must match const-ness for non-reference parameters (which it won't do) used by postconditions.
 
 \section{Design goals}
 

@@ -94,9 +94,9 @@ auto g()  // not a coroutine
   return f();  // a coroutine
 } 
 \end{codeblock}
-With such an indirection, the contracts applied to the wrapper function \tcode{g} will necessarily do exactly what they would be doing on \tcode{f}. This observation is key to the question how we should specify \tcode{pre} and \tcode{post} on coroutines directly. 
+Given the existence of this workaround, it seems reasonable to provide the ability to place \tcode{pre} and \tcode{post} on \tcode{f} directly, and to specify them to behave exactly the same on \tcode{f} as they would today on the wrapper function \tcode{g}. However, as with any other attempt to wrap a function in C++, once additional parameters are being passed there are subtle yet important differences in behavior that must be considered.
 
-There is just one potential complication to the above. In \cite{P2900R8}, in order to odr-use a function parameter in the predicate of \tcode{post}, it has to be declared \tcode{const} on every declaration of the function, so that we can reason about the parameter value not having been modified before \tcode{post} is evaluated. However, in a coroutine, function parameters are effectively always non-\tcode{const} objects, and may be moved from by the implementation, even  if they are declared \tcode{const} by the user.
+In \cite{P2900R8}, in order to odr-use a function parameter in the predicate of \tcode{post}, it has to be declared \tcode{const} on every declaration of the function, so that we can reason about the parameter value not having been modified before \tcode{post} is evaluated. However, in a coroutine, function parameters are effectively always non-\tcode{const} objects, and may be moved from by the implementation, even if they are declared \tcode{const} by the user.
 
 The question therefore arises whether \tcode{post} on a coroutine should see the original parameter objects (which may have moved-from values despite the parameters being declared \tcode{const} by the user), or the parameter copies created by the implementation for the coroutine state (which the original values will have been moved to), or whether something else should happen.
 
@@ -271,6 +271,8 @@ Furthermore, it does not seem useful to be able to write a postcondition on a pa
 % THis is the same thing.
 
 % TD: I think this is a purely philosophical debate. My reply to your code above is indeed "that's OK if T happens to be trivially movable" because that's just what falls out of the current specification. I suggest we don't spend more time on this here as whether or not 5b gets a green mark or a red cross in this row is pretty much irrelevant, because we are already discarding 5b as a viable solution due to it violating the "do not facilitate remote code breakage" design goal. Are you OK with leaving this discussion be for now, in the interest of getting the paper out sooner?
+
+% JMB: I still think we need to mention something --- especially since solution 5b isn't just trivial moves but also moves that degrade to copies (whichi might modify mutable members of the source).  How about something like "Solution 5b violates this goal in principle, although it limits use of move operations to those types where the source is known to be unmodified or which are totally move-unaware."
 
 \subsection{Satisfy the Contracts Prime Directive}
 \label{goal_prime_directive}

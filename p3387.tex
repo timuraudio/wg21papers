@@ -207,6 +207,7 @@ awaitable<int> f(Widget w) {
 \end{codeblock}
 In this scenario, with the specification in \cite{P2900R8}, one would not be able to odr-use \tcode{w} in the predicate of a \tcode{post} that applies to \tcode{f}, because for that to work, \tcode{w} needs to be declared \tcode{const} on \emph{all} declarations of \tcode{f}.
 
+% TIMUR TODO: There is some duplication of this paragraph with the above, and the "composed of..." part should probably be mentioned further above.
 Now, if the user instead chooses to provide a definition of \tcode{f} that makes \tcode{f} a coroutine, then the implementation of \tcode{f} will not actually be the function body that the user wrote, instead the implementation of \tcode{f} will be the compiler-generated ramp function (which is composed of different bits from the coroutine body, the promise type, etc.). Since this compiler-generated ramp function modifies the parameter object, it will notionally have a non-\tcode{const} \tcode{Widget} parameter, just like the last implementation of \tcode{f} above. However, that parameter might still be declared \tcode{const} on all declarations of \tcode{f} written by the \emph{user}, raising the question how \tcode{post} should behave if such a parameter is odr-used in its predicate. Any viable Contracts proposal needs to handle this situation in a consistent and user-friendly way.
 
 \subsection{The solution space}
@@ -230,6 +231,9 @@ All of the above solutions handle the question of odr-using parameters in \tcode
 %JMB: So the solution we seem to be heading towards is actually not one of the above.  If we simply clarify the definitions of corutines, and make it so the (non-user-controlled but still important) ramp function declaration has cv-qualifiers of non-reference parameters stripped off, then we just enforce our existing postcondition rules and you have no way to odr-use a non-refernece parameter from the postcondition of a coroutine.
 % References are fine --- coroutines shouldn't be strippping const from them, and postconditions don't care about using them.
 % I would really qualify this as "clarify the coroutine wording that hte ramp function's declaration is rewritten and enforce that it must match const-ness for non-reference parameters (which it won't do) used by postconditions.
+
+% TD: Well, the way I would phrase it is that the proposed solution is what Solution 3 says, and what you're describing is the specification strategy to get there. Your description of what we're proposing is technically accurate, but it's very core-ish, so I'm not convinced that structuring the paper around this way of phrasing it from the start is going to spin the correct narrative. Starting out with this core-ish description might confuse people. I think the paper is much more easily digestable if we initially formulate Solution 3 as done here, and then gradually steer the user towards the realisation that the right way to think about it is that it's actually just adding that bit of wording to coroutines and the rest fall out, and then *at the end* make them realise that it's one and the same. I think that's a much better narrative for the uninitiated reader than to start with "we want to mess with the specification of coroutines" which may send off all kinds of alarm bells. I did a few gentle tweaks to emphasise the underlying nature of the solution a bit more, but I would like to hold off from rewriting the whole paper to that effect, I hope that's OK for you.
+% Regarding references - you're of course correct. I have updated the entire paper to make it clear that we're only talking about non-reference parameters, and added an additional section above about reference parameters which essentially says what you said.
 
 \section{Design goals}
 
@@ -278,7 +282,8 @@ Furthermore, it does not seem useful to be able to write a postcondition on a pa
 
 % JMB: I still think we need to mention something --- especially since solution 5b isn't just trivial moves but also moves that degrade to copies (whichi might modify mutable members of the source).  How about something like "Solution 5b violates this goal in principle, although it limits use of move operations to those types where the source is known to be unmodified or which are totally move-unaware."
 
-% I don't agree that this is true. If Solution 5 "limits use of move operations to those types where the source is known to be unmodified or which are totally move-unaware", then I don't see how that it could possibly expose moved-from values, and if it doesn't do that, it doesn't violate this design goal. We keep going in circles on this one; I still think that this isn't productive or important for the paper.
+% TD: I don't agree that this is true. If Solution 5 "limits use of move operations to those types where the source is known to be unmodified or which are totally move-unaware", then I don't see how that it could possibly expose moved-from values, and if it doesn't do that, it doesn't violate this design goal.
+% We keep going in circles on this one; I still think that this discussion isn't very productive and who's right here isn't really important for the paper. If I'm really wrong here, then others will comment on it too once the paper is public, and I'll be happy to fix it at that point. For now, can we agree to disagree and move on? :)
 
 \subsection{Satisfy the Contracts Prime Directive}
 \label{goal_prime_directive}

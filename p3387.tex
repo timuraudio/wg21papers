@@ -370,7 +370,7 @@ The situation will become even simpler once we get postcondition captures (\cite
 \section{Proposed wording}
 \label{wording}
 
-Our wording strategy is to not modify the normative Contracts wording in \cite{P2900R8} at all other than removing of the prohibition for \tcode{pre} and \tcode{post} to apply to a coroutine, consistent with the principle that coroutine-ness is an implementation detail. Instead, we clarify the wording in [dcl.fct.def.coroutine] in the necessary places such that the behaviour of \tcode{pre} and \tcode{post} on the declaration of a function that happens to be implemented as a coroutine simply follows from the existing rules.
+Our wording strategy is to not modify the normative Contracts wording in \cite{P2900R8} at all other than removing of the prohibition for \tcode{pre} and \tcode{post} to apply to a coroutine, consistent with the principle that coroutine-ness is an implementation detail. Instead, we clarify the wording in [dcl.fct.def.coroutine] in the necessary places such that the behaviour of \tcode{pre} and \tcode{post} on the declaration of a function that happens to be implemented as a coroutine simply follows from the existing specification.
 
 The evaluation of both precondition and postcondition assertions should be semantically equivalent whether a function actually \emph{is} a coroutine or not.  We believe this is the case in the current intent of the coroutine wording, but we believe clarifications are needed for that purpose:
 \begin{itemize}

@@ -372,15 +372,16 @@ The situation will become even simpler once we get postcondition captures (\cite
 
 Our wording strategy is to not modify the normative Contracts wording in \cite{P2900R8} at all other than removing of the prohibition for \tcode{pre} and \tcode{post} to apply to a coroutine, consistent with the principle that coroutine-ness is an implementation detail. Instead, we clarify the wording in [dcl.fct.def.coroutine] in the necessary places such that the behaviour of \tcode{pre} and \tcode{post} on the declaration of a function that happens to be implemented as a coroutine simply follows from the existing rules.
 
-To specify the point of evaluation of \tcode{pre} and \tcode{post}, we need to clarify that  operations that are specific to the compiler-generated ramp function, in particular creating a copy of the parameters and allocating the coroutine state, are considered part of the function body; and that the local variables of a coroutine body are not considered local variables of the function body, but are destroyed when the coroutine state is deallocated, which is unrelated to the point of evaluation of \tcode{post}.
+The evaluation of both precondition and postcondition assertions should be semantically equivalent whether a function actually *is* a coroutine or not.  We believe this is the case in the current intent of the coroutine wording, but we believe clarifications are needed for that purpose:
+\begin{itemize}
+\item Preconditions should be evaluated after the normal function parameters are initialized (just as with any other function call) and prior to any coroutine-specific evaluations such as making copies of those parameters, allocating space for the coroutine state, or evaluating anything in the replacement function body defined in [dcl.fct.def.coroutine] paragraph 5.  To clarify this, we add ``as part of the replacement body'' to descriptions of both the allocating function invocation and the making of copies of the parameters.
+\item Postconditions should be evaluated when the coroutine returns to its caller (but not a resumer).  The return to the caller occurs the first time the coroutine suspends, all other suspension points return to a resumer.   This returning does \emph{not} destroy local variables because suspending is not considered leaving the scope within the coroutine.   To achieve the effects we want, we recommend a minor rearranigng of the wording in \cite{P2900R8} to describe postcondition evaluation along with precondition evaluation in [expr.call] and not tie it to the return statement (leaving just a note in the [stmt.return] and in [dcl.fct.def.coroutine] describing when postconditions are expected to be evaluated.)
+\end{itemize}
 
-Further, we need to add some clarifications around when and how the coroutine returns the object that is named by the result name in \tcode{post.}
 
-Finally, to make it ill-formed to odr-use parameters in the predicate of \tcode{post}, we need to clarify that a coroutine effectively removes \tcode{const} from its parameter declarations. This is already implied by the existing wording for the generated ramp function body, but is currently not specified clearly enough and contains a misleading note.
+Finally, to make it ill-formed to odr-use parameters in the predicate of \tcode{post}, we need to clarify that a coroutine does not just rewrite its body but also rewrites its declaration to not have top-level $cv$-qualifiers on its parameter declarations (thought he copies do retain those $cv$-qualifiers).  This is already implied by the existing wording for the generated ramp function body, but is currently not specified clearly enough and contains a misleading note.
 
 The proposed wording is relative to \cite{P2900R8}.
-
-// TODO Modify [stmt.return] ; explain relation of post with returned object AND local variables in the coroutine  // 
 
 Modify [dcl.contract.func], paragraph 6:
 \begin{adjustwidth}{0.5cm}{0.5cm}
@@ -399,9 +400,47 @@ An implementation may need to allocate additional storage for a coroutine. This 
 
 Modify [dcl.fct.def.coroutine], paragraph 13:
 \begin{adjustwidth}{0.5cm}{0.5cm}
-When a coroutine is invoked, \removed{after initializing its parameters ([expr.call])}\added{at the beginning of the replacement body}, a copy is created for each coroutine parameter. For a parameter of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.
+When a coroutine is invoked, \removed{after initializing its parameters ([expr.call])}\added{at the beginning of the replacement body}, a copy is created for each coroutine parameter. For a parameter \added{whose original declaration was} of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.
 
 \removed{[ \emph{Note:} An original parameter object is never a const or volatile object ([basic.type.qualifier]). --- \emph{end note} ]}
+\end{adjustwidth}
+
+Modify [intro.execution], paragraph 11:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+[11]  When invoking a function \tcode{f} (whether or not the function is inline),
+every argument expression and the postfix expression designating \tcode{f} are
+sequenced before every precondition assertion of the function call \added{([expr.call]), which in turn are sequenced before
+every expression or statement in the body of
+\tcode{f} \added{which in turn are sequenced before every postcondition assertion of the function call}. For each function invocation or evaluation
+of an \grammarterm{await-expression} $F$, each evaluation that does not occur within $F$ but is
+evaluated on the same thread and as part of the same signal handler (if any)
+is either sequenced before all evaluations that occur within $F$ or sequenced
+after all evaluations that occur within $F$; if $F$ invokes or resumes a coroutine
+(\stdref{expr.await}), only evaluations subsequent to the previous suspension (if any)
+and prior to the next suspension (if any) are considered to occur within $F$.}
+
+Several contexts in C++ cause evaluation of a function call, even though no
+corresponding function call syntax appears in the translation unit.
+\end{adjustwidth}
+
+Add a new paragraph after [expr.call], paragraph 8:
+
+\added{When control is transfered out of the called function all postcondition assertions of the call  are evaluated
+in sequence ([dcl.contract.func]).}
+
+Modify the new paragraph added after [stmt.return], paragraph 3:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\removed{
+All postcondition assertions ([dcl.contract.func]) of the function call ([expr.call])
+are evaluated in sequence. 
+The destruction of all local
+variables within the function body
+is sequenced before the evaluation of any postcondition assertions.}
+
+\emph{Note:} Postcondition assertions \added{of the function call ([expr.call]) } are \added{evaluated in sequence after the destruction of any local variables in scopes exited by the return statement, and are,} in turn, sequenced before the destruction of function parameters. --- \emph{end note}
+
 \end{adjustwidth}
 
 // TODO ANYTHING ELSE MISSING? //

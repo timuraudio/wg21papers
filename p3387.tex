@@ -392,6 +392,8 @@ Modify [dcl.fct.def.coroutine], paragraph 5:
 A coroutine behaves as if \added{the top-level $cv$-qualifiers in all \emph{parameter-declaration}s in the declarator of its \grammarterm{function-definition} were removed, and }its \grammarterm{function-body} were replaced by: [...]
 \end{adjustwidth}
 
+// TODO define "replacement body"! //
+
 Modify [dcl.fct.def.coroutine], paragraph 9:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 An implementation may need to allocate additional storage for a coroutine. This storage is known as the \emph{coroutine state} and is obtained by calling a non-array allocation function ([basic.stc.dynamic.allocation])\added{ as part of the replacement body}. The allocation function's name is looked up by searching for it in the scope of the promise type.

@@ -427,7 +427,8 @@ corresponding function call syntax appears in the translation unit.
 Add a new paragraph after [expr.call], paragraph 8:
 
 \added{When control is transfered out of the called function all postcondition assertions of the call  are evaluated
-in sequence ([dcl.contract.func]).}
+in sequence ([dcl.contract.func]).
+\emph{Note:} This in turn is sequenced before the destruction of any function parameters.  --- \emph{end note}}
 
 Modify the new paragraph added after [stmt.return], paragraph 3:
 

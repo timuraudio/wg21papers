@@ -374,7 +374,7 @@ Our wording strategy is to not modify the normative Contracts wording in \cite{P
 
 The evaluation of both precondition and postcondition assertions should be semantically equivalent whether a function actually \emph{is} a coroutine or not.  We believe this is the case in the current intent of the coroutine wording, but we believe clarifications are needed for that purpose:
 \begin{itemize}
-\item Preconditions should be evaluated after the normal function parameters are initialised (just as with any other function call) and prior to any coroutine-specific evaluations such as making copies of those parameters, allocating space for the coroutine state, or evaluating anything in the replacement function body defined in [dcl.fct.def.coroutine] paragraph 5.  To clarify this, we add ``as part of the replacement body'' to descriptions of both the allocating function invocation and the making of copies of the parameters.
+\item Preconditions should be evaluated after the normal function parameters are initialised (just as with any other function call) and prior to any coroutine-specific evaluations such as making copies of those parameters, allocating space for the coroutine state, or evaluating anything in the replacement function body defined in [dcl.fct.def.coroutine] paragraph 5.  To clarify this, we  introduce the term \emph{replacement body} so we can directly refer to it, and add ``as part of the replacement body'' to descriptions of both the allocating function invocation and the making of copies of the parameters.
 \item Postconditions should be evaluated when the coroutine returns to its caller (but not a resumer).  The return to the caller occurs the first time the coroutine suspends, all other suspension points return to a resumer.   This returning does \emph{not} destroy local variables because suspending is not considered leaving the scope within the coroutine.   To achieve the effects we want, we recommend a minor rearranging of the wording in \cite{P2900R8} to describe postcondition evaluation along with precondition evaluation in [expr.call] and not tie it to the return statement (leaving just a note in the [stmt.return] and in [dcl.fct.def.coroutine] describing when postconditions are expected to be evaluated.)
 \item To make it ill-formed to odr-use parameters in the predicate of \tcode{post}, we need to clarify that a coroutine does not just rewrite its body but also rewrites its declaration to not have top-level $cv$-qualifiers on its parameter declarations (though the copies do retain those $cv$-qualifiers).  This is already implied by the existing wording for the generated ramp function body, but is currently not specified clearly enough and contains a misleading note.
 \end{itemize}
@@ -388,10 +388,12 @@ A \removed{coroutine ([dcl.fct.def.coroutine]), }a deleted function ([dcl.fct.de
 
 Modify [dcl.fct.def.coroutine], paragraph 5:
 \begin{adjustwidth}{0.5cm}{0.5cm}
-A coroutine behaves as if \added{the top-level $cv$-qualifiers in all \emph{parameter-declaration}s in the declarator of its \grammarterm{function-definition} were removed, and }its \grammarterm{function-body} were replaced by: [...]
-\end{adjustwidth}
+A coroutine behaves as if \added{the top-level $cv$-qualifiers in all \emph{parameter-declaration}s in the declarator of its \grammarterm{function-definition} were removed, and }its \grammarterm{function-body} were replaced by\added{ the following \emph{replacement body}}: 
 
-// TODO define "replacement body"! //
+\phantom{~~~}\tcode{\{} \\
+\phantom{~~~~~~}\emph{promise-type \tcode{promise} promise-constructor-arguments} \tcode{;} \\
+\phantom{~~~~~~}\tcode{[...]}
+\end{adjustwidth}
 
 Modify [dcl.fct.def.coroutine], paragraph 9:
 \begin{adjustwidth}{0.5cm}{0.5cm}

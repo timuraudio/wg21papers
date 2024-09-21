@@ -48,7 +48,7 @@ Peter Bindels \small(\href{mailto:dascandy@gmail.com}{dascandy@gmail.com})
 
 \begin{tabular}{ll}
 Document \#: & D3387R0 \\
-Date: &2024-09-20 \\
+Date: &2024-09-21 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -246,7 +246,7 @@ A corollary of this fundamental principle is that adding \tcode{pre} or \tcode{p
 
 Solution 4 violates this principle. Note that the coroutine state, along with its copies of the function parameters, can be destroyed on initial suspend, which happens before control is returned to the caller, and thus before \tcode{post} is checked. Therefore, making parameters in \tcode{post} refer to the parameter copy would require changes to the semantics of the coroutine state to extend its lifetime accordingly, thereby violating the Contracts Prime Directive. Furthermore, such an approach would require heavy lifting in both wording and implementation changes, as we would have to change the nesting of lifetimes in significant ways; but without such changes, there would be no point at which the parameter copies and the return value necessarily exist at the same time, and therefore no point at which \tcode{post} could be checked.
 
-Solution 5a violates the Contracts Prime Directive in a different way. With this solution, adding \tcode{post} to a coroutine would incur an additional copy, even if the \emph{ignore} semantic is used and predicate is never checked; \cite{P2900R8} has been carefully designed to avoid such scenarios (this is the reason why, for example, the program is ill-formed if a contract assertion would trigger an implicit lambda capture). To avoid incurring an additional copy by merely adding a (potentially unchecked) contract assertion, we would have to perform the additional copy on \emph{any} coroutine, regardless whether contract assertions are being used, which would violate the ``do not pay for what you don't use'' principle of C++ and introduce performance regressions to existing code.
+Solution 5a violates the Contracts Prime Directive in a different way. With this solution, adding \tcode{post} to a coroutine would incur an additional copy of each non-reference parameter odr-used in \tcode{post}, even if the \emph{ignore} semantic is used and predicate is never checked. \cite{P2900R8} has been carefully designed to avoid such scenarios. This is the reason why, for example, the program is ill-formed if a contract assertion would trigger an implicit lambda capture. To avoid incurring an additional copy by merely adding a (potentially unchecked) contract assertion, we would have to perform an additional copy of \emph{each} parameter, on \emph{any} coroutine, regardless whether contract assertions are being used. Such an approach would  violate the ``don't pay for what you don't use'' principle of C++, and would introduce performance regressions to existing code.
 
 \subsection{Do not introduce additional inconsistencies between \tcode{pre} and \tcode{post}}
 

@@ -350,11 +350,23 @@ A coroutine behaves as if \added{the top-level $cv$-qualifiers in all \emph{para
 Modify [dcl.fct.def.coroutine], paragraph 9:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 An implementation may need to allocate additional storage for a coroutine. This storage is known as the \emph{coroutine state} and is obtained by calling a non-array allocation function ([basic.stc.dynamic.allocation])\added{ as part of the replacement body}. The allocation function's name is looked up by searching for it in the scope of the promise type.
+\begin{itemize}
+\item{If the search finds any declarations,
+overload resolution is performed on a function call created by assembling an
+argument list. The first argument is the amount of space requested, and
+is a prvalue of type \tcode{std::size_t}.
+The lvalues $\tcode{p}_1 \dotsc \tcode{p}_n$ \added{with their original $cv$-qualifiers} are the successive arguments.
+If no viable function is found ([over.match.viable]),
+overload resolution is performed again
+on a function call created by passing just
+the amount of space required as a prvalue of type \tcode{std::size_t}.
+}
+\end{itemize}
 \end{adjustwidth}
 
 Modify [dcl.fct.def.coroutine], paragraph 13:
 \begin{adjustwidth}{0.5cm}{0.5cm}
-When a coroutine is invoked, \removed{after initializing its parameters ([expr.call])}\added{at the beginning of the replacement body}, a copy is created for each coroutine parameter. For a parameter \added{whose original declaration was} of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.
+When a coroutine is invoked, \removed{after initializing its parameters ([expr.call])}\added{at the beginning of the replacement body}, a copy is created for each coroutine parameter. For a parameter \added{whose original declaration was} of type $cv$ \tcode{T}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an \removed{xvalue} \added{expression $E$} of type \tcode{T} referring to the parameter \added{; if \tcode{T} is a non-refernce type, $E$ is an xvalue, otherwise $E$ is an lvalue}.
 
 \removed{[ \emph{Note:} An original parameter object is never a const or volatile object ([basic.type.qualifier]). --- \emph{end note} ]}
 \end{adjustwidth}

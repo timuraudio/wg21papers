@@ -118,8 +118,7 @@ Consider a coroutine \tcode{f} that we wish to augment with \tcode{pre} and \tco
 \begin{codeblock}
 auto g()  // not a coroutine
   pre (/*...*/) 
-  post (r: /*...*/) 
-{ 
+  post (r: /*...*/) { 
   return f();  // a coroutine
 } 
 \end{codeblock}
@@ -137,7 +136,7 @@ One of the design principles of the Contracts MVP (\cite{P2900R8}, Section 3.1, 
 
 This lack of a direct connection between function declaration and user-provided function body may seem strange and unintuitive to users not familiar with coroutines; but it is a fundamental part of their design. Adding \tcode{pre} and \tcode{post} to the function declaration does not change this design and does not make things any more complex than they already are. This key insight allows us to move past ``postpone until we have a more complete picture'' and propose a coherent design for \tcode{pre} and \tcode{post} applied to coroutines.
 
-In addition to contract assertions on the function interface, we could consider a novel language feature to express assertions on the extended coroutine interface, i.e., preconditions and postconditions on a coroutine's suspension and resumption. However, such assertions could not be specified on the function declaration as the coroutine-ness of a function is not known there. We believe that most, if not all, use cases for such assertions can already be accomplished with the existing functionality in \cite{P2900R8} by using \tcode{contract_assert} inside the coroutine body or, for contracts that hold for \emph{any} entity that uses a given promise type, by applying \tcode{pre} and/or \tcode{post} to the various customisation functions in the promise and awaiter types. This latter approach is described in more detail in \cite{P3251R0}. A novel language feature to support this functionality is therefore not required for a viable Contracts MVP. Note also that it is possible to construct a regular functions with all the same properties and behaviour as a coroutine (albeit requiring multithreading). For the remainder of this paper, we therefore do not discuss contract assertions on the suspend and resume points of a coroutine any further, and focus solely on contract assertions on its function interface.
+In addition to contract assertions on the function interface, we could consider a novel language feature to express assertions on the extended coroutine interface, i.e., preconditions and postconditions on a coroutine's suspension and resumption. However, such assertions could not be specified on the function declaration as the coroutine-ness of a function is not known there. We believe that most, if not all, use cases for such assertions can already be accomplished with the existing functionality in \cite{P2900R8} by using \tcode{contract_assert} inside the coroutine body or, for contracts that hold for \emph{any} entity that uses a given promise type, by applying \tcode{pre} and/or \tcode{post} to the various customisation functions in the promise and awaiter types. This latter approach is described in more detail in \cite{P3251R0}. A novel language feature to support this functionality is therefore not required for a viable Contracts MVP. Note also that for any coroutine, it is possible to construct a non-coroutine function with the same observable behaviour (although that might require multithreading in some cases). For the remainder of this paper, we therefore do not discuss contract assertions on the suspend and resume points of a coroutine any further, and focus solely on contract assertions on its function interface.
 %IDS I will send separate email about this - but I am begining to think that we (collectively) are over-thinking the internals - I can construct non-coroutine examples that have all these properties (with the exception of being a single-threaded impl).
 % TD: I edited this part with your suggestions in mind. Hopefully it is better now? We can continue to edit it later if needed.
 
@@ -172,8 +171,7 @@ Now, as an implementation detail, the user could choose to provide a non-corouti
 awaitable<int> f(const Widget w);
 
 // f.cpp
-awaitable<int> f(Widget w)
-{
+awaitable<int> f(Widget w) {
   Widget w_copy = std::move(w); // OK
   // some other code; not a coroutine
 }
@@ -309,7 +307,7 @@ Support caller-side checking of \tcode{pre} and \tcode{post} & \yes & \yes & \ye
 \label{table:matrix}
 \end{table}
 
-This decision matrix visualises that the only solution that satisfies all our design goals, and furthermore the only possible solution that is compatible with the fundamental design principles of both coroutines (Section~\ref{goal_coro_principle}) and Contracts (Section~\ref{goal_prime_directive}), is Solution 3: allow \tcode{pre} and \tcode{post} on coroutines, but make it ill-formed to odr-use a parameter of a coroutine in the predicate of \tcode{post} (even if that parameter is declared \tcode{const} by the user). 
+The above decision matrix visualises that the only solution that satisfies all our design goals, and furthermore the only possible solution that is compatible with the fundamental design principles of both coroutines (Section~\ref{goal_coro_principle}) and Contracts (Section~\ref{goal_prime_directive}), is Solution 3: allow \tcode{pre} and \tcode{post} on coroutines, but make it ill-formed to odr-use a parameter of a coroutine in the predicate of \tcode{post} (even if that parameter is declared \tcode{const} by the user). 
 
 Therefore, we propose to adopt Solution 3 for the Contracts MVP. It is the correct solution for contract assertions on coroutines and provides the most value for the C++ language and its users. Furthermore, as we will see in Section~\ref{wording}, Solution 3 is also remarkably simple to specify on top of the existing Contracts and coroutines wording: it reduces to essentially just a couple of minor clarifications in the existing coroutines wording plus the actual removal of the prohibition to place \tcode{pre} and \tcode{post} on a coroutine, and the desired behaviour regarding point of evaluation, non-reference parameters, etc. just automatically falls out from that. This is another strong hint that it is indeed the most natural and consistent composition of the Contracts and coroutines features.
 

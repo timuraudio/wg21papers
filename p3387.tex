@@ -366,6 +366,7 @@ When a coroutine is invoked, \removed{after initializing its parameters ([expr.c
 \begin{itemize}
 \item{\added{If \tcode{T} is a reference type, the copy is a reference of type $cv$ \tcode{T} bound to the same object as the parameter,}}
 \item{\added{Otherwise}, the copy is a variable of type $cv$ \tcode{T} with automatic storage duration that is direct-initialized from an xvalue of type \tcode{T} referring to the parameter.}
+\added{[ \emph{Note:} An identifier that names one of these parameters refers to the created copy and not the original paramter ([expr.prim.id.unqual]) --- \emph{end note} ]}
 \end{itemize}
 
 \removed{[ \emph{Note:} An original parameter object is never a const or volatile object ([basic.type.qualifier]). --- \emph{end note} ]}
@@ -386,7 +387,7 @@ corresponding function call syntax appears in the translation unit.
 Add a new paragraph after [expr.call], paragraph 8:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-\added{When control is transferred out of the called function, all postcondition assertions of the function call are evaluated in sequence ([dcl.contract.func]).
+\added{When control is transferred back to this caller by the called function ([stmt.return], [expr.await]), all postcondition assertions of the function call are evaluated in sequence ([dcl.contract.func]).
 [\emph{Note:} This in turn is sequenced before the destruction of any function parameters.  --- \emph{end note}]}
 \end{adjustwidth}
 

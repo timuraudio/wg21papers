@@ -794,6 +794,7 @@ void test(int i) {
 we could avoid the consequences of making  \tcode{pre} and \tcode{post} part of the pointer type or the pointer value. The compiler will see the contract on the declaration of \tcode{fptr} at (1) and will be able to generate the required checks around the call at (2), while adding \tcode{pre} and \tcode{post} will not have any effect on the ABI, will not break any client code, will not have additional runtime overhead, etc.
 
 \subsubsection{Backchannel propagation}
+\label{propagation}
 
 One possible downside of the property of declaration approach is that with the rules of C++ today, it would be impossible to keep track of intermediate contracts --- we could neither check intermediate contracts, nor make non-matching intermediate contracts ill-formed. In C++ today, so-called \emph{backchannel} information that is neither part of the type nor part of the value does not propagate through expressions, so our only options would be to either drop all intermediate contracts (see \ref{implicitdrop}) or to add a new mechanism for backchannel propagation to the language.
 

@@ -795,7 +795,7 @@ we could avoid the consequences of making  \tcode{pre} and \tcode{post} part of 
 
 \subsubsection{Backchannel propagation}
 
-One possible downside of the property of declaration approach is that with the rules of C++ today, it would be impossible to keep track of intermediate contracts --- we could neither check intermediate contracts, not make non-matching intermediate contracts ill-formed. In C++ today, \emph{backchannel} information that is neither part of the type nor part of the value does not propagate through expressions, so our only options would be to either drop all intermediate contracts (see \ref{implicitdrop}) or to add a new mechanism for backchannel propagation to the language.
+One possible downside of the property of declaration approach is that with the rules of C++ today, it would be impossible to keep track of intermediate contracts --- we could neither check intermediate contracts, nor make non-matching intermediate contracts ill-formed. In C++ today, so-called \emph{backchannel} information that is neither part of the type nor part of the value does not propagate through expressions, so our only options would be to either drop all intermediate contracts (see \ref{implicitdrop}) or to add a new mechanism for backchannel propagation to the language.
 
 When we invoke a function, we do not invoke a declaration; we invoke an expression. If that expression is an \emph{id-expression} that directly names a function or a function pointer whose declaration is visible, and \emph{that} declaration has \tcode{pre} and \tcode{post} attached to it, the backchannel information is readily available. However, as we already saw in \label{intermediate}, there are many situations where this is not the case. Consider:
 \begin{codeblock}

@@ -750,7 +750,7 @@ Any proposal that makes contracts part of the type system needs to answer the qu
 
 Instead of making the sequence of contract assertions on a function pointer part of its type, we could encode the sequence in the pointer's value. This would also allow contracts to propagate through arbitrary expressions, but that would happen during program execution rather than statically.
 
-Contracts are usually thought of as a static property, but can also be thought of as a dynamic property if we want to pursue the `sticky'' intermediate contracts approach (see \ref{sticky}). The value of a pointer is a dynamic property that can change arbitrarily during program execution and therefore lends itself for the latter approach. 
+Contracts are usually thought of as a static property, but can also be thought of as a dynamic property if we want to pursue the ``sticky'' intermediate contracts approach (see \ref{sticky}). The value of a pointer is a dynamic property that can change arbitrarily during program execution and therefore lends itself for the latter approach. 
 
 The tradeoff of the value approach is that it seems inevitable to incur some amount of runtime overhead when adding a contract assertion to a function pointer, regardless of whether the contract is actually ever checked. This violates the \emph{Zero Overhead} principle from \cite{P2900R8}, although one can of course argue whether a branch never taken actually has any runtime overhead on modern architectures. 
 
@@ -798,7 +798,7 @@ we could avoid the consequences of making  \tcode{pre} and \tcode{post} part of 
 
 One possible downside of the property of declaration approach is that with the rules of C++ today, it would be impossible to keep track of intermediate contracts --- we could neither check intermediate contracts, nor make non-matching intermediate contracts ill-formed. In C++ today, so-called \emph{backchannel} information that is neither part of the type nor part of the value does not propagate through expressions, so our only options would be to either drop all intermediate contracts (see \ref{implicitdrop}) or to add a new mechanism for backchannel propagation to the language.
 
-When we invoke a function, we do not invoke a declaration; we invoke an expression. If that expression is an \emph{id-expression} that directly names a function or a function pointer whose declaration is visible, and \emph{that} declaration has \tcode{pre} and \tcode{post} attached to it, the backchannel information is readily available. However, as we already saw in \label{intermediate}, there are many situations where this is not the case. Consider:
+When we invoke a function, we do not invoke a declaration; we invoke an expression. If that expression is an \emph{id-expression} that directly names a function or a function pointer whose declaration is visible, and \emph{that} declaration has \tcode{pre} and \tcode{post} attached to it, the backchannel information is readily available. However, as we already saw in \ref{intermediate}, there are many situations where this is not the case. Consider:
 \begin{codeblock}
 struct C {
   auto get_fptr() { return fptr; }

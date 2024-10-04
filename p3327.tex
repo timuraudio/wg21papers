@@ -852,7 +852,7 @@ void test(int i, bool b) {
 \end{codeblock}
 In all of those cases, according to the rules of C++ today, the information that the pointer type originally came from a typedef does not propagate through the expression --- and therefore, the contract assertions on that typedef do not propagate either.
 
-Existing compilers can --- and do --- propagate different kinds of backchannel information about ``attributed types'' in this manner today. Different compilers have made different implementation decisions in this area, which are not necessarily coherent. As we saw above, the C++ language specification lacks a mechanism for such backchannel propagation. However, we can consider introducing such a mechanism into the C++ standard. This could be one way to fix issues like the ones described above.
+Existing compilers can --- and do --- propagate different kinds of backchannel information about ``attributed types'' in this manner today. Different compilers have made different implementation decisions in this area, which are not necessarily coherent. As we saw above, the C++ language specification lacks a mechanism for such backchannel propagation. However, we can consider introducing such a mechanism into the C++ Standard. This could be one way to fix issues like the ones described above.
 
 \subsubsection{Incompatibility with templates}
 
@@ -871,7 +871,7 @@ void test(int i) {
   std::invoke(neg_fptr, i);  // same or different template instantiation?
 }
 \end{codeblock}
-Since the contract assertions are not part of the type, the template arguments of \tcode{pos_fptr} and \tcode{neg_fptr} have the same type, and therefore must result in the same template instantiation. In other words, the template only sees the type of its template argument, not the backchannel information, and therefore generates the same code regardless of the contract assertion sequence. This must be so --- doing otherwise would be an ODR violation. Since the contract assertions are not part of the value either, there is simply no way for \tcode{std::invoke} to be aware of the contract assertion sequence on either pointer.
+Since the contract assertions are not part of the type, the template arguments of \tcode{pos_fptr} and \tcode{neg_fptr} have the same type, and therefore must result in the same template instantiation. In other words, the template only sees the type of its template argument, not the backchannel information, and therefore generates the same code regardless of the contract assertion sequence. This must be so --- doing otherwise would be an ODR violation. Since the contract assertions are not part of the value either, there is simply no way for \tcode{std::invoke} to be aware of the contract assertion sequence on either pointer. This problem exists independently from the problem of propagating backchannel information through expressions described in the last section, and has no known solution.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

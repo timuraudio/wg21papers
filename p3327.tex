@@ -83,7 +83,7 @@ struct device_io_t {
 \end{codeblock}
 To detect and mitigate possible misuse of such an API, it would be desirable to attach function contract assertions --- \tcode{pre} and \tcode{post} --- directly to the function pointers in order to add contract checks to the function calls made through them. Such checks can verify preconditions on the passed-in parameters, postconditions on the returned values, and potentially other parts of the API's contract.
 
-The need for such a feature has been recognised, and named by a major compiler vendor as a criterion for whether the Contracts MVP is indeed viable. However, despite the interest in such a feature, no proposal that would allow placing \tcode{pre} and \tcode{post} directly on pointers to functions and pointers to member functions has been published to date. This paper does not contain such a proposal, either. Rather, the purpose of this paper is to explore the design space for such a proposal and to discuss the challenges and open questions that any such proposal must address.
+The need for such a feature has been recognised and named by a major compiler vendor as a criterion for whether the Contracts MVP is indeed viable (see \cite{P3173R0}). However, despite the interest in such a feature, no proposal that would allow placing \tcode{pre} and \tcode{post} directly on pointers to functions and pointers to member functions has been published to date. This paper does not contain such a proposal, either. Rather, the purpose of this paper is to explore the design space for such a proposal and to discuss the challenges and open questions that any such proposal must address.
 
 The paper is structured as follows. In Section \ref{priorart}, we summarise the prior art in this design space --- how past C++ Contracts proposals have dealt with the question of contract assertions on function pointers, and what papers have been published in this design space more recently. In Section \ref{usecases}, we consider various possible use cases for attaching \tcode{pre} and \tcode{post} directly on function pointers. In Section \ref{syntax}, we explore the available syntactic space for such an extension. In Section \ref{semantics}, we explore different options for the compile-time and runtime semantics: when working with \tcode{pre} and \tcode{post} on function pointers, when should the program compile, when should it not, and what should its behaviour be --- in particular, when calling through a function pointer, which contracts should be checked when? Finally, in Section \ref{wherelive}, we analyse three possible strategies for specifying such a feature, and their respective tradeoffs and limitations. We discuss where and how a contract assertion sequence attached to a function pointer should be stored --- as part of the pointer's type, as part of its value, or as a property of the variable declaration?
 
@@ -110,9 +110,9 @@ int takes_and_returns_positive_numbers(int i) usage
   pre (i > 0)
   post (r: r > 0);
 \end{codeblock}
-We can then declare a pointer to such a function usage type, assign the address of a function to that pointer, and call the function through that pointer, which will perform a check of the usage type's contract around that call.
+We can then declare a pointer to such a function usage type, assign the address of a function to that pointer, and call the function through that pointer, which will perform a check of that usage type's contract around the call to the pointed-to function.
 
-In this model, function usage types are a distinct kind of types different from function pointer types. Two function usage types that differ only in their contract assertion sequence are different types. Simultaneously, a function usage type is a type that is \emph{similar} to the corresponding function pointer type without a contract assertion sequence (using the core language definition of \emph{similar}, e.g., \tcode{int} and \tcode{const int} are similar types; so are \tcode{int[3]} and \tcode{int[]}). This means essentially that both types have the same value representation and are thus ABI-compatible.
+In this model, function usage types are a distinct kind of types different from function types. Two function usage types that differ only in their contract assertion sequence are different types. When forming a pointer to a function usage type, the type of such a pointer is \emph{similar} --- using the core language definition of that term\footnote{See \href{https://timsong-cpp.github.io/cppwp/n4950/conv.qual\#2}{[conv.qual]/2}. For example,  \tcode{int} and \tcode{const int} are similar types; so are \tcode{int[3]} and \tcode{int[]}.} --- to the type of a regular function pointer without a contract assertion sequence, meaning that both types have the same value representation and are thus ABI-compatible.
 
 The approach in \cite{P3271R0} combines some of the advantages of the type system approach (see \ref{type}), such as being compatible with templates and type deduction, with the advantages of the ``property of the declaration'' approach (see \ref{decl}), such as no impact on ABI and no breakage of client code. However, it introduces a novel kind of entity to the language instead of allowing to attach \tcode{pre} and \tcode{post} directly on function pointers as they exist in C++ today. This might or might not turn out to be a viable solution to the problem. In this paper, we do not consider solutions that introduce a new novel of entity instead of using function pointers directly. In this sense, our paper can be considered complementary material to \cite{P3271R0}.
 
@@ -149,17 +149,17 @@ Another possible use case for \tcode{pre} and \tcode{post} on function pointers 
 // legacy function; the behaviour is undefined if \tcode{x < 0}
 int f(int x);   
 
-int (*f_checked)(int x) pre (x >= 0) = f; 
+int (*f_with_pre)(int x) pre (x >= 0) = f; 
 
 void using_code() {
-  f(-3);          // unsafe call to \tcode{f}
-  f_checked(-3);  // safe call to \tcode{f} if contract checks are enabled
+  f(-3);          // No precondition check
+  f_with_pre(-3);  // Precondition may be checked
 }
 \end{codeblock}
 
 Note that the same effect can already be achieved with \cite{P2900R8} without involving function pointers. If we cannot modify the declaration of \tcode{f}, but we can modify the definition, we can add the desired precondition check with a \tcode{contract_assert} statement at the start of the function body. If we cannot modify the declaration either, we can wrap \tcode{f} with another function or a lambda that has the desired precondition check:
 \begin{codeblock}
-auto f_checked = [](int x) pre (x >= 0) { return f(x); }
+auto f_with_pre = [](int x) pre (x >= 0) { return f(x); }
 \end{codeblock}
 Note that such a captureless lambda implicitly converts to a function pointer.
 
@@ -504,7 +504,7 @@ This model can be equally applied to other kinds of indirect calls, including ca
 
 In the caller/callee model, the contracts on the involved entities are completely independent from each other. An alternative model for indirect calls is the \emph{substitution principle} model that Eiffel, D, and Ada use for contracts on virtual functions. In this model, the involved contracts are not independent, but subject to constraints: the preconditions in an overriding function can only be wider than in the overridden function, and the postconditions can only be narrower. This model can also be applied to indirect calls through a function pointer: the preconditions on the pointed-to function can only be wider than on the pointer, and the postconditions can only be narrower.
 
-For virtual function calls, SG21 found that this model was not an ideal fit for C++; rationale can be found in \cite{P3097R0}. Choosing this model for function pointers would therefore create a conceptual inconsistency in \cite{P2900R8}. It would also raise the question whether or how the substitution constraints should be enforced. We could follow the strategy chosen in Eiffel and D for virtual functions and enforce the constraints by OR-ing the involved precondition checks and AND-ing the postcondition checks during program execution. Alternatively, we could consider performing static subsumption proofs, which raises questions about the practical feasibility of such proofs.
+For virtual function calls, SG21 found that this model was not an ideal fit for C++; rationale can be found in \cite{P3097R0}. Choosing this model for function pointers would therefore create a conceptual inconsistency in \cite{P2900R8}. It would also raise the question whether or how the substitution constraints should be enforced. We could attempt to follow the strategy chosen in Eiffel and D for virtual functions and enforce the constraints by OR-ing the involved precondition checks and AND-ing the postcondition checks during program execution, or perhaps by performing some kind of subsumption proof. However, any such approach is complicated by the fact that unlike for virtual function calls, for calls through a function pointer the pointer declaration does not know the function declaration, and the function declaration does not know the pointer declaration. 
 
 %---------------------------------------------------------------------------------------------------------------------
 \subsection{Intermediate contracts}
@@ -877,7 +877,7 @@ Since the contract assertions are not part of the type, the template arguments o
 
 \section*{Acknowledgements}
 
-Thanks to Gabriel Dos Reis, Peter Bindels, Joshua Berne, Lisa Lippincott, and Daveed Vandevoorde for the discussions that led to this paper.
+Thanks to Gabriel Dos Reis, Peter Bindels, Joshua Berne, Lisa Lippincott, and Daveed Vandevoorde for the conversations that led to this paper. Thansk to Peter Bindels, Joshua Berne, Lisa Lippincott, Ville Voutilainen, and Oliver Rosten for reviewing drafts of this paper and providing helpful feedback.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

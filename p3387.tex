@@ -47,8 +47,8 @@ Peter Bindels \small(\href{mailto:dascandy@gmail.com}{dascandy@gmail.com})
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D3387R0 \\
-Date: &2024-09-26 \\
+Document \#: & P3387R0 \\
+Date: &2024-10-09 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -193,9 +193,9 @@ We are aware of the following potential solutions for how \tcode{pre} and \tcode
 \begin{enumerate}
 \item Do not allow \tcode{pre} or \tcode{post} on coroutines at all (status quo in \cite{P2900R8});
 \item Allow \tcode{pre} on coroutines, but not \tcode{post} (first proposed in \cite{P2957R1});
-\item Allow \tcode{post} on coroutines, but do not allow odr-using parameters in its predicate (first mentioned in \cite{P2957R1} as an alternative);
-\item Allow odr-using parameters in the predicate of \tcode{post}; an \emph{id-expression} naming a non-reference parameter refers to the copy made for the coroutine state;
-\item Allow odr-using parameters in the predicate of \tcode{post}; an \emph{id-expression} naming a non-reference parameter refers to the original object, and:
+\item Allow \tcode{post} on coroutines, but do not allow odr-using non-reference parameters in its predicate (first mentioned in \cite{P2957R1} as an alternative);
+\item Allow odr-using non-reference parameters in the predicate of \tcode{post}; an \emph{id-expression} naming a non-reference parameter refers to the copy made for the coroutine state;
+\item Allow odr-using non-reference parameters in the predicate of \tcode{post}; an \emph{id-expression} naming a non-reference parameter refers to the original object, and:
 \begin{enumerate}[label=\alph*.,ref=\theenumi\alph*]
         \item the parameter copy made in the ramp function is copy-constructed instead of move-constructed;
         \item is ill-formed if the parameter type has a non-trivial move constructor (i.e., the parameter can have a moved-from value);

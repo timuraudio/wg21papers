@@ -253,6 +253,10 @@ Now, let us consider an occurrence of undefined behaviour for which \emph{no} sa
 \item The default behaviour in C++ today, which is to assume that a violation can never happen, and optimise based on that assumption, is a conforming implementation of the \emph{assume} semantic.
 \end{itemize}
 We propose to define such operations that have no reasonable defined behaviour in case of a violation of their implicit contract  as \emph{non-ignorable implicit contract assertions}. A non-ignorable implicit contract assertion cannot be evaluated with the \emph{ignore} or \emph{observe} semantic, as there is no possible behaviour for the program for these semantics; the only possible options are to enforce or to assume that such behaviour can never occur.
+% TD: the term "non-ignorable" is a bit misleading because it suggests that the assertion MUST be checked, which is
+% often not possible (e.g., dangling pointers/preferences). In reality, the assertion may be enforced or assumed, but not
+% ignored or observed (because there is no possible defined behaviour for the error path). Can you think of a better English
+% term to express this concept?
 
 \subsection{UB that is easy vs. difficult to diagnose during program execution}
 \label{easy}

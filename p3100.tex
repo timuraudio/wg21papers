@@ -80,11 +80,11 @@ According to the definition in \cite{Carruth2023}, safety is characterised by in
 
 With the above definitions, C++ is not a safe language: both the core language and the C++ standard library allow for a multitude of ways in which a well-formed C++ program can exhibit \emph{unbounded} undefined behaviour, i.e. situations in which the C++ standard places no restrictions on the behaviour of the program (see \cite{P1705R1} for a list). Bugs that trigger such unbounded undefined behaviour cause stability issues and can be exploited by threat actors, thereby causing security vulnerabilities. Among the most popular programming languages, the presence of unbounded undefined behaviour is a unique trait of C and C++. 
 
-Realistically, we do not believe that it is possible to evolve C++ into a fully safe language under the above definition --- i.e., a language with no unbounded undefined behaviour --- in the foreseeable future (\cite{Doumler2023}). However, we can and should do what we can to give people significantly more control over the amount of undefined behaviour in C++ programs, especially with the aim of vastly \emph{reducing} it, including in legacy code that may be recompiled but not modified on the source level.
+Realistically, we do not believe that it is possible to evolve C++ into a safe language under the above definition --- i.e., remove all undefined behaviour from C++ --- in the foreseeable future (\cite{Doumler2023}). However, we can and should do what we can to give people significantly more control over the amount of undefined behaviour in C++ programs, especially with the aim of vastly \emph{reducing} it, including in legacy code that may be recompiled but not modified on the source level.
 
 Many ways to detect and mitigate undefined behaviour in C++ exist today. They range from engineering practices such as code reviews, coding guidelines, and meticulous coverage with unit tests to specialised tooling such as static analysers and sanitisers. However, while the use of such tools is usually strongly encouraged, they are not part of the core language and are therefore opt-in rather than opt-out. This is a major weakness of C++. For this reason, it is of particular importance to devote special attention to efforts to remove undefined behaviour from C++ on the language specification level.
 
-These efforts are ongoing. For C++23, a common cause of undefined behaviour in range-based \tcode{for} loops has been removed (\cite{P2012R2}). For C++26, it will no longer be undefined behaviour to execute a trivial infinite loop (\cite{P2809R3}) and, in some cases,\footnote{If the  variable is default-initialised, of scalar type, and has automatic storage duration.} to read an uninitialised value (\cite{P2795R5}). Efforts to tame undefined behaviour at a larger scale include the current work on safety profiles (\cite{P3274R0}) and adding a Rust-like borrow checker to C++ (\cite{P3390R0}). Outside of the C++ Standard committee, work in this space is being done by compiler vendors, for example the hardening modes in libc++\footnote{See \href{https://libcxx.llvm.org/Hardening.html}{https://libcxx.llvm.org/Hardening.html}.} and \tcode{-fbounds-safety} in Clang\footnote{See \href{https://clang.llvm.org/docs/BoundsSafety.html}{https://clang.llvm.org/docs/BoundsSafety.html}.}.
+These efforts are ongoing. For C++23, a common cause of undefined behaviour in range-based \tcode{for} loops has been removed (\cite{P2012R2}). For C++26, it will no longer be undefined behaviour to execute a trivial infinite loop (\cite{P2809R3}) and, in some cases,\footnote{If the  variable is default-initialised, of scalar type, and has automatic storage duration.} to read an uninitialised value (\cite{P2795R5}). Efforts to tame undefined behaviour at a larger scale include the current work on safety profiles (\cite{P3274R0}) and adding a Rust-like borrow checker to C++ (\cite{P3390R0}). Outside of the C++ Standard committee, solutions in this space are being shipped by compiler vendors, for example the hardening modes in libc++\footnote{See \href{https://libcxx.llvm.org/Hardening.html}{https://libcxx.llvm.org/Hardening.html}.} and \tcode{-fbounds-safety} in Clang\footnote{See \href{https://clang.llvm.org/docs/BoundsSafety.html}{https://clang.llvm.org/docs/BoundsSafety.html}.}.
 
 In \cite{P2900R9}, a Contracts facility is being proposed for inclusion in C++. One of the explicit goals of this proposal is to make C++ a safer language, and to make C++ programs more safe. The proposal has triggered discussions about whether this goal is being met, some going as far as saying that Contracts are not a safety feature at all: after all, they do not add new language guarantees, and instead focus on correctness checks during program evaluation, with no such checks being performed unless the developer adds explicit contract assertions to their code.
 
@@ -161,7 +161,7 @@ Importantly, the implementer of a library containing the above function, the dev
 T& operator[] (size_t i)
 pre (i <= size());
 \end{codeblock}
-\cite{P2900R9} thus makes C++ safer by offering the developer a powerful tool to detect and mitigate library undefined behaviour \emph{before} it can progress to cause core undefined behaviour --- and thus unbounded undefined behaviour that can lead to safety issues and security vulnerabilities --- without sacrificing flexibility for use cases where such detection and mitigation is not affordable or otherwise desired.
+\cite{P2900R9} thus makes C++ safer by offering the developer a powerful tool to detect and mitigate library undefined behaviour \emph{before} it can progress to cause core undefined behaviour --- and thus unbounded undefined behaviour that can cause safety issues and security vulnerabilities --- without sacrificing flexibility for use cases where such detection and mitigation is not affordable or otherwise desired.
 
 However, in order to get this benefit from \cite{P2900R9} as proposed, the user actually needs to add the contract assertion \tcode{pre (i <= size())} to their code, or use a library that does this. Contracts as proposed in \cite{P2900R9} thus directly address library undefined behaviour, but only indirectly address core undefined behaviour.
 
@@ -186,7 +186,7 @@ pre (i < N) {
   return a[i];
 }
 \end{codeblock}
-Other than being an \emph{implicit} precondition assertion generated by the compiler, \tcode{pre (i < N)} behaves as specified in \cite{P2900R9}. That is, the user has the choice whether or not to check this assertion and whether the contract-violation handler (which is the same as for explicit contract violations) should be called; this choice happens through implementation-defined means, for example through a compiler flag. 
+Other than being an \emph{implicit} precondition assertion generated by the compiler, \tcode{pre (i < N)} behaves as specified in \cite{P2900R9}. That is, the user has the choice whether or not to check this assertion and whether the contract-violation handler (which is the same as for explicit contract violations) should be called; this choice happens via implementation-defined means, e.g., a compiler flag. 
 
 Thus, the Contracts framework can be directly applied to core language undefined behaviour, and therefore to legacy code, without the need to add any explicit contract assertions. The implementation can choose which evaluation semantics it provides for each kind of implicit contract assertion; if it is not capable of generating checks for certain kinds of core language operation with implicit contract assertions, it can choose to not offer a checked contract semantic for this kind of contract assertion while still being conforming.
 
@@ -393,6 +393,8 @@ where the added enum value stands for implicit contract assertions.
 %nothing here yet
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\pagebreak % MANUAL - remove if editing paper
 
 % Remove ToC entry for bibliography
 \renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry

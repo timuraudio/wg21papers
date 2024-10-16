@@ -197,17 +197,21 @@ Thus, the Contracts framework can be directly applied to core language undefined
 
 Note that the concept of a \emph{contract violation} in \cite{P2900R8} does exactly the same thing. The salient difference, until now, was that erroneous behaviour applies to misbehaving core language constructs, whereas contract violations occur when  explicit contract assertions are checked and determined to not evaluate to \tcode{true}. However, with our proposed extension, contract violations can also occur when core language constructs violate their \emph{implicit} contract. 
 
-This leads us to two key insights. The first is that erroneous behaviour is simply another term for implicit contract violation --- they are \emph{one and the same thing}. The second is that the semantics of erroneous behaviour as specified in \cite{P2795R5} are a strict subset of the possible evaluation semantics of a contract violation. According to that specification, when erroneous behaviour occurs, the implementation is permitted to do any of the following:
+This leads us to two key insights. The first is that erroneous behaviour is simply another term for implicit contract violation --- they are, conceptually, \emph{one and the same thing}. The second is that the semantics of erroneous behaviour as specified in \cite{P2795R5} are a strict subset of the possible evaluation semantics of a contract violation. According to that specification, when erroneous behaviour occurs, the implementation is permitted to do any of the following:
 \begin{itemize}
 \item Issue a diagnostic;
-\item Terminate the application;
+\item Terminate the application;\footnote{There is a subtle difference in how program termination is defined for erroneous behaviour on the one hand, and for terminating semantics in \cite{P2900R8} on the other hand. The wording adopted from \cite{P2795R5} specifies that on erroneous behaviour, the implementation is permitted to terminate the execution at an unspecified time after that operation, whereas the terminating semantics in \cite{P2900R8} do not give permission for the termination to be delayed until an unspecified time. One of the reasons why it is desirable to unify both frameworks, rather than having two separate mechanisms for achieving essentially the same thing, is that we can avoid such subtle divergences in behaviour.}
 \item Do nothing.
 \end{itemize}
 Note that all the above options are covered by the four evaluation semantics in \cite{P2900R8}, \emph{ignore}, \emph{observe}, \emph{enforce}, and \emph{quick_enforce}. In addition to the above options, these evaluation semantics add more possibilities, in particular calling the contract-violation handler, whichis a powerful tool to mitigate undefined and erroneous behaviour diagnosed during program execution.
 
-We therefore propose to remove the notion of \emph{erroneous behaviour} from C++ entirely, and change every occurrence of ``Operation $X$ has erroneous behaviour if $A$ is not \tcode{true}'' to ``Operation $X$ has an implicit precondition that $A$ is \tcode{true}.'' This works not only for reading uninitialised values, which is already specified as erroneous by \cite{P2795R5}, but also for every other occurrence of undefined behaviour in C++ listed as ``could be changed to erroneous'' in \cite{P2795R5}.
+Having two separate language mechanisms that are trying to achieve the same thing does not seem to be a sound design. We therefore propose to remove the notion of \emph{erroneous behaviour} from C++ entirely and replace it with the notion of implicit contract assertions as proposed here.
+
+Concretely, we propose to change every occurrence of ``Operation $X$ has erroneous behaviour if $A$ is not \tcode{true}'' to ``Operation $X$ has an implicit precondition that $A$ is \tcode{true}.'' This works not only for reading uninitialised values, which is already specified as erroneous by \cite{P2795R5}, but also for every other occurrence of undefined behaviour in C++ listed as ``could be changed to erroneous'' in \cite{P2795R5}.
 
 With this change, the function \tcode{std::erroneous()} as proposed in \cite{P3232R0} becomes simply a shorthand for \tcode{contract_assert(false)}, much in the same way as \tcode{std::unreachable()} today is a shorthand for \tcode{[[assume(false)]]}.
+
+Note that we do not propose to remove the notion of \emph{erroneous value}; however, instead of specifying that reading an erroneous value is erroneous behaviour, we propose to specify that reading a value has an implicit precondition that the value is not erroneous.
 
 \subsection{UB with vs. without safe fallback behaviour}
 \label{fallback}
@@ -278,24 +282,16 @@ The first reason is that there are occurrences of undefined behaviour --- or, wi
 
 The second reason is that even for implicit contract assertions that do have a safe fallback behaviour --- with our proposal, this is the behaviour that will be executed when the semantic is \emph{ignore} --- such fallback behaviour might lead to measurable performance degradations. This creates a problem for applications that care first and foremost about performance, and less about safety and security, such as high-performance numerical simulations and low-latency signal processing. Such applications must have an escape hatch that allows them to avoid degradations and preserve today's behaviour, in which the affected implicit contract assertions are \emph{assumed} rather than \emph{ignored}, with the consequence that contract violations may lead to core undefined behaviour.
 
-For uninitialised reads, \cite{P2795R5} offers such an escape hatch in the form of the new \tcode{[[indeterminate]]} attribute, which disables the safety guardrail and restores the C++23 behaviour. However, offering such an explicit, syntactic escape hatch for every possible case of undefined behaviour does not scale; it would make the language unnecessarily complex, and in some cases, would even not be possible --- how would we annotate, for example, an expression containing signed integer addition, and would we want to do that throughout our entire numerics library? 
+For uninitialised reads, \cite{P2795R5} offers such an escape hatch in the form of the new attribute \tcode{[[indeterminate]]}, which disables the safety guardrail and restores the C++23 behaviour. However, offering such an explicit, syntactic escape hatch for every possible case of undefined behaviour does not scale; it would make the language unnecessarily complex, and in some cases, would even not be possible --- how would we annotate, for example, an expression containing signed integer addition, and would we want to do that throughout our entire numerics library? 
 
 Our approach is therefore to offer a generic escape hatch in the form of the \emph{assume} semantic. This semantic can be selected by the user for a particular kind of implicit contract assertions, for example to squeeze maximum performance out of their numeric operations, while the other four semantics (none of which leave any room for undefined behaviour) can be used for other kinds of implicit contract assertions, for example to enable checks that guard against flowing off the end of non-\tcode{void}-returning functions. This framework enables the expert user to select precisely which tradeoffs between safety and performance are most appropriate for their use case; for the average user, implementations can offer reasonable defaults.
 
 \subsection{The library API}
+\label{lib}
 
 Re-specifying undefined and erroneous behaviour as a contract violation as proposed here means that, if any of the introduced implicit contract assertions is determined to be violated during program execution, and the selected evaluation semantic is \emph{observe} or \emph{enforce}, the contract-violation handler will be called. In order to accommodate implicit contract assertions in the associated library API for contract-violation handling, we need to make some minor adjustments to \cite{P2900R8}.
 
-We propose to add a new enum value \emph{implicit} to the enum \tcode{assertion_kind}:
-
-\phantom{~~}\tcode{enum class assertion_kind \{} \\
-\phantom{~~~~}\added{\tcode{implicit = 0,}} \\
-\phantom{~~~~}\tcode{pre = 1,} \\
-\phantom{~~~~}\tcode{post = 2,} \\ 
-\phantom{~~~~}\tcode{assert = 3} \\
-\phantom{~~}\tcode{\};}
-
-This value will be returned from the \tcode{kind()} member function of the \tcode{contract_violation} object passed into the handler when the contract violation that caused the call to the handler resulted from an implicit rather than an explicit contract assertion. We chose the numeric value \tcode{0} for the new enum value to emphasise that it does not correspond to any kind of explicit contract assertion (i.e. an assertion that the user wrote).
+We propose to add a new enum value \tcode{implicit} to the enum \tcode{assertion_kind}. This value will be returned from the \tcode{kind()} member function of the \tcode{contract_violation} object passed into the handler when the contract violation that caused the call to the handler resulted from an implicit rather than an explicit contract assertion. We chose the numeric value \tcode{0} for the new enum value to emphasise that it does not correspond to any kind of explicit contract assertion (i.e. an assertion that the user wrote).
 
 We further propose that the value returned by \tcode{detection_mode()} for violations of implicit contract assertions be unspecified. This choice gives implementations freedom to specify detection modes that are best suited to express the mitigation strategies they employ, and to inform the user of the strategy used to detect a particular implicit contract violation. 
 
@@ -305,7 +301,78 @@ because it located in a separate debug information file).
 
 \section{Discussion}
 
-TODO
+\subsection{Contracts provide a framework for safety}
+
+One benefit of adopting the framework of implicit contract assertions as proposed here for C++ is that it provides users, vendors of compilers and tools, as well as the C++ Standard committee with the vocabulary needed to reason about and  to specify different options for the detection and mitigation of undefined behaviour.
+
+In particular, once we re-specify undefined behaviour in terms of implicit contract assertions, the \cite{P2900R8} framework specifies that any evaluation of such an assertion can have any evaluation semantic, and that the choice of semantic is implementation-defined, meaning that implementations are expected to document which semantics they support for which implicit contract assertions, and which selection mechanism they offer.
+
+For example, a compiler that adds checks for out-of-bounds access no longer has to describe such checks as a vendor extension; it can simply document that it offers checked contract semantics for accessing an array. A user who wishes to enable such checks can more easily find tools that offer them. Further, coding guidelines can place restrictions on which semantics are permitted for which kinds of implicit contract assertions. For example, in a safety-critical context, a set of coding guidelines may prescribe that \emph{assume} semantics may not be used for certain kinds of implicit contract assertions, thus preventing the usage of toolchains and compiler options that could lead to the program exhibiting that particular kind of undefined behaviour.
+
+Finally, re-specifying undefined behaviour in terms of implicit contract assertions would be a visible step by the C++ committee towards more safety in C++. While such re-specification in itself does not make any code safer unless compilers and tools actually offer ways to perform the additional runtime checks, it would make such efforts more visible and explicit because they would be happening within a unified Standard framework.
+
+% TD: I am struggling to properly explain the grand vision here... it's all in my head, and I can explain it verbally (as I did in St. Louis),  but I'm too tired right now to translate it into written English :(
+	
+\subsection{Contracts provide a program-wide handler}
+\label{handler}
+
+Another benefit of the approach proposed here is that any compiler and tool that adds checks to detect and mitigate undefined behaviour during program execution could hook into the program-wide contract-violation handler defined by \cite{P2900R8}. This would allow the user to treat all possible defects that are detected during program execution in one place.
+
+TODO ADD REASONS WHY THIS IS GOOD
+% TD: Josh, can you elaborate on why this is a great idea? It's your idea, isn't it? A couple more paragraphs would be great but I ran out of steam here :(
+
+\subsection{Contracts provide better integration for sanitisers}
+\label{sanitisers}
+
+The ability to interface with the Contracts machinery and the contract-violation handler applies not only to C++ compilers, but also extends to sanitisers and other tools, which might be able to offer checked semantics for a much wider range of implicit contract assertions.
+
+The integration between such tools and user code today is poor. For example, all clang sanitisers have a callback \tcode{__sanitizer_set_death_callback}, but this callback takes no arguments. It can be used to inform the user that the process is about to terminate, but it does not provide an API to programmatically query what happened or where. ASan has a slightly more sophisticated callback \tcode{__asan_set_error_report_callback} which takes a single argument of type \tcode{const char*}. This argument provides a string that contains the generated error report.
+
+With our proposal, all these tools can instead hook into the API provided in \cite{P2900R8} (with slight modifications as proposed in Section~\ref{lib}). This API provides not only a user callback in the form of a global replaceable contract-violation handler, but also programmatically accessible information about the defect via the  \mbox{\tcode{contract_violation}} object passed into the contract-violation handler. This more comprehensive API can serve as a uniform standard callback mechanism for sanitisers and other tools.
+
+Note that supporting this API is entirely optional for existing sanitisers. \cite{P2900R8} specifies that the behaviour of the default contract-violation handler is implementation-defined and an implementation does not have to offer the option of installing a user-defined contract-violation handler; therefore, existing sanitisers are already conforming. Any given sanitiser can be said to apply the \tcode{enforce} evaluation semantic (without a replaceable contract-violation handler) to those kinds of undefined behaviour that it diagnoses, and the \tcode{assume} evaluation semantic to the remaining kinds.
+
+\section{Proposal summary}
+Below we provide an informal summary of the proposed changes, which are on top of those proposed in \cite{P2900R8}. Formal wording can be added after the design direction in this paper has been confirmed by the relevant study groups.
+
+\begin{itemize}
+\item Add the notion of \emph{explicit} contract assertion for a contract assertion specified by the user, which includes all three kinds of contract assertions in \cite{P2900R8} --- \tcode{pre}, \tcode{post}, and \tcode{contract_assert}.
+\item Add a fifth contract evaluation semantic, the \emph{assume} semantic, to the four semantics in \cite{P2900R8}. The  \emph{assume} semantic is an unchecked semantic, i.e. it does not attempt to determine the value of the predicate. If the predicate would not evaluate to \tcode{true} at the point of evaluation of the contract assertion, the behaviour is undefined.
+\item Add the notion of an \emph{implicit} contract assertion, that is, a contract assertion implicitly generated around a certain language construct by the implementation rather than specified by the user with \tcode{pre}, \tcode{post}, or \tcode{contract_assert}.
+\item Add a note that implicit contract assertions can be evaluated with any of the five contract evaluation semantics, just like explicit contract assertions.
+\item Remove the notion of \emph{erroneous behaviour}, replace it with ``violation of an implicit contract assertion'', and transform affected specifications as follows:
+\begin{itemize}
+\item Replace the specification that reading an erroneous value is erroneous behaviour with the specification that reading a value has an implicit precondition that the value is not erroneous;
+\item ...
+\end{itemize}
+\item Transform occurrences of undefined behaviour for which a safe fallback behaviour can be specified to instead be phrased in terms of implicit contract assertions, for example:
+\begin{itemize}
+\item Change signed integer overflow/underflow from being undefined behaviour to producing an unspecified value; add to the specification of the the associated signed integer operations an implicit precondition that no overflow/underflow will occur;
+\item Change shifting by equal or greater than the bit-width of a type from being undefined behaviour to producing an unspecified value; add to the specification of shift operations an implicit precondition that the right operand is smaller than the bit-width of the left operand;
+\item Change flowing off the end of a non-\tcode{void} function from being undefined behaviour to returning an erroneous value;
+\item ...
+\end{itemize}
+\item Add the notion of a \emph{non-ignorable} implicit contract assertion, that is, an implicit contract assertion that cannot be evaluated with the \emph{ignore} or \emph{observe} semantics;
+\item Transform occurrences of undefined behaviour for which no safe fallback behaviour can be specified to instead be phrased in terms of non-ignorable contract assertions, for example:
+\begin{itemize}
+\item Replace the specification that accessing an object outside of its lifetime is undefined behaviour with the specification that accessing an object has a non-ignorable implicit precondition that the object is within its lifetime;
+\item Replace the specification that attempting to modify a \tcode{const} object is undefined behaviour with the specification that any modification of an object has a non-ignorable implicit precondition that the object is not \tcode{const};
+\item Replace the specification that incrementing a pointer beyond one past the end of an array is undefined behaviour with the specification that incrementing a pointer has a non-ignorable implicit precondition that the pointer is not beyond one past the end of an array; 
+\item ...
+\end{itemize}
+\item Extend \tcode{std::contracts::assertion_kind} as follows:
+
+\phantom{~~}\tcode{enum class assertion_kind \{} \\
+\phantom{~~~~}\added{\tcode{implicit = 0,}} \\
+\phantom{~~~~}\tcode{pre = 1,} \\
+\phantom{~~~~}\tcode{post = 2,} \\ 
+\phantom{~~~~}\tcode{assert = 3} \\
+\phantom{~~}\tcode{\};}
+
+where the added enum value stands for implicit contract assertions.
+
+\item Add a provision that \tcode{std::contracts::contract_violation::detection_mode()} returns an implementation-defined value if the violated contract assertion was an implicit contract assertion.
+\end{itemize}
 
 %\section*{Document history}
 

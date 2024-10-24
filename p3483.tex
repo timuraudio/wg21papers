@@ -1,0 +1,267 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Contracts for C++: Pre-Wroc\l aw technical clarifications}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3483R0 \\
+Date: &2024-10-24 \\
+Project: & Programming Language C++ \\
+Audience: & SG21, EWG
+\end{tabular}
+
+\begin{abstract}
+After having gained implementation and deployment experience with Contracts for C++ as proposed in \cite{P2900R10} we identified a few corner cases for which the front matter and wording in \cite{P2900R10} would benefit from clarifications of the design intent. In this paper, we explain the affected cases and propose to add the necessary clarifications. Importantly, we do not propose any design changes to \cite{P2900R10}.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\tableofcontents*
+\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Proposed clarifications}
+
+\subsection{Postcondition result name with deduced type is late-parsed}
+
+As specified in \cite{P2900R10}, Section 3.4.3, if a postcondition names the return value on a non-templated function with a deduced return type, that postcondition must be attached to the declaration that is also the definition (and thus there
+can be no earlier declaration). This is necessary because the return type must be known in order to fully parse the postcondition predicate.
+
+The first of two clarifications requested in the Implementers Report \cite{P3460R0} concerns one particular aspect of this property. Consider:
+\begin{codeblock}
+struct A {
+  template <int N> bool f() const;
+};
+
+auto h()
+post (v: v.f<6>()) {
+  return A{};
+}
+\end{codeblock}
+Should the token \tcode{<} in the postcondition predicate be parsed as the smaller-than operator, or as the opening bracket of a template argument list? This decision cannot be made without knowing the return type of \tcode{h}.
+
+\cite{P3460R0} considers two option: inside the postcondition predicate of \tcode{h}, its return type could be either late-parsed (i.e. the predicate expression is properly parsed only after the function body) or treated as dependent. The former option would mean that the code above is well-formed. The latter option would mean that the code above is ill-formed unless we explicitly disambiguate the expression using the \tcode{template} keyword:
+\begin{codeblock}
+auto h()
+post (v: v.template f<6>()) {
+  return A{};
+}
+\end{codeblock}
+\cite{P3460R0} concludes that, in the opinion of the Clang implementers, the return type should be late-parsed, and the Standard should clarify this.
+
+We come to the same conclusion as the implementers. Making the return type a dependent type would be strange, as \tcode{h} is not a template, and requiring explicit disambiguation would be unnecessarily user-hostile. Making the return type late parsed matches the design intent of \cite{P2900R10}, is implementable, and in fact has already been implemented in both Clang and GCC.
+
+We believe that the proposed wording in \cite{P2900R10} already specifies this design correctly, however to improve clarity we propose to add a note to the proposed wording and to add the above example to the front matter of \cite{P2900R10}.
+
+It should be noted that this particular design aspect of Contracts has already been discussed in detail in \cite{P1323R2}, and the proposed solution approved by EWG. \cite{P1323R2} uses a different example to make the same point:
+\begin{codeblock}
+template <typename> struct X { enum { Nested }; };
+template <> struct X<int>    { struct Nested {}; };
+
+auto f()
+post (r: sizeof(X<decltype(ret)>::Nested) {  // \tcode{typename} needed to disambiguate?
+  return 42;
+}
+\end{codeblock}
+The paper lists four options:
+\begin{enumerate}
+\item Disallow naming the return value in a postcondition if the function has a deduced return type.
+\item Allow such naming, but treat the name of the return value as having a dependent type. This means requiring \tcode{template} and \tcode{typename} disambiguators; behaviour would be as if the point of instantiation is wherever the definition of the function occurs.
+\item Allow such naming as above for templated functions, and for non-templated functions, allow such naming only for definitions. Delay the parsing of the postcondition until the return type is known is a possible implementation strategy for the non-templated function case of this option.
+\item Allow such naming as above, but apply the dependent-type option for non-templated forward declarations.
+\end{enumerate}
+The paper summarises the EWG discussion on this topic, which concludes that Option 3 (late-parsed) is the correct solution, and provides wording for Option 3. This wording has already once been approved by CWG and merged into the C++ Working Draft (for C++20, before Contracts were removed). The same wording was adopted for P2900 as well. However, through subsequent iterations of the wording in P2900, the intent of those particular sections became less clear. Below, we propose the  wording tweaks necessary to restore the original clarity.
+
+\subsection{Trivial copies of the result object are in sequence with postconditions}
+
+The second of two clarifications requested in the Implementers Report \cite{P3460R0} concerns the case when the return value of a function does not have an RVO slot, but is passed in a register. In this case, the result object does not exist in memory at the time the postcondition assertions are evaluated, and the implementation may instead refer to a temporary object that has the same value. The implementation may make extra copies of the result object for this purpose. These copies must be trivial, so this situation can only arise if the return type is trivially copyable.
+
+In this case, evaluating a postcondition assertion that involves the return value requires temporary materialisation of an object that holds the return value. The question is whether the same materialised temporary must be used in each postcondition assertion:
+\begin{codeblock}
+int f()
+post(r : ++const_cast<int&>(r) == 1)
+post(r : ++const_cast<int&>(r) == 2) {  // \tcode{true} or \tcode{false}?
+  return 0; 
+}
+\end{codeblock}
+According to the specification in \cite{P2900R10}, postcondition assertions are evaluated in sequence. If the return type is \emph{not} trivially copyable, \tcode{r} must always refer to the same object --- the result object of the function. If the return type is trivially copyable, the compiler is allowed to make extra copies, but it needs to do that in sequence with evaluation of the postcondition. In other words, whether or not extra trivial copies are made cannot affect the result of the evaluation of the postcondition assertion. Therefore, in the example above, the postcondition predicate must evaluate to \tcode{true}.
+
+Below, we propose a wording clarification with a code example to make this design intent more clear.
+
+\subsection{Parameters odr-used in \tcode{post} can be non-\tcode{const} in overriding functions}
+
+\cite{P2900R10} Section 3.4.4 specifies that if a function parameter is odr-used by a postcondition assertion, that function parameter must have reference type or be \tcode{const} on all declarations of that function. \cite{P2900R10} Section 3.5.3 further specifies the semantics of precondition and postcondition assertions on virtual functions: in a virtual function call, the function contract assertions of both the statically called function and the final overrider are checked.
+
+However, the paper does not explicitly discuss the case where an overridden function odr-uses a \tcode{const} non-reference parameter in its postcondition assertion, but that same parameter is declared as non-\tcode{const} in an overriding function:
+\begin{codeblock}
+struct Base {
+  virtual int f(const int i) post (r: r >= i);
+};
+
+struct Derived : Base {
+  int f(int i) override;
+};
+\end{codeblock}
+In the above constellation, it is possible that the implementation of the function modifies the value of a \tcode{const} parameter, which is exactly the scenario that the specification in \cite{P2900R10} Section 3.4.4 seeks to avoid:
+\begin{codeblock}
+Derived::f(int i) {
+  i = 0;
+  return 0;
+};
+
+void test(Base& b, int i) {
+  int j = b.f(3);
+  // \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
+}
+
+int main() {
+  Derived d;
+  test(b);
+}
+\end{codeblock}
+In the above example, the implementation of \tcode{Derived::f} does \emph{not} satisfy the postcondition of \tcode{Base::f}; however, the bug is not caught, even though the postcondition assertion of \tcode{Base::f} is evaluated, because the parameter \tcode{i} has been modified in \tcode{Derived::f} (something that \tcode{Base::f} has no control or visibility over), rendering the postcondition assertion of \tcode{Base::f} meaningless.
+
+We are aware of four possible options for dealing with this issue:
+\begin{enumerate}
+\item Disallow odr-using any function parameters in a postcondition assertion that applies to a virtual function, regardless of whether they are declared \tcode{const}.
+\item Require that if a parameter is declared \tcode{const} in a virtual function, it must also be declared \tcode{const} in every overriding function.
+\item Allow overriding functions to drop \tcode{const}, but make it undefined behaviour to modify a parameter object in an overriding function if that parameter was declared \tcode{const} in an overridden function.
+\item Allow overriding functions to drop \tcode{const}, with no special provision, i.e., ``you get what you get'' and the behaviour is as described in the example above.
+\end{enumerate}
+Option 1 would catch the bug in the example above and is the most conservative choice. This choice is consistent with the choice we made for postcondition assertions on coroutines in \cite{P2900R10}: the program is ill-formed if a postcondition assertion odr-uses any function parameters in a postcondition assertion that applies to a coroutine, regardless of whether they are declared \tcode{const}, with the rationale that they may be modified inside the function.\footnote{In particular, a coroutine will move-from its function parameters to initialise the parameter copies in the coroutine frame, even if the parameters are declared \tcode{const}; see \cite{P3387R0}).} Just like in the coroutine case, for virtual functions the workaround would be to use a postcondition capture \cite{P3098R0} once this post-MVP feature becomes available.
+
+However, this choice is not ideal. In today's C++ ecosystem, virtual functions are more pervasive than coroutines, and postcondition assertions have more known use cases for virtual functions than for coroutines, where their usefulness is limited anyway due to the nature of coroutines in C++. Entirely disallowing the ability to odr-use parameters in the postcondition assertion of a virtual function in the first version of Contracts for C++ that we ship would severely hamper the usability of the feature.
+
+
+Option 2 would also catch the bug in the example above and is a more permissive choice. However, this choice is not ideal either, as it can lead to remote code breakage, which directly violates Design Principle 15 of \cite{P2900R10}, ``No Caller-Side Language Break'': adding a postcondition to a virtual function that odr-uses a \tcode{const} parameter would remotely break any client code that overrides that function and drops the \tcode{const}. The crucial difference to the coroutine case is that providing a definition for a given function that makes the function a coroutine is local, not remote code, whereas overriding a function can happen in an entirely different component of the program. Such remote code breakage due to the introduction of Contracts is not acceptable.
+
+Option 3 is the option chosen by C++2a Contracts \cite{P0542R5} but would fail to catch the bug in the example above and is arguably the most user-hostile option as the mere act of adding a postcondition assertion to a program would then potentially introduce new undefined behaviour, even if its predicate is written correctly. It also directly violates Design Principle 13 of \cite{P2900R10}, ``Explicitly Define All New Behaviour''.
+
+Option 4 is the status quo in \cite{P2900R10}. Since the current specification in that paper does not contain any special rules for parameter declarations on overriding functions, dropping \tcode{const} in such declarations is currently allowed in \cite{P2900R10} and ``you get what you get''. We believe that this option is the least bad solution and therefore propose to retain the current specification.
+
+In particular, if an overriding function drops the \tcode{const} on a parameter odr-used in the postcondition assertion of an overridden function, an implementation can issue a warning that would catch the bug in the example above, which lessens its potential negative impact. The crucial difference to the coroutine case is that the implementation \emph{knows} that the function is virtual at the point of declaration. Arguably, having such a warning (Option 4) is a better solution than undefined behaviour (Option 3), remote code breakage (Option 2), or not being able to odr-use any parameters in the postcondition assertion at all (Option 1).
+% TD: I'm actually not sold on this. If we manage to get postcondition captures in C++26, Option 1 would be the superior solution IMHO. This would mean that all cases in which a const parameter can be modified in the implementation would be treated in exactly the same way. What I would prefer to do instead is to choose Option 1 now, then add this case to P3098 as an additional motivation why we need postcondition captures in C++26, and then press ahead with that once P2900 is approved by EWG.
+
+Below, we propose a wording clarification in the form of a note which states that overriding functions may drop the \tcode{const} on a parameter declaration.
+
+\subsection{For a parameter odr-used in \tcode{post}, \tcode{const} can be part of dependent type}
+
+Whether or not a function parameter is declared \tcode{const}, and can therefore be odr-used in a postcondition assertion, is not always immediately visible. Consider:
+\begin{codeblock}
+template <typename T> 
+void f(T t) post(t > 0); 
+\end{codeblock}
+This function template may be instantiated with a type that is \tcode{const}-qualified, or a type that is not. However, this is not known when parsing this function template, as the variable \tcode{t} does not have a visible \tcode{const} specifier on it. It is therefore not immediately obvious when and how the above example should fail to compile.
+
+The answer is that the parameter \tcode{t} being odr-used in the postcondition assertion has a dependent type. This situation should be treated just like other situations where dependent types occur. In particular, the above function template declaration is well-formed in its own; whether or not the postcondition assertion makes the program ill-formed should be decided at the point where the template is instantiated:
+\begin{codeblock}
+int main() {
+  int i = 1;
+  f(i);   // error
+
+  const int ci = 2;
+  f(ci);  // OK
+}
+\end{codeblock}
+We believe that the above behaviour is already correctly specified by the wording in \cite{P2900R10} and no other behaviour makes sense. Nevertheless, below we propose adding the above code example to the wording for additional clarity.
+
+\subsection{Lambdas can appear in redeclared \tcode{pre} and \tcode{post} sequences}
+
+Usually, when the same lambda expression is repeated token-identically, it denotes a different object that has a different type:
+\begin{codeblock}
+auto l1 = []{};  
+auto l2 = []{};
+// \tcode{l1} and \tcode{l2} have different types
+
+template <typename T = decltype([]{})>
+struct X {};
+
+X x1;
+X x2;
+// \tcode{x1} and \tcode{x2} have different types
+\end{codeblock}
+This raises the question what should happen when a lambda appears in the predicate of a precondition or postcondition, and the affected function has a redeclaration that repeats its function contract assertion sequence (as permitted by \cite{P2900R10}, Section 3.3.1). Consider:
+\begin{codeblock}
+// f.h
+void f() pre([]{ _ = scoped_lock(obj_mtx); return obj.is_valid(); }())
+
+// f.cpp  
+void f() pre([]{ _ = scoped_lock(obj_mtx); return obj.is_valid(); }()) {
+  // implementation
+}
+\end{codeblock}
+It seems obvious that the only possible interpretation is that in this case, unlike the previous cases, the lambda expressions must be treated as the same entity. This is essentially the same situation as having a lambda expression inside the body of an inline function that appears in multiple translation units. We should apply the same rules for what is or is not an ODR-violation in this case as well.
+
+Below, we propose a wording clarification to make this design intent clearer.
+
+\section{Proposed wording}
+
+The proposed wording changes are relative to \cite{P2900R10}. Note that no normative wording changes are being proposed, only editorial wording clarifications (notes and examples).
+
+TODO
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}
+

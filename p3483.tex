@@ -193,10 +193,31 @@ Below, we propose adding an example to the wording to clarify this design intent
 
 The proposed wording changes are relative to \cite{P2900R10}. Note that all proposed changes are merely clarifications; no design changes are being proposed.
 
-%JMB: I need to head off soon, but I am going to summarize my thoughts on what we need to do in wording changes:
+Modify [expr.prim.id.unqual] paragraph 5 as follows:
+\begin{addedblock}
+[5] Otherwise, If the unqualified-id is the result name ([dcl.contract.res])
+in a postcondition assertion attached to a function whose (possibly
+deduced, see [dcl.spec.auto]) return type is T, then the type of the expression is `const` T.
+\end{addedblock}
+%JMB: I can't think of a good note that says anything more useful than what we have here.
+%     all the notes i thought of adding basically just say "possibly deduced means we
+%     deduce the type if it has a placeholder in it, we don't just leave the placeholder
+%     there which would make nos ense".   Notes that explicitly talk about late parsing
+%     don'treally fit in the standard --- but we can talk about that in the front matter
+%     of p2900 when we update that.
 
-% in expr.prim.id.unqual, take the first bullet added in p5 and make it a separate pargraph that describes the result name in its entirety
-%  Otherwise, If the unqualified-id is the result name ([dcl.contract.res]) in a postcondition assertion attached to a function whose (possibly deduced, see [dcl.spec.auto]) return type is T, then the type of the expression is `const` T.
+\removed{[5]}\added{[6]} Otherwise, if the \grammarterm{unqualified-id} appears in the predicate of a contract
+assertion $C$ (\stdref{basic.contract}) and the entity is
+
+\begin{itemize}
+\removed{\item the result object of (possibly deduced, see [dcl.spec.auto}) type T of a
+  function call and the \grammarterm{unqualified-id} is the result name (\stdref{dcl.contract.res}) in a postcondition assertion, or } }
+\item{ a variable declared outside of $C$, or }
+\item{ a structured binding of type T whose corresponding variable is declared outside of $C$, }
+\end{itemize}
+
+then the type of the expression is \tcode{const} T.
+
 
 Modify [dcl.contract.func] as follows:
 
@@ -218,7 +239,7 @@ bool b1, b2;
 void f() pre (b1) pre ([]{ return b2; }());
 void f();                    // OK, function-contract specifiers omitted
 void f() pre (b1) pre ([]{ return b2; }());  // OK, same by ODR
-void f() pre (b1);           // error: function-contract specifiers only partially omitted
+void f() pre (b1);           // error: function-contract specifiers only partially repeated
 void f() pre (b1) pre (b2);  // error: not same by ODR
 \end{codeblock}
 \end{example}

@@ -74,9 +74,9 @@ This paper considers the case where an overridden function odr-uses a non-refere
 \section{Background}
 \label{bg}
 
-\cite{P2900R10} Section 3.4.4 specifies that if a non-reference function parameter is odr-used by a postcondition assertion, that function parameter must be \tcode{const} on \emph{all} declarations of that function, otherwise the program is ill-formed.  Importantly, this includes the declaration on the definition of the function, and thus the body of the function can be assumed to treat the parameter as `const`.
+\cite{P2900R10} Section 3.4.4 specifies that if a non-reference function parameter is odr-used by a postcondition assertion, that function parameter must be \tcode{const} on \emph{all} declarations of that function, otherwise the program is ill-formed.  Importantly, this includes the \emph{defining} declaration of the function, and thus the body of the function can be assumed to treat the parameter as \tcode{const}.
 
-The rationale for this rule is that, if we were to allow the function implementation to modify a parameter that is later used to check the postcondition, it would render that check meaningless. Consider the following function declaration:
+The rationale for this rule is that allowing the function implementation to modify a parameter that is later used to check the postcondition would render that check meaningless. Consider the following function declaration:
 \begin{codeblock}
 // Returns: a number guaranteed to be greater or equal to the number passed in
 int f(const int i) post (r: r >= i);
@@ -95,9 +95,9 @@ void test() {
   // \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
 }
 \end{codeblock}
-Therefore, \cite{P2900R10} specifies that the above implementation of \tcode{f} makes the program ill-formed because \tcode{const} cannot be dropped from any function parameter odr-used in a precondition assertion.
+For this reason, \cite{P2900R10} makes the above implementation of \tcode{f} ill-formed: \tcode{const} cannot be dropped from any function parameter odr-used in a precondition assertion.
 
-As a side effect of the above rule interacting with coroutines, \cite{P2900R10} Section 3.4.4 specifies that if a non-reference function parameter is odr-used by a postcondition assertion, and that function is implemented as a coroutine, the program is ill-formed, \emph{even if} all such function parameters have been declared \tcode{const} by the user.
+Further, \cite{P2900R10} Section 3.4.4 specifies that if a non-reference function parameter is odr-used by a postcondition assertion, and that function is implemented as a coroutine, the program is ill-formed, \emph{even if} all such function parameters have been declared \tcode{const} by the user.
 
 The rationale for this rule is that a coroutine will move-from its function parameters to initialise the parameter copies in the coroutine frame, and therefore the function parameters of a coroutine are effectively not \tcode{const}, even if declared as such by the user (see \cite{P3387R0} for discussion). This case is thus notionally similar to the previous case where \tcode{const} was dropped from the parameter declaration in the implementation.
 
@@ -106,26 +106,26 @@ There is no expectation that the value will remain unchanged after the function 
 
 \section{The problem}
 
-Let us modify the example above slightly by making \tcode{f} a virtual function:
+Let us now slightly modify the example above by making \tcode{f} a virtual function:
 \begin{codeblock}
 struct Base {
   virtual int f(const int i) post (r: r >= i);
 };
 \end{codeblock}
-Note that if we override a virtual function, C++ allows dropping \tcode{const} from the parameter declaration in the overriding function, and \cite{P2900R10} currently does not have any provision to make this ill-formed --- the parameter declaration that is not `const` in this case is not the same parameter that is odr-used by the postcondition assertion:
+Note that if we override a virtual function, C++ allows dropping \tcode{const} from the parameter declaration in the overriding function, and \cite{P2900R10} currently does not have any provision to make such an override ill-formed:
 \begin{codeblock}
 struct Derived : Base {
   int f(int i) override; // OK
 };
 \end{codeblock}
-This allows us to implement \tcode{Derived::f} in a way that modifies the value of the parameter:
+This means that we can implement \tcode{Derived::f} such that it modifies the value of the parameter:
 \begin{codeblock}
 int Derived::f(int i) {
   i = 0;
   return i;
 };
 \end{codeblock}
-\cite{P2900R10} Section 3.5.3 specifies the semantics of precondition and postcondition assertions on virtual functions: in a virtual function call, the function contract assertions of both the statically called function \tcode{Base::f} and the final overrider \tcode{Derived::f} are checked (see \cite{P3097R0} for discussion). However, if we call \tcode{Derived::f} through a reference to \tcode{Base}, we are in for an unpleasant surprise:
+\cite{P2900R10} Section 3.5.3 specifies the semantics of precondition and postcondition assertions on virtual functions: in a virtual function call, the function contract assertions of both the statically called function \tcode{Base::f} and the final overrider \tcode{Derived::f} are checked (see \cite{P3097R0} for discussion). However, if we now call \tcode{Derived::f} through a reference to \tcode{Base}, we are in for an unpleasant surprise:
 \begin{codeblock}
 void test(Base& b) {
   int j = b.f(3);  // no contract violation detected
@@ -138,9 +138,7 @@ int main() {
 }
 \end{codeblock}
 
-\pagebreak %% MANUAL %%
-
-Here, even if the postcondition assertion of \tcode{Base::f} is checked, the fact that the implementation of \tcode{Derived::f} does \emph{not} satisfy the postcondition of \tcode{Base::f} is not caught, because the parameter \tcode{i} has been modified in \tcode{Derived::f} (something that \tcode{Base::f} has no control or visibility over), rendering the postcondition assertion of \tcode{Base::f} meaningless. This is exactly the scenario that the specification in \cite{P2900R10} Section 3.4.4 seeks to avoid; nevertheless, the code above is well-formed according to the current specification.
+In the program above, even if the postcondition assertion of \tcode{Base::f} is checked, the fact that the implementation of \tcode{Derived::f} does \emph{not} satisfy the postcondition of \tcode{Base::f} is not caught, because the parameter \tcode{i} has been modified in \tcode{Derived::f} (something that \tcode{Base::f} has no control or visibility over), rendering the postcondition assertion of \tcode{Base::f} meaningless. This is exactly the scenario that the specification in \cite{P2900R10} Section 3.4.4 seeks to avoid; nevertheless, the code above is well-formed according to the current specification.
 
 \section{Possible solutions}
 
@@ -200,8 +198,7 @@ Modify [dcl.contract.func] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type
-\added{; if the function is virtual
+non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type\added{; if the function is virtual
 it shall be marked with the virt-specifier \tcode{final} (see [class.virtual]) or it shall be a a member function of a class with the
 class-virt-specifier \tcode{final} (see [class.pre])}.
 \begin{note}
@@ -209,7 +206,7 @@ This requirement applies even to declarations
 that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
 \end{note}
 \begin{example}
-...
+\tcode{[...]}
 \end{example}
 \end{adjustwidth}
 
@@ -227,18 +224,10 @@ This requirement applies even to declarations
 that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
 \end{note}
 \begin{example}
-...
+\tcode{[...]}
 \end{example}
-%JMB: You can't use may in a note, ISO considers that a case of giving normative permission to do something
-%     but notes can't be normative.   We really want ot recommend a warning here, and I think
-%     the right thing to do is a recommended practive, not a Note, like this:
-%
-% Recommended practice: Implementations should emit a warning when an overriding
-% function omits \tcode{const} from a non-reference parameter whose corresponding
-% parameter in an overridden function is odr-used by a postcondition assertion
-% of that overridden function
-\added{[~\emph{Note:} An overriding function can omit \tcode{const} from the declaration of a non-reference parameter declared \tcode{const} in the overridden function. An implementation can issue a diagnostic message if such a parameter is odr-used in a postcondition assertion of the overridden function. --- \emph{end note}~]
-}
+
+\added{\emph{Recommended practice:} Implementations should issue a diagnostic when an overriding function omits \tcode{const} from the declaration of a non-reference parameter whose corresponding parameter in an overridden function is odr-used by a postcondition assertion of that overridden function.}
 \end{adjustwidth}
 
 

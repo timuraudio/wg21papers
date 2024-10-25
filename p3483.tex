@@ -46,7 +46,7 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 
 \begin{tabular}{ll}
 Document \#: & D3483R0 \\
-Date: &2024-10-24 \\
+Date: &2024-10-25 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -54,12 +54,11 @@ Audience: & SG21, EWG
 \begin{abstract}
 After having gained implementation and deployment experience with Contracts for C++ as proposed in \cite{P2900R10} we identified a few corner cases for which the front matter and wording in \cite{P2900R10} would benefit from clarifications of the design intent. In this paper, we explain the affected cases and propose to add the necessary clarifications. Importantly, we do not propose any design changes to \cite{P2900R10}.
 \end{abstract}
-%JMB: We should revisit the last line of this abstract if we are going to propose alternatives for virtual function postconditions
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\tableofcontents*
-\pagebreak
+%\tableofcontents*
+%\pagebreak
 
 %\section*{Revision history}
 
@@ -124,7 +123,7 @@ The paper lists four options:
 \end{enumerate}
 The paper summarises the EWG discussion on this topic, which concludes that Option 3 (late-parsed) is the correct solution, and provides wording for Option 3. This wording has already once been approved by CWG and merged into the C++ Working Draft (for C++20, before Contracts were removed). The same wording was adopted for P2900 as well. However, through subsequent iterations of the wording in P2900, the intent of those particular sections became less clear.
 
-To avoid future requests for clarification, we propose wording tweaks below to be more clear about what the result name does when used as an expression and that its type is always the deduced return type (with \tt{const} qualification added) of the function, even when lexically before the point where that deduction will happen.
+To avoid future requests for clarification, we propose wording tweaks below to be more clear about what the result name does when used as an expression and that its type is always the deduced return type (with \tcode{const} qualification added) of the function, even when lexically before the point where that deduction will happen.
 
 \subsection{Trivial copies of the result object are in sequence with postconditions}
 
@@ -142,65 +141,6 @@ According to the specification in \cite{P2900R10}, postcondition assertions are 
 
 Below, we propose a wording clarification with a code example to make this design intent more clear.
 
-\subsection{Parameters odr-used in \tcode{post} can be non-\tcode{const} in overriding functions}
-
-\cite{P2900R10} Section 3.4.4 specifies that if a function parameter is odr-used by a postcondition assertion, that function parameter must have reference type or be \tcode{const} on all declarations of that function. \cite{P2900R10} Section 3.5.3 further specifies the semantics of precondition and postcondition assertions on virtual functions: in a virtual function call, the function contract assertions of both the statically called function and the final overrider are checked.
-
-However, the paper does not explicitly discuss the case where an overridden function odr-uses a \tcode{const} non-reference parameter in its postcondition assertion, but that same parameter is declared as non-\tcode{const} in an overriding function:
-\begin{codeblock}
-struct Base {
-  virtual int f(const int i) post (r: r >= i);
-};
-
-struct Derived : Base {
-  int f(int i) override;
-};
-\end{codeblock}
-%JMB: constellation?  I'm not sure what word you're searching for here, but constellation is a very odd one to use.
-In the above constellation, it is possible that the implementation of the function modifies the value of a \tcode{const} parameter, which is exactly the scenario that the specification in \cite{P2900R10} Section 3.4.4 seeks to avoid:
-\begin{codeblock}
-Derived::f(int i) {
-  i = 0;
-  return 0;
-};
-
-void test(Base& b, int i) {
-  int j = b.f(3);
-  // \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
-}
-
-int main() {
-  Derived d;
-  test(b);
-}
-\end{codeblock}
-In the above example, the implementation of \tcode{Derived::f} does \emph{not} satisfy the postcondition of \tcode{Base::f}; however, the bug is not caught, even though the postcondition assertion of \tcode{Base::f} is evaluated, because the parameter \tcode{i} has been modified in \tcode{Derived::f} (something that \tcode{Base::f} has no control or visibility over), rendering the postcondition assertion of \tcode{Base::f} meaningless.
-
-We are aware of four possible options for dealing with this issue:
-\begin{enumerate}
-\item Disallow odr-using any non-reference function parameters in a postcondition assertion that applies to a virtual function, regardless of whether they are declared \tcode{const}.
-\item Require that if a parameter is declared \tcode{const} in a virtual function, it must also be declared \tcode{const} in every overriding function.
-\item Allow overriding functions to drop \tcode{const}, but make it undefined behaviour to modify a parameter object in an overriding function if that parameter was declared \tcode{const} in an overridden function.
-\item Allow overriding functions to drop \tcode{const}, with no special provision, i.e., ``you get what you get'' and the behaviour is as described in the example above.
-\end{enumerate}
-Option 1 would catch the bug in the example above and is the most conservative choice. This choice is consistent with the choice we made for postcondition assertions on coroutines in \cite{P2900R10}: the program is ill-formed if a postcondition assertion odr-uses any function parameters in a postcondition assertion that applies to a coroutine, regardless of whether they are declared \tcode{const}, with the rationale that they may be modified inside the function.\footnote{In particular, a coroutine will move-from its function parameters to initialise the parameter copies in the coroutine frame, even if the parameters are declared \tcode{const}; see \cite{P3387R0}).} Just like in the coroutine case, for virtual functions the workaround would be to use a postcondition capture \cite{P3098R0} once this post-MVP feature becomes available.
-
-However, this choice is not ideal. In today's C++ ecosystem, virtual functions are more pervasive than coroutines, and postcondition assertions have more known use cases for virtual functions than for coroutines, where their usefulness is limited anyway due to the nature of coroutines in C++. Entirely disallowing the ability to odr-use parameters in the postcondition assertion of a virtual function in the first version of Contracts for C++ that we ship would severely hamper the usability of the feature.  Additionally, unlike coroutines, any modifications to the parameters must be done explicitly in an overriding function and they will not happen implicitly as part of non-obvious language machinery.
-
-
-Option 2 would also catch the bug in the example above and is a more permissive choice. However, this choice is not ideal either, as it can lead to remote code breakage, which directly violates Design Principle 15 of \cite{P2900R10}, ``No Caller-Side Language Break'': adding a postcondition to a virtual function that odr-uses a \tcode{const} parameter would remotely break any client code that overrides that function and drops the \tcode{const}. The crucial difference to the coroutine case is that providing a definition for a given function that makes the function a coroutine is local, not remote code, whereas overriding a function can happen in an entirely different component of the program. Such remote code breakage due to the introduction of Contracts is not acceptable.
-
-Option 3 is the option chosen by C++2a Contracts \cite{P0542R5} but would fail to catch the bug in the example above and is arguably the most user-hostile option as the mere act of adding a postcondition assertion to a program would then potentially introduce new undefined behaviour, even if its predicate is written correctly. It also directly violates Design Principle 13 of \cite{P2900R10}, ``Explicitly Define All New Behaviour''.
-
-Option 4 is the status quo in \cite{P2900R10}. Since the current specification in that paper does not contain any special rules for parameter declarations on overriding functions, dropping \tcode{const} in such declarations is currently allowed in \cite{P2900R10} and ``you get what you get''. We believe that this option is the least bad solution and therefore propose to retain the current specification.
-
-In particular, if an overriding function drops the \tcode{const} on a parameter odr-used in the postcondition assertion of an overridden function, an implementation can easily issue a warning that would catch the bug in the example above, which lessens its potential negative impact. The crucial difference to the coroutine case is that the implementation \emph{knows} that the function is virtual at the point of declaration. Arguably, having such a warning (Option 4) is a better solution than undefined behaviour (Option 3), remote code breakage (Option 2), or not being able to odr-use any parameters in the postcondition assertion at all (Option 1).
-% TD: I'm actually not sold on this. If we manage to get postcondition captures in C++26, Option 1 would be the superior solution IMHO. This would mean that all cases in which a const parameter can be modified in the implementation would be treated in exactly the same way. What I would prefer to do instead is to choose Option 1 now, then add this case to P3098 as an additional motivation why we need postcondition captures in C++26, and then press ahead with that once P2900 is approved by EWG.
-% JMB: I wouldn't die if we ended up with option 1, but i think we are then paying a cost when we don't have to (unlike coroutines, where paying the cost of the copy is the only way to get the pre-moved-from state).   The important difference with coroutines is what i added above --- you can write virtual functions where this works very easily, just don't modify those values.   
-
-Below, we propose a wording clarification in the form of a note which states that overriding functions may drop the \tcode{const} on a parameter declaration.
-%JMB: I wonder if we should, in that same note, suggest that a diagnostic be issued in those cases.
-
 \subsection{For a parameter odr-used in \tcode{post}, \tcode{const} can be part of dependent type}
 
 Whether or not a function parameter is declared \tcode{const}, and can therefore be odr-used in a postcondition assertion, is not always immediately visible. Consider:
@@ -211,22 +151,11 @@ void f(T t) post(t > 0);
 This function template may be instantiated with a type that is \tcode{const}-qualified, or a type that is not. However, this is not known when parsing this function template, as the variable \tcode{t} does not have a visible \tcode{const} specifier on it. It is therefore not immediately obvious when and how the above example should fail to compile.
 
 The answer is that the parameter \tcode{t} being odr-used in the postcondition assertion has a dependent type. This situation should be treated just like other situations where dependent types occur. In particular, the above function template declaration is well-formed in its own; whether or not the postcondition assertion makes the program ill-formed should be decided at the point where the template is instantiated:
-%JMB: I don't think this deduces const int for T.   I think to get a const int the easiest thing to do is to
-%     explicitly specify the template arguments
-%```
-%int main() {
-%  int i = 1;
-%  f<int>(i);  // error
-%  f<const int>(i); // OK
-%}
-%```
 \begin{codeblock}
 int main() {
   int i = 1;
-  f(i);   // error
-
-  const int ci = 2;
-  f(ci);  // OK
+  f<int>(i);  // error
+  f<const int>(i); // OK
 }
 \end{codeblock}
 We believe that the above behaviour is already correctly specified by the wording in \cite{P2900R10} and no other behaviour makes sense. Nevertheless, below we propose adding the above code example to the wording for additional clarity.
@@ -270,8 +199,6 @@ The proposed wording changes are relative to \cite{P2900R10}. Note that no norma
 %  Otherwise, If the unqualified-id is the result name ([dcl.contract.res]) in a postcondition assertion attached to a function whose (possibly deduced, see [dcl.spec.auto]) return type is T, then the type of the expression is `const` T.
 
 % I think we might just want an example in the front matter for the trivial copy thing, i'm not convinced the wording needs one.
-
-% I think we want a note about virtual functions and parameters being const -- remember to always include non-reference on that --- and that we could also suggest a diagnostic.
 
 % The lamdba example doesn't need normative wording, but an example would be good.  In dcl.contract after we define when function-contract-specifiers are the same we should have an example with a lambda.  Maybe also have examples where redeclarations
 % do and don't have preconditiosn.

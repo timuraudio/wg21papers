@@ -84,15 +84,15 @@ int f(const int i) post (r: r >= i);
 Now, if we could drop the \tcode{const} in the implementation of \tcode{f}, we could write a dummy implementation as follows:
 \begin{codeblock}
 int f(int i) {  // \tcode{i} is not \tcode{const}
-  i = INT_MIN;
-  return -17;
+  i = 0;
+  return i;
 }
 \end{codeblock}
 Such an implementation blatantly fails to satisfy the postcondition of \tcode{f}, and is therefore incorrect. However the defect will not be caught by checking the precondition assertion of \tcode{f}, because its predicate always evaluates to \tcode{true}:
 \begin{codeblock}
 void test() {
   int j = f(3); // no contract violation detected
-  // \tcode{j} is \tcode{-17}, which is smaller than \tcode{3}!
+  // \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
 }
 \end{codeblock}
 Therefore, \cite{P2900R10} specifies that the above implementation of \tcode{f} makes the program ill-formed because \tcode{const} cannot be dropped from any function parameter odr-used in a precondition assertion.
@@ -122,7 +122,7 @@ This allows us to implement \tcode{Derived::f} in a way that modifies the value 
 \begin{codeblock}
 int Derived::f(int i) {
   i = 0;
-  return 0;
+  return i;
 };
 \end{codeblock}
 \cite{P2900R10} Section 3.5.3 specifies the semantics of precondition and postcondition assertions on virtual functions: in a virtual function call, the function contract assertions of both the statically called function \tcode{Base::f} and the final overrider \tcode{Derived::f} are checked (see \cite{P3097R0} for discussion). However, if we call \tcode{Derived::f} through a reference to \tcode{Base}, we are in for an unpleasant surprise:

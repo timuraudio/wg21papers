@@ -123,7 +123,7 @@ The paper lists four options:
 \end{enumerate}
 The paper summarises the EWG discussion on this topic, which concludes that Option 3 (late-parsed) is the correct solution, and provides wording for Option 3. This wording has already once been approved by CWG and merged into the C++ Working Draft (for C++20, before Contracts were removed). The same wording was adopted for P2900 as well. However, through subsequent iterations of the wording in P2900, the intent of those particular sections became less clear.
 
-To avoid future requests for clarification, we propose wording tweaks below to be more clear about what the result name does when used as an expression and that its type is always the deduced return type (with \tcode{const} qualification added) of the function, even when lexically before the point where that deduction will happen.
+To avoid future requests for clarification, we propose a few wording edits below to be more clear about what the result name does when used as an expression and that its type is always the deduced return type (with \tcode{const} qualification added) of the function, even when lexically before the point where that deduction will happen.
 
 \subsection{Trivial copies of the result object are in sequence with postconditions}
 
@@ -139,7 +139,7 @@ post(r : ++const_cast<int&>(r) == 2) {  // \tcode{true} or \tcode{false}?
 \end{codeblock}
 According to the specification in \cite{P2900R10}, postcondition assertions are evaluated in sequence. If the return type is \emph{not} trivially copyable, \tcode{r} must always refer to the same object --- the result object of the function. If the return type is trivially copyable, the compiler is allowed to make extra copies, but it needs to do that in sequence with evaluation of the postcondition. In other words, whether or not extra trivial copies are made cannot affect the result of the evaluation of the postcondition assertion. Therefore, in the example above, when both postconditions are evaluated once they will both evaluate to \tcode{true}.
 
-Below, we propose a wording clarification with a code example to make this design intent more clear.
+Below, we propose adding a few words to a non-normative note as well as a code example to the wording to clarify this design intent.
 
 \subsection{For a parameter odr-used in \tcode{post}, \tcode{const} can be part of dependent type}
 
@@ -154,11 +154,11 @@ The answer is that the parameter \tcode{t} being odr-used in the postcondition a
 \begin{codeblock}
 int main() {
   int i = 1;
-  f<int>(i);  // error
+  f<int>(i);       // error
   f<const int>(i); // OK
 }
 \end{codeblock}
-We believe that the above behaviour is already correctly specified by the wording in \cite{P2900R10} and no other behaviour makes sense. Nevertheless, below we propose adding the above code example to the wording for additional clarity.
+We believe that the above behaviour is already correctly specified by the wording in \cite{P2900R10} and no other behaviour makes sense. Nevertheless, below we propose adding a few words to a non-normative note as well as a code example to the wording for additional clarity.
 
 \subsection{Lambdas can appear in redeclared \tcode{pre} and \tcode{post} sequences}
 
@@ -187,28 +187,127 @@ void f() pre([]{ _ = scoped_lock(obj_mtx); return obj.is_valid(); }()) {
 \end{codeblock}
 It seems obvious that the only possible interpretation is that in this case, unlike the previous cases, the lambda expressions must be treated as the same entity. This is essentially the same situation as having a lambda expression inside the body of an inline function that appears in multiple translation units. We should apply the same rules for what is or is not an ODR-violation in this case as well.
 
-Below, we propose an additional example to add to the wording to clarify this design intent.
+Below, we propose adding an example to the wording to clarify this design intent.
 
 \section{Proposed wording}
 
-The proposed wording changes are relative to \cite{P2900R10}. Note that no normative wording changes are being proposed, only editorial wording clarifications (notes and examples).
+The proposed wording changes are relative to \cite{P2900R10}. Note that all proposed changes are merely clarifications; no design changes are being proposed.
 
 %JMB: I need to head off soon, but I am going to summarize my thoughts on what we need to do in wording changes:
 
 % in expr.prim.id.unqual, take the first bullet added in p5 and make it a separate pargraph that describes the result name in its entirety
 %  Otherwise, If the unqualified-id is the result name ([dcl.contract.res]) in a postcondition assertion attached to a function whose (possibly deduced, see [dcl.spec.auto]) return type is T, then the type of the expression is `const` T.
 
-% I think we might just want an example in the front matter for the trivial copy thing, i'm not convinced the wording needs one.
+Modify [dcl.contract.func] as follows:
 
-% The lamdba example doesn't need normative wording, but an example would be good.  In dcl.contract after we define when function-contract-specifiers are the same we should have an example with a lambda.  Maybe also have examples where redeclarations
-% do and don't have preconditiosn.
-% ```
-% void f() pre( [](){ return true; } );
-% void f();  // OK, no function-contract specifiers
-% void f() pre( [](){ return true; } );  // OK, same by ODR
-% ```
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A \grammarterm{function-contract-specifier-seq} $s1$ is the same as a \grammarterm{function-contract-specifier-seq} $s2$ if $s1$ and $s2$ consist of the same \grammarterm{function-contract-specifier}s in the same order. A \grammarterm{function-contract-specifier} $c1$ on a function declaration $d1$ is the same as a \grammarterm{function-contract-specifier}
+$c2$ on a function declaration $d2$ if their predicates ([basic.contract.general]), $p1$ and $p2$,
+would satisfy the one-definition rule ([basic.def.odr]) if placed in function definitions on
+the declarations $d1$ and $d2$, respectively, except for renaming of parameters, renaming of
+template parameters, and renaming of the result name ([dcl.contract.res]), if any.
+\begin{note}
+As a result of the above, all uses and definitions of a function see the equivalent
+\grammarterm{function-contract-specifier-seq} for that function across all translation units.
+\end{note}
+\begin{addedblock}
+\begin{example}
+\begin{codeblock}
+bool b1, b2;
 
-TODO
+void f() pre (b1) pre ([]{ return b2; }());
+void f();                    // OK, function-contract specifiers omitted
+void f() pre (b1) pre ([]{ return b2; }());  // OK, same by ODR
+void f() pre (b1);           // error: function-contract specifiers only partially omitted
+void f() pre (b1) pre (b2);  // error: not same by ODR
+\end{codeblock}
+\end{example}
+\end{addedblock}
+
+[...]
+
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+non-reference parameter of that function, that parameter shall be declared \tcode{const} and
+shall not have array or function type.
+\begin{note}
+This requirement applies even to declarations that do not specify the \grammarterm{postcondition-specifier}. \added{The \tcode{const} qualifier of the parameter can be part of the dependent type. }Arrays and functions are still usable when
+declared with the equivalent pointer types ([dcl.fct]). 
+\end{note}
+\begin{example}
+\begin{codeblock}
+int f(const int i)
+post (r: r == i);
+int g(int i)
+post (r: r == i); // error: i is not declared const.
+int f(int i) // error: i is not declared const.
+{
+  return i;
+}
+
+int g(int i) // error: i is not declared const.
+{
+  return i;
+}
+\end{codeblock}
+\begin{addedblock}
+\begin{codeblock}
+template <typename T>
+void f(T t) post(t > 0);
+  
+int main() {
+  int i = 1;
+  f<int>(i);        // error 
+  f<const int>(i);  // OK
+}
+\end{codeblock}
+\end{addedblock}
+\end{example}
+\end{adjustwidth}
+
+Modify [dcl.contract.res] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the implementation is permitted to introduce a temporary object for the return value
+([class.temporary]), the result name may instead denote that temporary object.
+\begin{note}
+It follows that, for objects that can be returned in registers, the address of the object
+referred to by the result name might be a temporary materialized to hold the value before
+it is used to initialize the actual result object. Modifications to that temporary’s value are
+still \added{in sequence with the evaluation of the postcondition assertions and }expected to be retained for the eventual result object.
+\end{note}
+\begin{example}
+\begin{addedblock}
+\begin{codeblock}
+int f()
+  post(r : ++const_cast<int&>(r) == 1)
+  post(r : ++const_cast<int&>(r) == 2) // The postcondition check is guaranteed to succeed.
+{
+  return 0; 
+}
+\end{codeblock}
+\end{addedblock}
+\begin{codeblock}
+struct A {}; // trivially copyable
+
+struct B {   // not trivially copyable
+  B() {}
+  B(const B&) {}
+};
+
+template <typename T>
+T f(T* ptr)
+  post(r: &r == ptr)
+{
+  return T{};
+}
+
+int main() {
+  A a = f(&a); // The postcondition check may fail.
+  B b = f(&b); // The postcondition check is guaranteed to succeed.
+}
+\end{codeblock}
+\end{example}
+\end{adjustwidth}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

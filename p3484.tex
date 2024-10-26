@@ -88,14 +88,14 @@ int f(int i) {  // \tcode{i} is not \tcode{const}
   return i;
 }
 \end{codeblock}
-Such an implementation blatantly fails to satisfy the postcondition of \tcode{f}, and is therefore incorrect. However the defect will not be caught by checking the precondition assertion of \tcode{f}, because its predicate always evaluates to \tcode{true}:
+Such an implementation blatantly fails to satisfy the postcondition of \tcode{f}, and is therefore incorrect. However the defect will not be caught by checking the postcondition assertion of \tcode{f}, because its predicate always evaluates to \tcode{true}:
 \begin{codeblock}
 void test() {
   int j = f(3); // no contract violation detected
   // \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
 }
 \end{codeblock}
-For this reason, \cite{P2900R10} makes the above implementation of \tcode{f} ill-formed: \tcode{const} cannot be dropped from any function parameter odr-used in a precondition assertion.
+For this reason, \cite{P2900R10} makes the above implementation of \tcode{f} ill-formed: \tcode{const} cannot be dropped from any function parameter odr-used in a postcondition assertion.
 
 Further, \cite{P2900R10} Section 3.4.4 specifies that if a non-reference function parameter is odr-used by a postcondition assertion, and that function is implemented as a coroutine, the program is ill-formed, \emph{even if} all such function parameters have been declared \tcode{const} by the user.
 
@@ -144,8 +144,8 @@ In the program above, even if the postcondition assertion of \tcode{Base::f} is 
 
 We are aware of four possible options for dealing with this problem. These are, from most to least restrictive:
 \begin{enumerate}
-\item Disallow odr-using any non-reference function parameters in a postcondition assertion that applies to a virtual function, regardless of whether they are declared \tcode{const}, unless that function is marked \tcode{final} or is a member function of a class marked \tcode{final}.
-\item Require that if a non-reference parameter is odr-used by a postcondition assertion on a virtual function, it must also be declared \tcode{const} in every declaration of an overriding function.
+\item Disallow odr-using any non-reference function parameter in a postcondition assertion that applies to a virtual function, regardless of whether that parameter is declared \tcode{const}, unless that function is marked \tcode{final} or is a member function of a class marked \tcode{final}.
+\item Require that if a non-reference parameter is odr-used by a postcondition assertion on a virtual function, that parameter must also be declared \tcode{const} in every declaration of every overriding function.
 \item Allow overriding functions to drop \tcode{const} from a non-reference function parameter, with no special provision, i.e., ``you get what you get'': in the virtual function call above, which invokes \tcode{Derived::f}, the postcondition check on \tcode{Base::f} succeeds even though \tcode{Derived::f} does not satisfy the postcondition of \tcode{Base::f}.
 \item Allow overriding functions to drop \tcode{const} from a non-reference function parameter, but make it undefined behaviour to actually modify a parameter object in an overriding function if that parameter is a non-reference parameter declared \tcode{const} in an overridden function.
 \end{enumerate}
@@ -184,7 +184,7 @@ Option~3 does not suffer from the above downsides. Option~3 is also the status q
 
 However, there is a remedy available: if an overriding function drops the \tcode{const} on a parameter odr-used in the postcondition assertion of an overridden function, an implementation can easily issue a \emph{warning}. The crucial difference to the coroutine case is that the implementation \emph{knows} that the function is virtual at the point of declaration. While we cannot normatively mandate such a warning, we can non-normatively recommend it.
 
-We believe that Option~1 and Option~3 are both worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose both options (which are mutually exclusive) to determine which option has more consensus in SG21.  Choosing Option~1 would leave the door open to adopting Option~3 at some point in the future, but not the other way around.
+We believe that Option~1 and Option~3 are both worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose both options (which are mutually exclusive) to determine which option has more consensus in SG21.  Note that choosing Option~1 would leave the door open to adopting Option~3 at some point in the future, but not the other way around.
 
 \pagebreak %% MANUAL %%
 
@@ -199,8 +199,8 @@ Modify [dcl.contract.func] as follows:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
 non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type\added{; if the function is virtual
-it shall be marked with the virt-specifier \tcode{final} (see [class.virtual]) or it shall be a a member function of a class with the
-class-virt-specifier \tcode{final} (see [class.pre])}.
+it shall be marked with the \grammarterm{virt-specifier} \tcode{final} (see [class.virtual]) or it shall be a a member function of a class with the
+\grammarterm{class-virt-specifier} \tcode{final} (see [class.pre])}.
 \begin{note}
 This requirement applies even to declarations
 that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).

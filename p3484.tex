@@ -183,7 +183,7 @@ However, there is a remedy available: if an overriding function drops the \tcode
 
 We believe that Options 1 --- 3 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all three options (which are mutually exclusive) to determine which option has more consensus in SG21. 
 
-Note that choosing Option~1 would leave the door open to adopting Option~2 or Option~3 at non-breaking changes some point in the future, while Option~2 could only be evolved towards Option~3 but not Option~1, and Option~3 could not be evolved towards either of the other options.
+Note that choosing Option~1 would leave the door open to adopting Option~2 or Option~3 without breaking changes at some point in the future, while Option~2 could only be evolved towards Option~3 but not Option~1, and Option~3 could not be evolved towards either of the other options.
 
 \section{Proposed wording}
 
@@ -212,8 +212,8 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 Modify [dcl.contract.func] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-If the predicate of a postcondition assertion of a function \added{$f$} odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, that parameter \added{ and the corresponding parameter on any functions that override $f$} shall be declared \tcode{const} and shall not have array or function type \added{on all declarations of $f$ and its overrides}.
+If the predicate of a postcondition assertion of a function \added{$f$ }odr-uses ([basic.def.odr]) a
+non-reference parameter of \removed{that function}\added{$f$}, that parameter \added{and the corresponding parameter on any functions that override $f$ }shall be declared \tcode{const} and shall not have array or function type.
 \begin{note}
 This requirement applies even to declarations
 that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).

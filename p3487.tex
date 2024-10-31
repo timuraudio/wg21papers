@@ -1,0 +1,363 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Contracts for C++: trivially copyable \\ parameters in postconditions}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3487R0 \\
+Date: &2024-10-31 \\
+Project: & Programming Language C++ \\
+Audience: & SG21, EWG
+\end{tabular}
+
+\begin{abstract}
+This paper considers the case where a non-reference parameter of trivially copyable and trivially destructible type is odr-used in a postcondition assertion and that parameter is passed to the function in a register, which may lead to the postcondition predicate seeing a copy of the parameter object. This in turn can lead to unexpected behaviour. We propose several alternatives for how to address this problem in the Contracts MVP \cite{P2900R10}.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Background}
+\label{bg}
+
+For efficiency reasons, the major ABIs used for implementations of C++ allow objects of trivially copyable and trivially destructible type to be passed to a function and returned from a function via \emph{registers}. This has the consequence that such objects do not exist in memory and do not have an address. The C++ Standard accommodates this practice via the following provision (\href{https://timsong-cpp.github.io/cppwp/n4950/class.temporary#3}{[class.temporary]/3}):
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+When an object of class type \tcode{X} is passed to or returned from a function, if \tcode{X} has at least one eligible copy or move constructor ([special]), each such constructor is trivial, and the destructor of \tcode{X} is either trivial or deleted, implementations are permitted to create a temporary object to hold the function parameter or result object. The temporary object is constructed from the function argument or return value, respectively, and the function's parameter or return object is initialized as if by using the eligible trivial constructor to copy the temporary (even if that constructor is inaccessible or would not be selected by overload resolution to perform a copy or move of the object).
+\end{adjustwidth}
+
+In C++ today, there is no context where the pre-temporary copy versions of these objects could be directly observable by the user; however, the Contracts MVP \cite{P2900R10} adds postcondition assertions, which is such a context. We thus need to specify the behaviour for these cases.
+
+For the case of an object \emph{returned from} a function, which can be observed in a postcondition assertion via the introduced \emph{result name}, \cite{P2900R10} already specifies:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the implementation is permitted to introduce a temporary object for the return value
+([class.temporary]), the result name may instead denote that temporary object.
+\end{adjustwidth}
+
+This provision is directly observable. Consider:
+
+\pagebreak %% MANUAL %%
+\begin{codeblock}
+class X { /* ... */ };
+
+X f(const X* ptr) post(r: &r == ptr) {
+  return X{};
+}
+
+int main() {
+  X x = f(&x);
+}
+\end{codeblock}
+
+In the example above, if \tcode{X} is \emph{not} a trivially copyable and trivially destructible type, the postcondition check of \tcode{f} is guaranteed to pass, because \tcode{r} must denote the return object \tcode{x} in \tcode{main()}; however, if \tcode{X} \emph{is} a trivially copyable and trivially destructible type, the postcondition check may fail, because \tcode{r} may instead denote a temporary object.
+
+So far, so good. However, \cite{P2900R10} has not explicitly considered the other half of this phenomenon --- the case of an object \emph{passed to} a function, i.e., a non-reference parameter. Consider:
+
+\begin{codeblock}
+X* ptr;
+
+void f(const X x) post (ptr == &x) {
+  ptr = &x;
+}
+\end{codeblock}
+If \tcode{X} is a trivially copyable and trivially destructible type, is this postcondition guaranteed to pass or not? \cite{P2900R10} is silent on this issue; the wording could be read one way or another.
+
+At this point, we could decide to clarify in \cite{P2900R10} that the postcondition is \emph{not} guaranteed to pass in this case, consistent with the return object case, and move on. However, such a specification would have surprising consequences which are worth considering first.
+
+\section{The problem}
+
+If the postcondition assertion is allowed to see a different copy of a parameter object than the function body, the problem is that these two versions of the same object could diverge, rendering the postcondition meaningless. Any parameter odr-used in a postcondition must be declared \tcode{const}, but that means that the function body could still modify any \tcode{mutable} members of that class, and the postcondition assertion may not see those modifications.
+
+Now, of course we should not write postconditions that directly depend on such mutable state anyway, and if we do, we have already shot ourselves in the foot. But the problem at hand is more subtle: we may have a type whose correctness is connected to that mutable state.
+
+Consider a class type holding some integer value. This value is accessible via a public \tcode{value()} member function:
+
+\begin{codeblock}
+class Integer {
+  // ...
+public:
+  int value() const;
+};
+\end{codeblock}
+
+The \tcode{value()} member function is marked \tcode{const} because it does not change the \emph{observable} state of the object --- it always returns the same value.
+
+Now, consider the case where this value can be computed only once --- perhaps because it relies on hardware that is too expensive to use more than once, or because it consumes data that cannot be recovered to produce the value, or for some other reason:
+
+\begin{codeblock}
+int computeOnce()
+{
+  static bool called = false;
+  if (called) {
+    contract_assert(false);
+  }
+  else {
+    called = true;
+    return 42;
+  }
+}
+\end{codeblock}
+
+Now, we implement our \tcode{Integer} class such that it retrieves this value and caches it. This process is an implementation detail that does not change the observable behaviour of the class. Therefore, we can maintain the required internal state in private variables marked \tcode{mutable}:
+ \begin{codeblock}
+class Integer {
+  mutable bool _computed = false;
+  mutable int  _value;
+public:
+  int value() const {
+    if (!_computed) {
+      _value = computeOnce();
+      _computed = true;
+    }
+    return d_value;
+  }
+};
+ \end{codeblock}
+ 
+Note that our \tcode{Integer} class, as defined above, is trivially copyable and trivially destructible and therefore may be passed in a register. This leads to a footgun as soon as we pass such an object to a function as a non-reference parameter, and simultaneously odr-use that parameter in the postcondition predicate of the function: 
+ \begin{codeblock}
+int f(const Integer i)
+post(r : r > i.value()) {
+  return s.value() + 5;
+}
+ \end{codeblock}
+If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code breaks: evaluating the postcondition assertion will trigger a second call to \tcode{computeOnce()}, which in turn will cause a contract violation, even though conceptually, the user did nothing wrong.
+ 
+The same problem occurs if the function \tcode{f} is virtual, and \tcode{i} is odr-used in the postcondition predicate of any function that \tcode{f} overrides. In either case, the author of \tcode{f} has only one conceptual \tcode{Integer} object they are dealing with, but we have allowed the compiler to fork that object, pass it to the function via registers, and then never tell the caller that this object has changed value.
+
+This works in C++ today because the original object will never be touched by anything again after it has been packed into registers and passed to the function (remember that it also needs to be trivially destructible, not just trivially copyable). However, the presence of postcondition assertions that can odr-use this object changes that. If we want to allow an implementation to check postcondition assertions \emph{caller-side}, then these postcondition assertions must see the original object before it was forked and passed to the function via registers, thus creating the footgun described above.
+
+\section{Possible solutions}
+
+We are aware of five possible options for dealing with this problem. These are, from most to least
+restrictive:
+
+\begin{enumerate}
+\item Remove postcondition assertions from \cite{P2900R10} entirely.
+\item Remove the ability to odr-use \emph{any} function parameters in postcondition predicates.
+\item Remove the ability to odr-use any \emph{non-reference} function parameters in postcondition predicates.
+\item Remove the ability to odr-use non-reference function parameters in postcondition predicates if the type of the parameter satisfies the requirements for being passed in registers (trivially copyable and trivially destructible).
+\item Require that when a non-reference function parameter is odr-used in a postcondition predicate, the corresponding \grammarterm{id-expression} must refer to the same object as it does in the function body.
+\item Specify that, when a non-reference function parameter is odr-used in a postcondition predicate and the type of the parameter satisfies the requirements for being passed in registers, the corresponding \grammarterm{id-expression} may refer to a different copy of the object than it does in the function body.
+\end{enumerate}
+% TIMUR TODOL TALK ABOUT OPTION 3
+
+Option~1 would be a rather drastic measure at this point. Consider that postcondition assertions are significantly more difficult to specify than preconditions (see \cite{P1323R2}, \cite{P3007R0}, and \cite{P3098R0}), and unlike preconditions, postcondition assertions have so far already generated several known issues that needed fixing in the specification of \cite{P2900R10} (see \cite{P3387R0}, \cite{P3460R0}, \cite{D3483R0}, and \cite{D3484R0}). Option~1 would remove \emph{all} known and unknown footguns from postcondition assertions by removing the feature itself.
+
+We believe that \cite{P2900R10} would still be viable and useful without postcondition assertions. Postcondition assertions have significantly fewer uses than precondition assertions, and their value can to a certain extent also be achieved with good unit test coverage. 
+
+For the record, the option of removing postcondition assertions from the Contracts MVP was once before polled in SG21:
+
+\begin{wgpoll}{SG21 Poll, Teleconference 2021-12-14}
+Postconditions should be in the MVP at this time.
+\wgpollresult{1}{7}{3}{4}{1}
+Result: Marginal consensus (if at all).
+\end{wgpoll}
+
+Option~2 is less than ideal in our opinion, because it significantly limits the set of postconditions we can write, and thus significantly limits the usefulness of the feature, until we can add postconditions captures \cite{P3098R0} to the Standard. This option becomes more appealing if we include \cite{P3098R0} in the first version of Contracts that we ship. Postcondition captures would never be referencing parameters in a place they cannot be referenced today, so they would not be impacted by this issue at all. However, capturing parameters for use in a postcondition predicate incurs the cost of a copy, which in many cases is not conceptually necessary, thus violating the ``do not pay for what you do not use'' design principle of C++ (see also \cite{D3484R0} Option~1, which suffers from the same issue).
+
+Option~3 is similar to Option~2, except that it allows reference parameters, which are not affected by any of the issues surrounding copies of objects and are not affected by postcondition captures as proposed in \cite{P3098R0}. However, it still significantly limits the set of postconditions we can write, and in addition encourages users to pass parameters by-reference instead by-value in order to make the postcondition assertion compile, which can lead to more error-prone and less efficient code. We therefore do not consider Option~3 to be an improvement over Option~2.
+
+Option~4 is less restrictive than Options 1 --- 3, however it is arguably confusing and brittle. That a particular type is \emph{not} trivially copyable and trivially destructible is not something that code should guarantee to its clients indefinitely in all cases; conversely, making a type trivially copyable and trivially destructible should not break client code. We made a similar choice to not discriminate on particular type traits in the postcondition assertions of a function when we decided that whether a type is trivially movable should not affect whether a non-reference parameter of that type can be odr-used in the postcondition assertion of a coroutine (i.e., when we rejected \cite{P3387R0} Option 5b).
+
+Option~5 removes the above footgun without making any code ill-formed. It is therefore arguably the optimal choice with respect to the user experience of dealing with code like the above. However, Option~5 comes with a cost: it would make it impossible to implement caller-side postcondition checking without an ABI break.
+
+Not allowing caller-side postcondition checking would prevent the simplest implementations of virtual function contract checking.  It would also make it impossible to enable contract checking for functions whose implementation is in a translation unit that was compiled without contract checks enabled. The alternative, imposing an ABI break on all users who wish to add postcondition assertions to their functions, would arguably do significant harm to the adoption of Contracts in the C++ ecosystem, which is why one of the fundamental design principles of the Contracts MVP (\cite{P2900R10} Principle 16) is to avoid such an ABI break.
+
+Option~6 makes the behaviour of objects passed to a function in registers consistent with the behaviour of objects returned from a function in registers. It is therefore arguably the optimal choice with respect to having a straightforward specification and implementation of the feature, enabling caller-side checking, avoiding ABI issues, not making any user code unnecessarily ill-formed, and not imposing any unnecessary run-time cost on the user.
+
+However, the tradeoff of Option~6 is that the above footgun remains. Note that the footgun only occurs in rare edge cases, in particular when a trivially copyable, trivially destructible, \tcode{const} object passed to a function as a non-reference parameter relies on mutable state for its correctness, and a postcondition assertion would break if it happens to observe an earlier version of that mutable state. Note further that such cases could potentially be mitigated by an implementation issuing a warning when a trivially copyable, trivially destructible type that has \tcode{mutable} members (including in any of its subtypes) is used as the type of a function parameter odr-used in a postcondition assertion of that function or another function that that function overrides.
+
+\section{Proposed wording}
+
+The proposed wording changes are relative to the wording proposed in \cite{P2900R10}.
+
+\subsection{Option 1}
+
+Remove all wording that relates to:
+\begin{itemize}
+\item The \tcode{pre} identifier with special meaning;
+\item The \emph{postcondition-specifier} and \emph{result-name-introducer} grammar non-terminals;
+\item Postcondition assertions and result names;
+\item The \tcode{pre} enumeration value in \tcode{std::contracts::assertion_kind}.
+\end{itemize}
+The exact wording diff is not provided here due to its length.
+
+\subsection{Option 2}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+\removed{non\-reference }parameter of that function, \removed{that parameter shall be declared \tcode{const} and shall not have array or function type}\added{the program is ill-formed}.
+\begin{note}
+This requirement applies even to declarations
+that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\begin{example}
+\tcode{[...]}
+\end{example}
+\end{adjustwidth}
+
+\subsection{Option 3}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+non-reference parameter of that function, \removed{that parameter shall be declared \tcode{const} and shall not have array or function type}\added{the program is ill-formed}.
+\begin{note}
+This requirement applies even to declarations
+that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\begin{example}
+\tcode{[...]}
+\end{example}
+\end{adjustwidth}
+
+\subsection{Option 4}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+non-reference parameter of that function, that parameter shall be declared \tcode{const}\added{, }\removed{and }shall not have array or function type\added{, and shall not have a type for which the implementation is permitted to create a temporary object to hold the function parameter ([class.temporary])}.
+\begin{note}
+This requirement applies even to declarations
+that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\begin{example}
+\tcode{[...]}
+\end{example}
+\end{adjustwidth}
+
+\subsection{Option 5}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type.
+\begin{note}
+This requirement applies even to declarations
+that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\begin{example}
+\tcode{[...]}
+\end{example}
+
+\added{If the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]), the corresponding \emph{id-expression} in the predicate of a postcondition assertion denotes the same object as in the function body.}
+\end{adjustwidth}
+
+\subsection{Option 6}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type.
+\begin{note}
+This requirement applies even to declarations
+that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\begin{example}
+\tcode{[...]}
+\end{example}
+
+\added{If the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]), it is unspecified whether the corresponding \emph{id-expression} in the predicate of a postcondition assertion denotes that temporary object or the original parameter object. [ \emph{Note:} It follows that, for objects that can be passed in registers, the postcondition assertion might not see any modifications of \tcode{mutable} subobjects ([dcl.stc]) of the parameter object performed by the function or a function overriding it. --- \emph{end note} ]}
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgements}
+Thanks to Alisdair Meredith for his helpful remarks while drafting this paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

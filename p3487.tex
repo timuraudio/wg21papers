@@ -101,7 +101,10 @@ For efficiency reasons, the major ABIs used for implementations of C++ allow obj
 When an object of class type \tcode{X} is passed to or returned from a function, if \tcode{X} has at least one eligible copy or move constructor ([special]), each such constructor is trivial, and the destructor of \tcode{X} is either trivial or deleted, implementations are permitted to create a temporary object to hold the function parameter or result object. The temporary object is constructed from the function argument or return value, respectively, and the function's parameter or return object is initialized as if by using the eligible trivial constructor to copy the temporary (even if that constructor is inaccessible or would not be selected by overload resolution to perform a copy or move of the object).
 \end{adjustwidth}
 
-In C++ today, there is no context where the pre-temporary copy versions of these objects could be directly observable by the user; however, the Contracts MVP \cite{P2900R10} adds postcondition assertions, which is such a context. We thus need to specify the behaviour for these cases.
+In C++ today, there is (almost\footnote{An object that meets the requirements to be passed in a register may still have a user-provide constructor that may observe its address through the use of \tt{this}, and that address may then differ from the address seen for the parameter within the function body.}) no context where the pre-temporary copy versions of these objects could be directly observable by the user; however, the Contracts MVP \cite{P2900R10} adds precondition and postcondition assertions, which can be such a context where that pre-temporary object is not only observable, but usable by name.
+
+The current wording does not say it explicitly, but there is an assumption within it that, once a temporary has been created to ``hold the function parameter or result object'', that temporary will be referred to whenever the parameter name is used going forward.   In practice in C++ today, that is always the case.    Precondition assertions, even if checked caller-side, will potentially observe the pre-temporary object but will do so before the copy is made to pass the object into a function.   Postcondition assertions, however, if implemented as caller-side checks that only know about the pre-temporary object, will be referencing the object \emph{after} it has also been copied and the copy has been used within the function body.
+In both of these cases we must clarify exactly what semantics we want to allow, and what that means for implementations, users, and 
 
 For the case of an object \emph{returned from} a function, which can be observed in a postcondition assertion via the introduced \emph{result name}, \cite{P2900R10} already specifies:
 
@@ -112,6 +115,7 @@ If the implementation is permitted to introduce a temporary object for the retur
 
 This provision is directly observable. Consider:
 
+%jmb: page break between code block and lead-in sentence seems much harder to read, why not put this above the line before?
 \pagebreak %% MANUAL %%
 \begin{codeblock}
 class X { /* ... */ };
@@ -125,7 +129,7 @@ int main() {
 }
 \end{codeblock}
 
-In the example above, if \tcode{X} is \emph{not} a trivially copyable and trivially destructible type, the postcondition check of \tcode{f} is guaranteed to pass, because \tcode{r} must denote the return object \tcode{x} in \tcode{main()}; however, if \tcode{X} \emph{is} a trivially copyable and trivially destructible type, the postcondition check may fail, because \tcode{r} may instead denote a temporary object.
+In the example above, if \tcode{X} is \emph{not} a trivially copyable and trivially destructible type, the postcondition check of \tcode{f} is guaranteed to pass, because \tcode{r} must denote the return object \tcode{x} in \tcode{main()}; however, if \tcode{X} \emph{is} a trivially copyable and trivially destructible type, the postcondition check may\footnote{In practice, whether this check fails will depend on both optimization levels and whether \tcode{f} is inlined into \tcode{main}} fail, because \tcode{r} may instead denote a temporary object.
 
 So far, so good. However, \cite{P2900R10} has not explicitly considered the other half of this phenomenon --- the case of an object \emph{passed to} a function, i.e., a non-reference parameter. Consider:
 
@@ -142,7 +146,7 @@ At this point, we could decide to clarify in \cite{P2900R10} that the postcondit
 
 \section{The problem}
 
-If the postcondition assertion is allowed to see a different copy of a parameter object than the function body, the problem is that these two versions of the same object could diverge, rendering the postcondition meaningless. Any parameter odr-used in a postcondition must be declared \tcode{const}, but that means that the function body could still modify any \tcode{mutable} members of that class, and the postcondition assertion may not see those modifications.
+If the postcondition assertion is allowed to see a different copy of a parameter object than the function body, the problem is that these two versions of the same object could diverge, rendering the postcondition's actual meaning significantly more difficult to reason about. Any parameter odr-used in a postcondition must be declared \tcode{const}, but that means that the function body could still modify any \tcode{mutable} members of that class, and the postcondition assertion may not see those modifications.
 
 Now, of course we should not write postconditions that directly depend on such mutable state anyway, and if we do, we have already shot ourselves in the foot. But the problem at hand is more subtle: we may have a type whose correctness is connected to that mutable state.
 
@@ -185,7 +189,7 @@ public:
       _value = computeOnce();
       _computed = true;
     }
-    return d_value;
+    return _value;
   }
 };
  \end{codeblock}
@@ -197,9 +201,10 @@ post(r : r > i.value()) {
   return s.value() + 5;
 }
  \end{codeblock}
-If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code breaks: evaluating the postcondition assertion will trigger a second call to \tcode{computeOnce()}, which in turn will cause a contract violation, even though conceptually, the user did nothing wrong.
- 
-The same problem occurs if the function \tcode{f} is virtual, and \tcode{i} is odr-used in the postcondition predicate of any function that \tcode{f} overrides. In either case, the author of \tcode{f} has only one conceptual \tcode{Integer} object they are dealing with, but we have allowed the compiler to fork that object, pass it to the function via registers, and then never tell the caller that this object has changed value.
+If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code breaks: evaluating the postcondition assertion will trigger a second call to \tcode{computeOnce()}, which in turn will cause a contract violation, even though for any user reading this code without a deep understanding of objects being passed in registers will see nothing obviously incorrect with this code.
+
+%JMB: I wouldn't relate this to the virtual case, they're really separate decisions, virtual just has the disadvantage that it doesn't currently enforce const in the body that is invoked --- there's still only a "fork" of the object in teh trivially copyable case, and that is independent of being virtual.
+% The same problem occurs if the function \tcode{f} is virtual, and \tcode{i} is odr-used in the postcondition predicate of any function that\tcode{f} overrides. In either case, the author of \tcode{f} has only one conceptual \tcode{Integer} object they are dealing with, but we have allowed the compiler to fork that object, pass it to the function via registers, and then never tell the caller that this object has changed value.
 
 This works in C++ today because the original object will never be touched by anything again after it has been packed into registers and passed to the function (remember that it also needs to be trivially destructible, not just trivially copyable). However, the presence of postcondition assertions that can odr-use this object changes that. If we want to allow an implementation to check postcondition assertions \emph{caller-side}, then these postcondition assertions must see the original object before it was forked and passed to the function via registers, thus creating the footgun described above.
 

@@ -156,60 +156,45 @@ If the postcondition assertion is allowed to see a different copy of a parameter
 
 Now, of course we should not write postconditions that directly depend on such mutable state anyway, and if we do, we have already shot ourselves in the foot. But the problem at hand is more subtle: we may have a type whose correctness is connected to that mutable state.
 
-Consider a class type holding some integer value. This value is accessible via a public \tcode{value()} member function:
+Consider a class \tcode{RandomInteger} holding a random integer value:
 
 \begin{codeblock}
-class Integer {
-  // ...
+class RandomInteger {
+  int _value = rand();
 public:
-  int value() const;
+  int value() const { 
+    return _value; 
+  }
 };
 \end{codeblock}
 
-The \tcode{value()} member function is marked \tcode{const} because it does not change the \emph{observable} state of the object --- it always returns the same value.
+The value is computed once when an object of type \tcode{RandomInteger} is created and does not change afterwards. This value is accessible via a public \tcode{value()} member function, which is marked \tcode{const} because it does not change the \emph{observable} state of the object --- it always returns the same value throughout its lifetime.
 
-Now, consider the case where this value can be computed only once --- perhaps because it relies on hardware that is too expensive to use more than once, or because it consumes data that cannot be recovered to produce the value, or for some other reason:
-
-\begin{codeblock}
-int computeOnce()
-{
-  static bool called = false;
-  if (called) {
-    contract_assert(false);
-  }
-  else {
-    called = true;
-    return 42;
-  }
-}
-\end{codeblock}
-
-Now, we implement our \tcode{Integer} class such that it retrieves this value and caches it. This process is an implementation detail that does not change the observable behaviour of the class. Therefore, we can maintain the required internal state in private variables marked \tcode{mutable}:
+As an implementation detail, we might compute the value lazily when \tcode{value()} is called for the first time, and cache it afterwards, with no observable change in behaviour:
  \begin{codeblock}
-class Integer {
+class RandomInteger {
   mutable bool _computed = false;
   mutable int  _value;
 public:
   int value() const {
     if (!_computed) {
-      _value = computeOnce();
+      _value = rand();
       _computed = true;
     }
     return _value;
   }
 };
  \end{codeblock}
- 
-Note that our \tcode{Integer} class, as defined above, is trivially copyable and trivially destructible and therefore may be passed in a register. This leads to a footgun as soon as we pass such an object to a function as a non-reference parameter, and simultaneously odr-use that parameter in the postcondition predicate of the function: 
+Note that our \tcode{RandomInteger} class, as defined above, is trivially copyable and trivially destructible and therefore may be passed in a register. This leads to a footgun as soon as we pass such an object to a function as a non-reference parameter, and simultaneously odr-use that parameter in the postcondition predicate of the function: 
  \begin{codeblock}
-int f(const Integer i)
-post(r : r > i.value()) {
-  return s.value() + 5;
+int f(const RandomInteger i)
+post(r: r & i.value() == 0) {
+  return ~i.value();
 }
  \end{codeblock}
-If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code breaks: evaluating the postcondition assertion will trigger a second call to \tcode{computeOnce()}, which in turn will cause a contract violation, even though for any user reading this code without a deep understanding of objects being passed in registers will see nothing obviously incorrect with this code.
+If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code will break. The postcondition assertion will see a different integer value returned from \tcode{i.value()} than the body of the function, and thus fail where it should pass or vice versa, even though for any user reading this code without a deep understanding of objects being passed in registers will see nothing obviously incorrect with this code.
 
-This works in C++ today because the original object will never be touched by anything again after it has been packed into registers and passed to the function (remember that it also needs to be trivially destructible, not just trivially copyable). However, the presence of postcondition assertions that can odr-use this object changes that. If we want to allow an implementation to check postcondition assertions \emph{caller-side}, then these postcondition assertions must see the original object before it was forked and passed to the function via registers, thus creating the footgun described above.
+Such code works in C++ today because after the parameter object has been packed into registers and passed to the function,  the original object will never be touched by anything again (remember that it also needs to be trivially destructible, not just trivially copyable). However, the presence of postcondition assertions that can odr-use this object changes that. If we want to allow an implementation to check postcondition assertions \emph{caller-side}, then these postcondition assertions must see the original object before it was forked and passed to the function via registers, thus creating the footgun described above.
 
 \section{Possible solutions}
 
@@ -375,7 +360,7 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section*{Acknowledgements}
-Thanks to Alisdair Meredith for his helpful remarks while drafting this paper.
+Thanks to Alisdair Meredith and John Lakos for their helpful remarks during drafting of this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

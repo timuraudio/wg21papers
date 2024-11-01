@@ -239,14 +239,10 @@ still \added{in sequence with the evaluation of the postcondition assertions and
 \begin{example}
 \begin{addedblock}
 \begin{codeblock}
-% TD: This code example is not good because it relies on
-% each postcondition being evaluated exactly once with a 
-% checked semantic, which is not something P2900 guarantees.
-% We need a different example to illustrate the point here!
 int f()
-  post(r : ++const_cast<int&>(r) == 1)
-  post(r : ++const_cast<int&>(r) == 2) // The postcondition check is guaranteed to succeed.
-{
+  post(r : ++const_cast<int&>(r) == 1) 
+  post(r : ++const_cast<int&>(r) == 2) // The postcondition check is guaranteed to succeed,
+{                                      // assuming both checks are performed exactly once
   return 0; 
 }
 \end{codeblock}

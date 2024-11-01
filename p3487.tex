@@ -106,10 +106,10 @@ These issues should be considered together, and ideally resolved in a consistent
 For efficiency reasons, the major ABIs used for implementations of C++ allow objects of trivially copyable and trivially destructible type to be passed to a function and returned from a function via \emph{registers}. This has the consequence that such objects do not exist in memory and do not have an address. The C++ Standard accommodates this practice via the following provision (\href{https://timsong-cpp.github.io/cppwp/n4950/class.temporary#3}{[class.temporary]/3}):
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-When an object of class type \tcode{X} is passed to or returned from a function, if \tcode{X} has at least one eligible copy or move constructor ([special]), each such constructor is trivial, and the destructor of \tcode{X} is either trivial or deleted, implementations are permitted to create a temporary object to hold the function parameter or result object. The temporary object is constructed from the function argument or return value, respectively, and the function's parameter or return object is initialized as if by using the eligible trivial constructor to copy the temporary (even if that constructor is inaccessible or would not be selected by overload resolution to perform a copy or move of the object).
+When an object of class type \tcode{X} is passed to or returned from a function, if \tcode{X} has at least one eligible copy or move constructor ([special]), each such constructor is trivial, and the destructor of \tcode{X} is either trivial or deleted, implementations are permitted to create a temporary object to hold the function parameter or result object. The temporary object is constructed from the function argument or return value, respectively, and the function's parameter or return object is initialised as if by using the eligible trivial constructor to copy the temporary (even if that constructor is inaccessible or would not be selected by overload resolution to perform a copy or move of the object).
 \end{adjustwidth}
 
-In C++ today, there is (almost\footnote{An object that meets the requirements to be passed in a register may still have a user-provide constructor that may observe its address through the use of \tt{this}, and that address may then differ from the address seen for the parameter within the function body.}) no context where the pre-temporary copy versions of these objects could be directly observable by the user; however, the Contracts MVP \cite{P2900R10} adds precondition and postcondition assertions, which can be such a context where that pre-temporary object is not only observable, but usable by name.
+In C++ today, there is (with one minor exception\footnote{An object that meets the requirements to be passed in a register may still have a user-provide constructor that may observe its address through the use of \tcode{this}, and that address may then differ from the address seen for the parameter within the function body.}) no context where the pre-temporary copy versions of these objects could be directly observable by the user; however, the Contracts MVP \cite{P2900R10} adds precondition and postcondition assertions, which can be such a context where that pre-temporary object is not only observable, but usable by name.
 
 The current wording does not say it explicitly, but there is an assumption within it that, once a temporary has been created to ``hold the function parameter or result object'', that temporary will be referred to whenever the parameter name is used going forward.   In practice in C++ today, that is always the case.    Precondition assertions, even if checked caller-side, will potentially observe the pre-temporary object but will do so before the copy is made to pass the object into a function.   Postcondition assertions, however, if implemented as caller-side checks that only know about the pre-temporary object, will be referencing the object \emph{after} it has also been copied and the copy has been used within the function body.
 In both of these cases we must clarify exactly what semantics we want to allow, and what that means for implementations, users, and 
@@ -209,9 +209,6 @@ post(r : r > i.value()) {
  \end{codeblock}
 If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code breaks: evaluating the postcondition assertion will trigger a second call to \tcode{computeOnce()}, which in turn will cause a contract violation, even though for any user reading this code without a deep understanding of objects being passed in registers will see nothing obviously incorrect with this code.
 
-%JMB: I wouldn't relate this to the virtual case, they're really separate decisions, virtual just has the disadvantage that it doesn't currently enforce const in the body that is invoked --- there's still only a "fork" of the object in teh trivially copyable case, and that is independent of being virtual.
-% The same problem occurs if the function \tcode{f} is virtual, and \tcode{i} is odr-used in the postcondition predicate of any function that\tcode{f} overrides. In either case, the author of \tcode{f} has only one conceptual \tcode{Integer} object they are dealing with, but we have allowed the compiler to fork that object, pass it to the function via registers, and then never tell the caller that this object has changed value.
-
 This works in C++ today because the original object will never be touched by anything again after it has been packed into registers and passed to the function (remember that it also needs to be trivially destructible, not just trivially copyable). However, the presence of postcondition assertions that can odr-use this object changes that. If we want to allow an implementation to check postcondition assertions \emph{caller-side}, then these postcondition assertions must see the original object before it was forked and passed to the function via registers, thus creating the footgun described above.
 
 \section{Possible solutions}
@@ -227,7 +224,10 @@ restrictive:
 \item Require that when a non-reference function parameter is odr-used in a postcondition predicate, the corresponding \grammarterm{id-expression} must refer to the same object as it does in the function body.
 \item Specify that, when a non-reference function parameter is odr-used in a postcondition predicate and the type of the parameter satisfies the requirements for being passed in registers, the corresponding \grammarterm{id-expression} may refer to a different copy of the object than it does in the function body.
 \end{enumerate}
-% TIMUR TODOL TALK ABOUT OPTION 3
+
+Below we discuss the tradeoffs of each option.
+
+\subsection*{Option 1}
 
 Option~1 would be a rather drastic measure at this point. Consider that postcondition assertions are significantly more difficult to specify than preconditions (see \cite{P1323R2}, \cite{P3007R0}, and \cite{P3098R0}), and unlike preconditions, postcondition assertions have so far already generated several known issues that needed fixing in the specification of \cite{P2900R10} (see \cite{P3387R0}, \cite{P3460R0}, \cite{P3483R0}, \cite{D3484R1}, and \cite{D3489R0}). Option~1 would remove \emph{all} known and unknown footguns from postcondition assertions by removing the feature itself.
 
@@ -241,21 +241,39 @@ Postconditions should be in the MVP at this time.
 Result: Marginal consensus (if at all).
 \end{wgpoll}
 
-Option~2 is less than ideal in our opinion, because it significantly limits the set of postconditions we can write, and thus significantly limits the usefulness of the feature, until we can add postconditions captures \cite{P3098R0} to the Standard. This option becomes more appealing if we include \cite{P3098R0} in the first version of Contracts that we ship. Postcondition captures would never be referencing parameters in a place they cannot be referenced today, so they would not be impacted by this issue at all. However, capturing parameters for use in a postcondition predicate incurs the cost of a copy, which in many cases is not conceptually necessary, thus violating the ``do not pay for what you do not use'' design principle of C++ (see also \cite{D3484R1} Option~1, which suffers from the same issue).
+\subsection*{Option 2}
+
+Option~2 is likewise less than ideal in our opinion, because it significantly limits the set of postconditions we can write, and thus significantly limits the usefulness of the feature, until we can add postconditions captures \cite{P3098R0} to the Standard. This option becomes more appealing if we include \cite{P3098R0} in the first version of Contracts that we ship. Postcondition captures would never be referencing parameters in a place they cannot be referenced today, so they would not be impacted by this issue at all. However, capturing parameters for use in a postcondition predicate incurs the cost of a copy, which in many cases is not conceptually necessary, thus violating the ``do not pay for what you do not use'' design principle of C++ (see also \cite{D3484R1} Option~1, which suffers from the same issue).
+
+\subsection*{Option 3}
 
 Option~3 is similar to Option~2, except that it allows reference parameters, which are not affected by any of the issues surrounding copies of objects and are not affected by postcondition captures as proposed in \cite{P3098R0}. However, it still significantly limits the set of postconditions we can write, and in addition encourages users to pass parameters by-reference instead by-value in order to make the postcondition assertion compile, which can lead to more error-prone and less efficient code. We therefore do not consider Option~3 to be an improvement over Option~2.
 
-Option~4 is less restrictive than Options 1 --- 3, however it is arguably confusing and brittle. That a particular type is \emph{not} trivially copyable and trivially destructible is not something that code should guarantee to its clients indefinitely in all cases; conversely, making a type trivially copyable and trivially destructible should not break client code. We made a similar choice to not discriminate on particular type traits in the postcondition assertions of a function when we decided that whether a type is trivially movable should not affect whether a non-reference parameter of that type can be odr-used in the postcondition assertion of a coroutine (i.e., when we rejected \cite{P3387R0} Option 5b).
+\subsection*{Option 4}
+
+Unlike Options 1 --- 3, Option 4 is not a radical solution that removes vast swathes of functionality from \cite{P2900R10}. However, Option 4 is arguably confusing and brittle. That a particular type is \emph{not} trivially copyable and trivially destructible is not something that code should guarantee to its clients indefinitely in all cases; conversely, making a type trivially copyable and trivially destructible should not break client code. We made a similar choice to not discriminate on particular type traits in the postcondition assertions of a function when we decided that whether a type is trivially movable should not affect whether a non-reference parameter of that type can be odr-used in the postcondition assertion of a coroutine (i.e., when we rejected \cite{P3387R0} Option 5b).
+
+\subsection*{Option 5}
 
 Option~5 removes the above footgun without making any code ill-formed. It is therefore arguably the optimal choice with respect to the user experience of dealing with code like the above. However, Option~5 comes with a cost: it would make it impossible to implement caller-side postcondition checking without an ABI break.
 
 Not allowing caller-side postcondition checking would prevent the simplest implementations of virtual function contract checking.  It would also make it impossible to enable contract checking for functions whose implementation is in a translation unit that was compiled without contract checks enabled. The alternative, imposing an ABI break on all users who wish to add postcondition assertions to their functions, would arguably do significant harm to the adoption of Contracts in the C++ ecosystem, which is why one of the fundamental design principles of the Contracts MVP (\cite{P2900R10} Principle 16) is to avoid such an ABI break.
 
+\subsection*{Option 6}
+
 Option~6 makes the behaviour of objects passed to a function in registers consistent with the behaviour of objects returned from a function in registers. It is therefore arguably the optimal choice with respect to having a straightforward specification and implementation of the feature, enabling caller-side checking, avoiding ABI issues, not making any user code unnecessarily ill-formed, and not imposing any unnecessary run-time cost on the user.
 
 However, the tradeoff of Option~6 is that the above footgun remains. Note that the footgun only occurs in rare edge cases, in particular when a trivially copyable, trivially destructible, \tcode{const} object passed to a function as a non-reference parameter relies on mutable state for its correctness, and a postcondition assertion would break if it happens to observe an earlier version of that mutable state. Note further that such cases could potentially be mitigated by an implementation issuing a warning when a trivially copyable, trivially destructible type that has \tcode{mutable} members (including in any of its subtypes) is used as the type of a function parameter odr-used in a postcondition assertion of that function or another function that that function overrides.
 
-\section{Proposed wording}
+\section{Proposal}
+
+We believe that Options 1 --- 6 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all of these options to determine which option has more consensus in SG21. 
+
+Note that choosing Option~1 would leave the door open to adopting any of the other options without breaking changes at some point in the future; Option~2 could only be evolved towards Options 3 -- 6; Option~3 could only be evolved towards Options 4 -- 6; Option~4 could only be evolved towards Options 5 or 6; while Options 5 and 6 are mutually exclusive and cannot be evolved towards any of the other options without breaking changes once adopted.
+
+Note further that choosing Options 1, 2, or 3 would also remove the source of the issues discussed in the two companion papers \cite{D3484R1} and \cite{D3489R0}.
+
+\section{Wording}
 
 The proposed wording changes are relative to the wording proposed in \cite{P2900R10}.
 

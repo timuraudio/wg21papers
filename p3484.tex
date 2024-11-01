@@ -36,7 +36,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
-\title{Contracts for C++: \\ \tcode{const} parameters in postconditions of overridden functions}
+\title{Postconditions odr-using a parameter \\ modified in an overriding function}
 \author{
 Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
 Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
@@ -45,8 +45,8 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P3484R0 \\
-Date: &2024-10-31 \\
+Document \#: & D3484R1 \\
+Date: &2024-11-01 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -71,17 +71,25 @@ This paper considers the case where an overridden function odr-uses a non-refere
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+This paper is the first part of a trilogy of papers dealing with known issues in the Contracts MVP \cite{P2900R10} regarding postconditions odr-using non-reference function parameters:
+\begin{itemize}
+\item \cite{D3484R1} Postconditions odr-using a parameter modified in an overriding function;
+\item \cite{D3487R0} Postconditions odr-using a parameter that may be passed in registers;
+\item \cite{D3489R0} Postconditions odr-using a parameter of dependent type.
+\end{itemize}
+These issues should be considered together, and ideally resolved in a consistent way.
+
 \section{Background}
 \label{bg}
 
 \cite{P2900R10} Section 3.4.4 specifies that if a non-reference function parameter is odr-used in a postcondition assertion, that function parameter must be \tcode{const} on \emph{all} declarations of that function, otherwise the program is ill-formed.  Importantly, this includes the \emph{defining} declaration of the function; thus, the implementation of the function can be assumed to not modify the value of that parameter.
 
-The rationale for this rule is that allowing the implementation to modify a parameter that is later used to check the postcondition would render that check meaningless. Consider:
+The rationale for this rule is that allowing the implementation to modify a parameter that is later used to check the postcondition would render that check meaningless. Consider the following function declaration:
 \begin{codeblock}
 // Returns: a number guaranteed to be greater or equal to the number passed in
 int f(const int i) post (r: r >= i);
 \end{codeblock}
-Given this function declaration, if we could drop the \tcode{const} on the defining declaration of \tcode{f}, we could write a dummy implementation of \tcode{f} as follows:
+Now, if we could drop the \tcode{const} on the defining declaration of \tcode{f}, we could write a dummy implementation of \tcode{f} as follows:
 \begin{codeblock}
 int f(int i) {  // \tcode{i} is not \tcode{const}
   i = 0;
@@ -95,11 +103,15 @@ void test() {
   // precondition does not hold --- \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
 }
 \end{codeblock}
-For this reason, \cite{P2900R10} makes the above implementation of \tcode{f} ill-formed: \tcode{const} cannot be dropped from any function parameter odr-used in a postcondition assertion.
+In the above scenario, the implementation of \tcode{f} explicitly modifies the parameter. However, an even more dangerous variant of this scenario is when such modifications happen \emph{implicitly}. In particular, if the parameter is not \tcode{const} on the defining declaration of \tcode{f}, it may be returned by value, which will perform an implicit move, i.e. the postcondition assertion would observe the parameter object in a moved-from state.
+
+For these reasons, \cite{P2900R10} makes the above implementation of \tcode{f} ill-formed: \tcode{const} cannot be dropped from any function parameter odr-used in a postcondition assertion.
 
 Further, \cite{P2900R10} Section 3.4.4 specifies that if a non-reference function parameter is odr-used in a postcondition assertion, and that function is implemented as a coroutine, the program is ill-formed, \emph{even if} all such function parameters have been declared \tcode{const} by the user.
 
 The rationale for this rule is that a coroutine will move-from its function parameters to initialise the parameter copies in the coroutine frame, and therefore the function parameters of a coroutine are effectively not \tcode{const}, even if declared as such by the user (see \cite{P3387R0} for discussion). This case is thus notionally similar to the previous case where \tcode{const} was dropped from the parameter declaration in the implementation.
+
+Together, these rules provide a static guarantee that, if a parameter is odr-used in a postcondition assertion, this parameter object \emph{will not be modified} between the call to a function and the evaluation of its postcondition assertions. An additional benefit of this design is that a static analysis tool can reason about the value of a function parameter in a postcondition without having to  take into account the function definition, which will often be either too complicated to analyse or unavailable at the call site.
 
 Reference parameters are excluded from the above restrictions because references refer to objects declared elsewhere, and the value of those objects when the function call completes are still relevant and available to the caller because those objects can still have outside references known to the caller.  
 There is no expectation that the value will remain unchanged after the function body has executed, and many functions that pass an object through a modifiable reference do so with the exact intention of modifying that object; therefore, such parameters would not be used in a postcondition assertion with that expectation in mind.
@@ -138,7 +150,9 @@ int main() {
 }
 \end{codeblock}
 
-In the program above, even if the postcondition assertion of \tcode{Base::f} is checked, the fact that the implementation of \tcode{Derived::f} does \emph{not} satisfy the postcondition of \tcode{Base::f} is not caught, because the parameter \tcode{i} has been modified in \tcode{Derived::f} (something that \tcode{Base::f} has no control or visibility over), rendering the postcondition assertion of \tcode{Base::f} meaningless. This is exactly the scenario that the specification in \cite{P2900R10} Section 3.4.4 seeks to avoid; nevertheless, the code above is well-formed according to the current specification.
+In the program above, even if the postcondition assertion of \tcode{Base::f} is checked, the fact that the implementation of \tcode{Derived::f} does \emph{not} satisfy the postcondition of \tcode{Base::f} is not caught, because the parameter \tcode{i} has been modified in \tcode{Derived::f}, rendering the postcondition assertion of \tcode{Base::f} meaningless. This is exactly the scenario that the specification in \cite{P2900R10} Section 3.4.4 seeks to avoid; nevertheless, the code above is well-formed according to the current specification. The more dangerous variant of this scenario that a parameter might be modified \emph{implicitly}, for example moved-from when returned by value, is also possible and well-formed.
+
+Unlike other cases that may lead to a \tcode{const }parameter being modified in the function body, namely when \tcode{const} is dropped on a subsequent declaration of the \emph{same} function, or when the function is implemented as a coroutine (which are both ill-formed in \cite{P2900R10}), in this case \tcode{Base::f} does not know whether there are any functions overriding it, or how the corresponding parameter in those overriding functions is declared.
 
 \section{Possible solutions}
 
@@ -150,7 +164,9 @@ We are aware of four possible options for dealing with this problem. These are, 
 \item Allow overriding functions to drop \tcode{const} from a non-reference function parameter, but make it undefined behaviour to actually modify a parameter object in an overriding function if that parameter is a non-reference parameter declared \tcode{const} in an overridden function.
 \end{enumerate}
 
-Option~4 is the option that was chosen in the past by C++2a Contracts \cite{P0542R5}. However, we can immediately discard it as unviable. Not only would this option fail to catch the bug in the example above, but it is also the most user-hostile option: the mere act of adding a postcondition assertion to a program would have the potential to introduce new undefined behaviour, even if its predicate were written correctly. This directly violates Design Principle 13 of \cite{P2900R10}, ``Explicitly Define All New Behaviour''.
+Below we discuss the tradeoffs of each option.
+
+\subsection*{Option 1}
 
 Option~1 would catch the bug in the example above and is the most conservative choice. This choice is consistent with the choice we made for postcondition assertions on coroutines in \cite{P2900R10}: if a function odr-uses a non-reference parameter in its postcondition, and that parameter is declared \tcode{const}, but there might be some other reason why the implementation of the function may modify that parameter anyway, the program is ill-formed. One such reason is that the function is a coroutine and thus the parameter will be modified by the underlying coroutine machinery. Another such reason is that the function is a non-\tcode{final} virtual function and thus an overriding function could modify the parameter.
 
@@ -173,19 +189,42 @@ Further, unlike coroutines, any modifications to the parameters must be done exp
 
 Finally, in today's C++ ecosystem, virtual functions are more pervasive than coroutines, and postcondition assertions have more known use cases for virtual functions than for coroutines (the usefulness of postcondition assertions on coroutines is fundamentally limited due to the nature of coroutines in C++). Entirely disallowing the ability to odr-use parameters in the postcondition assertion of a non-\tcode{final} virtual function in the first version of Contracts for C++ that we ship could noticeably hamper the usability of the feature. Shipping postcondition captures as proposed in \cite{P3098R0} in the same version could somewhat mitigate but not fully remove the friction.
 
-Overall, Option~1 might therefore be a disproportionately harsh measure for a relatively obscure problem. Option~2 would also catch the bug in the example above and is a less restrictive choice than Option~1: it would make only cases ill-formed where the parameter can actually be modified (when the overriding function actually drops the \tcode{const}). This option makes  the behaviour for overriding functions consistent with the behaviour of subsequent declarations of the \emph{same} function: if we redeclare a function, \emph{or} an overload of that function, and drop \tcode{const} on a parameter in that declaration, the program is ill-formed. Option~2 thus seems more appealing than Option~1.
+Overall, Option~1 might therefore be a disproportionately harsh measure for a relatively rare problem.
 
-However, the tradeoff is that Option~2 could also lead to remote code breakage, which directly violates Design Principle 15 of \cite{P2900R10}, ``No Client-Side Language Break''. In particular, adding a postcondition to a virtual function that odr-uses a \tcode{const} parameter would remotely break any client code that overrides that function and yet has not added the \tcode{const}, or any override that is implemented as a coroutine. The crucial difference to the coroutine case is that providing a definition for a given function that makes the function a coroutine is local, not remote code, whereas overriding a function can happen in an entirely different component of the program. The possibility of such remote code breakage due to the introduction of Contracts could hamper their adoption and make releasing low-level libraries with newly introduced function-contract assertions vastly more difficult.
+\subsection*{Option 4}
 
-Option~3 does not suffer from the downsides of Options 1 and 2. Option~3 is also the status quo in \cite{P2900R10} and therefore does not require any design changes to Contracts for C++. Since the current specification in that paper does not contain any special rules for parameter declarations on overriding functions, dropping \tcode{const} in such declarations is currently allowed in \cite{P2900R10} and ``you get what you get''. This is also the downside of Option~3 compared to Options 1 and 2: Option~3 does not actually catch the bug.
+Option~2 would also catch the bug in the example above and is a less restrictive choice than Option~1: it would make only cases ill-formed where the parameter can actually be modified (when the overriding function actually drops the \tcode{const}). This option makes  the behaviour for overriding functions consistent with the behaviour of subsequent declarations of the \emph{same} function: if we redeclare a function, \emph{or} an overload of that function, and drop \tcode{const} on a parameter in that declaration, the program is ill-formed. Option~2 thus seems more appealing than Option~1.
 
-However, there is a remedy available: if an overriding function drops the \tcode{const} on a parameter odr-used in the postcondition assertion of an overridden function, an implementation can easily issue a \emph{warning}. The crucial difference to the coroutine case is that the implementation \emph{knows} that the function is virtual at the point of declaration. While we cannot normatively mandate such a warning, we can non-normatively recommend it.
+However, the tradeoff is that Option~2 could also lead to remote code breakage, which directly violates Design Principle 15 of \cite{P2900R10}, ``No Client-Side Language Break''. In particular, adding a postcondition to a virtual function that odr-uses a \tcode{const} parameter would remotely break any client code that overrides that function and yet has not added the \tcode{const}, or any override that is implemented as a coroutine. 
+
+We anticipate that particularly the former case would be a frequent problem. Today, hardly anyone adds \tcode{const} to the declaration of a non-reference parameter as it has essentially no meaning; with \cite{P2900R10}, anyone who wishes to odr-use a parameter in a postcondition will \emph{have} to add the \tcode{const}, breaking any overriding functions.
+
+The crucial difference to the coroutine case is that providing a definition for a given function that makes the function a coroutine is local, not remote code, whereas overriding a function can happen in an entirely different component of the program. The possibility of such remote code breakage due to the introduction of Contracts could hamper their adoption and make releasing low-level libraries with newly introduced function-contract assertions vastly more difficult.
+
+\subsection*{Option 3}
+
+Option~3 is the status quo\footnote{Since the current specification in that paper does not contain any special rules for parameter declarations on overriding functions, dropping \tcode{const} in such declarations is currently allowed in \cite{P2900R10} and ``you get what you get''.} in \cite{P2900R10}. It avoids the usage limitations imposed by Option~1 and the remote code breakage imposed by Option~2. However, this option too has tradeoffs.
+
+One downside of Option~3 is that, unlike Options 1 and 2, it does not actually catch the bug. As a partial remedy, an implementation could easily issue a \emph{warning} if an overriding function drops the \tcode{const} on a parameter odr-used in the postcondition assertion of an overridden function. The crucial difference to the coroutine case is that the implementation \emph{knows} that the function is virtual at the point of declaration. While we cannot normatively mandate such a warning, we can add a non-normative recommended practice note to the wording that such a warning be issued. 
+
+Another downside of Option~3 compared to Options 1 and 2 is that it would mean abandoning the static guarantee of the current \cite{P2900R10} design that, if a parameter is odr-used in a postcondition assertion, that parameter object \emph{will not be modified} between the call to a function and the evaluation of its postcondition assertions.
+
+It follows that a static analysis tool can no longer reason about the value of a function parameter in a postcondition, at least not without taking into account which function will be selected by virtual dispatch and what the body of that function does (both are typically unknowable at the call site). This greatly reduces the amount of useful information that a static analysis tool could extract from a postcondition assertion at the call site of a virtual function.
+
+\subsection*{Option 4}
+
+Option~4 is the option that was chosen in the past by C++2a Contracts \cite{P0542R5}. However, we can immediately discard it as unviable. Not only would this option fail to catch the bug in the example above, but it is also actively user-hostile: the mere act of adding a postcondition assertion to a program would have the potential to introduce new undefined behaviour, even if its predicate were written correctly. This directly violates Design Principle 13 of \cite{P2900R10}, ``Explicitly Define All New Behaviour''.
+
+
+\section{Proposal}
 
 We believe that Options 1 --- 3 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all three options (which are mutually exclusive) to determine which option has more consensus in SG21. 
 
 Note that choosing Option~1 would leave the door open to adopting Option~2 or Option~3 without breaking changes at some point in the future, while Option~2 could only be evolved towards Option~3 but not Option~1, and Option~3 could not be evolved towards either of the other options.
 
-\section{Proposed wording}
+Note further that \cite{D3487R0} --- which deals with a different problem regarding parameters in postconditions --- proposes several more extreme options, in particular disallowing odr-use of \emph{any} parameters, or any \emph{non-reference} parameters, in the postcondition assertions of \emph{any} functions, or even removing postcondition assertions from \cite{P2900R10} altogether. These more radical options would also remove the issue discussed in this paper. It seems therefore that we should decide on a solution for \cite{D3487R0} first. 
+
+\section{Wording}
 
 The proposed wording changes are relative to the wording proposed in \cite{P2900R10}.
 
@@ -242,6 +281,14 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 \added{\emph{Recommended practice:} Implementations should issue a diagnostic when an overriding function omits \tcode{const} from the declaration of a non-reference parameter whose corresponding parameter in an overridden function is odr-used in a postcondition assertion of that overridden function.}
 \end{adjustwidth}
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Revision history}
+
+\begin{itemize}
+\item \textbf{R0}, 2024-10-31: Initial version, presented to SG21 on 2024-10-31
+\item \textbf{R1}, 2024-11-01: Incorporated SG21 feedback
+\end{itemize}
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

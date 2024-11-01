@@ -73,7 +73,7 @@ Audience: & SG21, EWG
 \end{tabular}
 
 \begin{abstract}
-This paper considers the case where a non-reference parameter of trivially copyable and trivially destructible type is odr-used in a postcondition assertion. Such a parameter may be passed to the function in registers, which may lead to the postcondition predicate seeing an older copy of the parameter object. This in turn can lead to unexpected behaviour. We propose several alternatives for how to address this problem in the Contracts MVP \cite{P2900R10}.
+This paper considers the case where a non-reference parameter is odr-used in a postcondition and is eligible to be passed via registers (its type has at least one eligible trivial copy or move constructor and a trivial or deleted destructor). This may lead to the postcondition predicate seeing an older copy of the parameter object. This in turn can lead to unexpected behaviour. We propose several alternatives for how to address this problem in the Contracts MVP \cite{P2900R10}.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -103,18 +103,20 @@ These issues should be considered together, and ideally resolved in a consistent
 \section{Background}
 \label{bg}
 
-For efficiency reasons, the major ABIs used for implementations of C++ allow objects of trivially copyable and trivially destructible type to be passed to a function and returned from a function via \emph{registers}. This has the consequence that such objects do not exist in memory and do not have an address. The C++ Standard accommodates this practice via the following provision (\href{https://timsong-cpp.github.io/cppwp/n4950/class.temporary#3}{[class.temporary]/3}):
+For efficiency reasons, the major ABIs used for implementations of C++ allow objects to be passed to a function and returned from a function via \emph{registers} when the type of the object satisfies certain requirements  (\href{https://timsong-cpp.github.io/cppwp/n4950/class.temporary#3}{[class.temporary]/3}):
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 When an object of class type \tcode{X} is passed to or returned from a function, if \tcode{X} has at least one eligible copy or move constructor ([special]), each such constructor is trivial, and the destructor of \tcode{X} is either trivial or deleted, implementations are permitted to create a temporary object to hold the function parameter or result object. The temporary object is constructed from the function argument or return value, respectively, and the function's parameter or return object is initialised as if by using the eligible trivial constructor to copy the temporary (even if that constructor is inaccessible or would not be selected by overload resolution to perform a copy or move of the object).
 \end{adjustwidth}
 
-In C++ today, there is (with one minor exception\footnote{An object that meets the requirements to be passed in a register may still have a user-provide constructor that may observe its address through the use of \tcode{this}, and that address may then differ from the address seen for the parameter within the function body.}) no context where the pre-temporary copy versions of these objects could be directly observable by the user; however, the Contracts MVP \cite{P2900R10} adds precondition and postcondition assertions, which can be such a context where that pre-temporary object is not only observable, but usable by name.
+Effectively, such objects passed and returned via registers do not exist in memory and do not have an address; their value is instead accessed by materialising a temporary copy. In C++ today, this specification peculiarity causes no friction, because there is (with one minor exception\footnote{An object that meets the requirements to be passed in a register may still have a user-provide constructor that may observe its address through the use of \tcode{this}, and that address may then differ from the address seen for the parameter within the function body.}) no context where the pre-temporary copy versions of these objects could be directly observable by the user. However, the Contracts MVP \cite{P2900R10} adds precondition and postcondition assertions, which can be such a context where that pre-temporary object is not only observable, but usable by name.
 
-The current wording does not say it explicitly, but there is an assumption within it that, once a temporary has been created to ``hold the function parameter or result object'', that temporary will be referred to whenever the parameter name is used going forward.   In practice in C++ today, that is always the case.    Precondition assertions, even if checked caller-side, will potentially observe the pre-temporary object but will do so before the copy is made to pass the object into a function.   Postcondition assertions, however, if implemented as caller-side checks that only know about the pre-temporary object, will be referencing the object \emph{after} it has also been copied and the copy has been used within the function body.
-In both of these cases we must clarify exactly what semantics we want to allow, and what that means for implementations, users, and 
+The current wording does not say it explicitly, but there is an assumption within it that, once a temporary has been created to ``hold the function parameter or result object'', that temporary will be referred to whenever the parameter name is used going forward.   In practice in C++ today, that is always the case.
 
-For the case of an object \emph{returned from} a function, which can be observed in a postcondition assertion via the introduced \emph{result name}, \cite{P2900R10} already specifies:
+Precondition assertions, even if checked caller-side, will potentially observe the pre-temporary object but will do so before the copy is made to pass the object into a function.   Postcondition assertions, however, if implemented as caller-side checks that only know about the pre-temporary object, will be referencing the object \emph{after} it has also been copied and the copy has been used within the function body.
+In both of these cases we must clarify exactly what semantics we want to allow, and what that means for implementations and for users.
+
+For the case of an object \emph{returned from} a function, which can be observed in a postcondition assertion via the introduced \emph{result name}, the specification proposed in \cite{P2900R10} already contains an explicit provision for objects returned via registers:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the implementation is permitted to introduce a temporary object for the return value
@@ -135,7 +137,7 @@ int main() {
 }
 \end{codeblock}
 
-In the example above, if \tcode{X} is \emph{not} a trivially copyable and trivially destructible type, the postcondition check of \tcode{f} is guaranteed to pass, because \tcode{r} must denote the return object \tcode{x} in \tcode{main()}; however, if \tcode{X} \emph{is} a trivially copyable and trivially destructible type, the postcondition check may\footnote{In practice, whether this check fails will depend on both optimization levels and whether \tcode{f} is inlined into \tcode{main}} fail, because \tcode{r} may instead denote a temporary object.
+In the example above, if \tcode{X} is \emph{not} a type eligible to be passed via registers, the postcondition check of \tcode{f} is guaranteed to pass, because \tcode{r} must denote the return object \tcode{x} in \tcode{main()}; however, if \tcode{X} \emph{is} a type eligible to be passed via registers, the postcondition check may\footnote{In practice, whether this check fails will depend on both optimization levels and whether \tcode{f} is inlined into \tcode{main()}.} fail, because \tcode{r} may instead denote a temporary object.
 
 So far, so good. However, \cite{P2900R10} has not explicitly considered the other half of this phenomenon --- the case of an object \emph{passed to} a function, i.e., a non-reference parameter. Consider:
 
@@ -146,7 +148,7 @@ void f(const X x) post (ptr == &x) {
   ptr = &x;
 }
 \end{codeblock}
-If \tcode{X} is a trivially copyable and trivially destructible type, is this postcondition guaranteed to pass or not? \cite{P2900R10} is silent on this issue; the wording could be read one way or another.
+If \tcode{X} is a type eligible to be passed via registers, is this postcondition guaranteed to pass or not? \cite{P2900R10} is silent on this issue; the wording could be read one way or another.
 
 At this point, we could decide to clarify in \cite{P2900R10} that the postcondition is \emph{not} guaranteed to pass in this case, consistent with the return object case, and move on. However, such a specification would have surprising consequences which are worth considering first.
 
@@ -185,7 +187,7 @@ public:
   }
 };
  \end{codeblock}
-Note that our \tcode{RandomInteger} class, as defined above, is trivially copyable and trivially destructible and therefore may be passed in a register. This leads to a footgun as soon as we pass such an object to a function as a non-reference parameter, and simultaneously odr-use that parameter in the postcondition predicate of the function: 
+Note that our \tcode{RandomInteger} class, as defined above, has a trivial copy constructor and a trivial destructor and is therefore eligible to be passed via registers. This leads to a footgun as soon as we pass such an object to a function as a non-reference parameter, and simultaneously odr-use that parameter in the postcondition predicate of the function: 
  \begin{codeblock}
 int f(const RandomInteger i)
 post(r: r & i.value() == 0) {
@@ -194,7 +196,7 @@ post(r: r & i.value() == 0) {
  \end{codeblock}
 If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code will break. The postcondition assertion will see a different integer value returned from \tcode{i.value()} than the body of the function, and thus fail where it should pass or vice versa, even though for any user reading this code without a deep understanding of objects being passed in registers will see nothing obviously incorrect with this code.
 
-Such code works in C++ today because after the parameter object has been packed into registers and passed to the function,  the original object will never be touched by anything again (remember that it also needs to be trivially destructible, not just trivially copyable). However, the presence of postcondition assertions that can odr-use this object changes that. If we want to allow an implementation to check postcondition assertions \emph{caller-side}, then these postcondition assertions must see the original object before it was forked and passed to the function via registers, thus creating the footgun described above.
+Such code works in C++ today because after the parameter object has been packed into registers and passed to the function,  the original object will never be touched by anything again (remember that the type also needs to have a trivial or deleted destructor, not just an eligible trivial copy or move constructor). However, the presence of postcondition assertions that can odr-use this object changes that. If we want to allow an implementation to check postcondition assertions \emph{caller-side}, then these postcondition assertions must see the original object before it was forked and passed to the function via registers, thus creating the footgun described above.
 
 \section{Possible solutions}
 
@@ -205,7 +207,7 @@ restrictive:
 \item Remove postcondition assertions from \cite{P2900R10} entirely.
 \item Remove the ability to odr-use \emph{any} function parameters in postcondition predicates.
 \item Remove the ability to odr-use any \emph{non-reference} function parameters in postcondition predicates.
-\item Remove the ability to odr-use non-reference function parameters in postcondition predicates if the type of the parameter satisfies the requirements for being passed in registers (trivially copyable and trivially destructible).
+\item Remove the ability to odr-use non-reference function parameters in postcondition predicates if the type of the parameter satisfies the requirements for being passed via registers.
 \item Require that when a non-reference function parameter is odr-used in a postcondition predicate, the corresponding \grammarterm{id-expression} must refer to the same object as it does in the function body.
 \item Specify that, when a non-reference function parameter is odr-used in a postcondition predicate and the type of the parameter satisfies the requirements for being passed in registers, the corresponding \grammarterm{id-expression} may refer to a different copy of the object than it does in the function body.
 \end{enumerate}
@@ -236,7 +238,7 @@ Option~3 is similar to Option~2, except that it allows reference parameters, whi
 
 \subsection*{Option 4}
 
-Unlike Options 1 --- 3, Option 4 is not a radical solution that removes vast swathes of functionality from \cite{P2900R10}. However, Option 4 is arguably confusing and brittle. That a particular type is \emph{not} trivially copyable and trivially destructible is not something that code should guarantee to its clients indefinitely in all cases; conversely, making a type trivially copyable and trivially destructible should not break client code. We made a similar choice to not discriminate on particular type traits in the postcondition assertions of a function when we decided that whether a type is trivially movable should not affect whether a non-reference parameter of that type can be odr-used in the postcondition assertion of a coroutine (i.e., when we rejected \cite{P3387R0} Option 5b).
+Unlike Options 1 --- 3, Option 4 is not a radical solution that removes vast swathes of functionality from \cite{P2900R10}. However, Option 4 is arguably confusing and brittle. That a particular type is \emph{not} eligible to be passed via registers is not something that code should guarantee to its clients indefinitely in all cases; conversely, making a type trivially copyable and/or movable and trivially destructible should not break client code. We made a similar choice to not discriminate on particular type traits in the postcondition assertions of a function when we decided that whether a type is trivially movable should not affect whether a non-reference parameter of that type can be odr-used in the postcondition assertion of a coroutine (i.e., when we rejected \cite{P3387R0} Option 5b).
 
 \subsection*{Option 5}
 
@@ -248,7 +250,7 @@ Not allowing caller-side postcondition checking would prevent the simplest imple
 
 Option~6 makes the behaviour of objects passed to a function in registers consistent with the behaviour of objects returned from a function in registers. It is therefore arguably the optimal choice with respect to having a straightforward specification and implementation of the feature, enabling caller-side checking, avoiding ABI issues, not making any user code unnecessarily ill-formed, and not imposing any unnecessary run-time cost on the user.
 
-However, the tradeoff of Option~6 is that the above footgun remains. Note that the footgun only occurs in rare edge cases, in particular when a trivially copyable, trivially destructible, \tcode{const} object passed to a function as a non-reference parameter relies on mutable state for its correctness, and a postcondition assertion would break if it happens to observe an earlier version of that mutable state. Note further that such cases could potentially be mitigated by an implementation issuing a warning when a trivially copyable, trivially destructible type that has \tcode{mutable} members (including in any of its subtypes) is used as the type of a function parameter odr-used in a postcondition assertion of that function or another function that that function overrides.
+However, the tradeoff of Option~6 is that the above footgun remains. Note that the footgun only occurs in rare edge cases, in particular when a \tcode{const} object eligible to be passed via registers is used as a non-reference parameter and its type relies on mutable state for its correctness, and a postcondition assertion would break if it happens to observe an earlier version of that mutable state. Note further that such cases could potentially be mitigated by an implementation issuing a warning if a type eligible to be passed in registers has \tcode{mutable} members (including in any of its subtypes), is used as the type of a non-reference function parameter, and that parameter is odr-used in a postcondition assertion of that function or another function that that function overrides.
 
 \section{Proposal}
 

@@ -57,7 +57,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
-\title{Contracts for C++: \\ Trivially copyable parameters in postconditions}
+\title{Postconditions odr-using a parameter \\ that may be passed in registers}
 \author{
 Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
 Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
@@ -73,7 +73,7 @@ Audience: & SG21, EWG
 \end{tabular}
 
 \begin{abstract}
-This paper considers the case where a non-reference parameter of trivially copyable and trivially destructible type is odr-used in a postcondition assertion and that parameter is passed to the function in a register, which may lead to the postcondition predicate seeing a copy of the parameter object. This in turn can lead to unexpected behaviour. We propose several alternatives for how to address this problem in the Contracts MVP \cite{P2900R10}.
+This paper considers the case where a non-reference parameter of trivially copyable and trivially destructible type is odr-used in a postcondition assertion. Such a parameter may be passed to the function in registers, which may lead to the postcondition predicate seeing an older copy of the parameter object. This in turn can lead to unexpected behaviour. We propose several alternatives for how to address this problem in the Contracts MVP \cite{P2900R10}.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -91,6 +91,14 @@ This paper considers the case where a non-reference parameter of trivially copya
 %\pagebreak
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+This paper is the second part of a trilogy of papers dealing with known issues in the Contracts MVP \cite{P2900R10} regarding postconditions odr-using non-reference function parameters:
+\begin{itemize}
+\item \cite{D3484R1} Postconditions odr-using a parameter modified in an overriding function;
+\item \cite{D3487R0} Postconditions odr-using a parameter that may be passed in registers;
+\item \cite{D3489R0} Postconditions odr-using a parameter of dependent type.
+\end{itemize}
+These issues should be considered together, and ideally resolved in a consistent way.
 
 \section{Background}
 \label{bg}
@@ -112,7 +120,6 @@ If the implementation is permitted to introduce a temporary object for the retur
 
 This provision is directly observable. Consider:
 
-\pagebreak %% MANUAL %%
 \begin{codeblock}
 class X { /* ... */ };
 
@@ -205,7 +212,7 @@ This works in C++ today because the original object will never be touched by any
 
 \section{Possible solutions}
 
-We are aware of five possible options for dealing with this problem. These are, from most to least
+We are aware of six possible options for dealing with this problem. These are, from most to least
 restrictive:
 
 \begin{enumerate}
@@ -218,7 +225,7 @@ restrictive:
 \end{enumerate}
 % TIMUR TODOL TALK ABOUT OPTION 3
 
-Option~1 would be a rather drastic measure at this point. Consider that postcondition assertions are significantly more difficult to specify than preconditions (see \cite{P1323R2}, \cite{P3007R0}, and \cite{P3098R0}), and unlike preconditions, postcondition assertions have so far already generated several known issues that needed fixing in the specification of \cite{P2900R10} (see \cite{P3387R0}, \cite{P3460R0}, \cite{D3483R0}, and \cite{D3484R0}). Option~1 would remove \emph{all} known and unknown footguns from postcondition assertions by removing the feature itself.
+Option~1 would be a rather drastic measure at this point. Consider that postcondition assertions are significantly more difficult to specify than preconditions (see \cite{P1323R2}, \cite{P3007R0}, and \cite{P3098R0}), and unlike preconditions, postcondition assertions have so far already generated several known issues that needed fixing in the specification of \cite{P2900R10} (see \cite{P3387R0}, \cite{P3460R0}, \cite{P3483R0}, \cite{D3484R1}, and \cite{D3489R0}). Option~1 would remove \emph{all} known and unknown footguns from postcondition assertions by removing the feature itself.
 
 We believe that \cite{P2900R10} would still be viable and useful without postcondition assertions. Postcondition assertions have significantly fewer uses than precondition assertions, and their value can to a certain extent also be achieved with good unit test coverage. 
 
@@ -230,7 +237,7 @@ Postconditions should be in the MVP at this time.
 Result: Marginal consensus (if at all).
 \end{wgpoll}
 
-Option~2 is less than ideal in our opinion, because it significantly limits the set of postconditions we can write, and thus significantly limits the usefulness of the feature, until we can add postconditions captures \cite{P3098R0} to the Standard. This option becomes more appealing if we include \cite{P3098R0} in the first version of Contracts that we ship. Postcondition captures would never be referencing parameters in a place they cannot be referenced today, so they would not be impacted by this issue at all. However, capturing parameters for use in a postcondition predicate incurs the cost of a copy, which in many cases is not conceptually necessary, thus violating the ``do not pay for what you do not use'' design principle of C++ (see also \cite{D3484R0} Option~1, which suffers from the same issue).
+Option~2 is less than ideal in our opinion, because it significantly limits the set of postconditions we can write, and thus significantly limits the usefulness of the feature, until we can add postconditions captures \cite{P3098R0} to the Standard. This option becomes more appealing if we include \cite{P3098R0} in the first version of Contracts that we ship. Postcondition captures would never be referencing parameters in a place they cannot be referenced today, so they would not be impacted by this issue at all. However, capturing parameters for use in a postcondition predicate incurs the cost of a copy, which in many cases is not conceptually necessary, thus violating the ``do not pay for what you do not use'' design principle of C++ (see also \cite{D3484R1} Option~1, which suffers from the same issue).
 
 Option~3 is similar to Option~2, except that it allows reference parameters, which are not affected by any of the issues surrounding copies of objects and are not affected by postcondition captures as proposed in \cite{P3098R0}. However, it still significantly limits the set of postconditions we can write, and in addition encourages users to pass parameters by-reference instead by-value in order to make the postcondition assertion compile, which can lead to more error-prone and less efficient code. We therefore do not consider Option~3 to be an improvement over Option~2.
 

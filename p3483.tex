@@ -45,8 +45,8 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P3483R0 \\
-Date: &2024-10-31 \\
+Document \#: & P3483R1 \\
+Date: &2024-11-01 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -129,7 +129,7 @@ To avoid future requests for clarification, we propose a few wording edits below
 
 The second of two clarifications requested in the Implementers Report \cite{P3460R0} concerns the case when the return value of a function does not have an RVO slot, but is passed in a register. In this case, the result object does not exist in memory at the time the postcondition assertions are evaluated, and the implementation may instead refer to a temporary object that has the same value. The implementation may make extra copies of the result object for this purpose. These copies must be trivial, so this situation can only arise if the return type is trivially copyable.
 
-In this case, evaluating a postcondition assertion that involves the return value requires temporary materialisation of an object that holds the return value. The question is whether the same materialised temporary must be used in each postcondition assertion:
+In this case, evaluating a postcondition assertion that involves the return value requires temporary materialisation of an object that holds the return value. The question is whether the same materialised temporary must be used in each postcondition assertion. Assuming that we have configured the program such that every contract assertion will be \emph{evaluated with a checked semantic exactly once}, is the second postcondition assertion guaranteed to succeed in the following example --- in other words, does the second postcondition assertion see the modification of the return value performed by the first, or does it operate on a different object?
 \begin{codeblock}
 int f()
 post(r : ++const_cast<int&>(r) == 1)
@@ -137,28 +137,15 @@ post(r : ++const_cast<int&>(r) == 2) {  // \tcode{true} or \tcode{false}?
   return 0; 
 }
 \end{codeblock}
-According to the specification in \cite{P2900R10}, postcondition assertions are evaluated in sequence. If the return type is \emph{not} trivially copyable, \tcode{r} must always refer to the same object --- the result object of the function. If the return type is trivially copyable, the compiler is allowed to make extra copies, but it needs to do that in sequence with evaluation of the postcondition. In other words, whether or not extra trivial copies are made cannot affect the result of the evaluation of the postcondition assertion. Therefore, in the example above, when both postconditions are evaluated once they will both evaluate to \tcode{true}.
+According to the specification in \cite{P2900R10}, postcondition assertions are evaluated in sequence. If the return type is \emph{not} trivially copyable, \tcode{r} must always refer to the same object --- the result object of the function. If the return type is trivially copyable, the compiler is allowed to make extra copies, but it needs to do that in sequence with evaluation of the postcondition. In other words, whether or not extra trivial copies are made cannot affect the result of the evaluation of the postcondition assertion. Therefore, in the example above, assuming that both postconditions are evaluated with a checked semantic exactly once, they must both evaluate to \tcode{true}.
 
 Below, we propose adding a few words to a non-normative note as well as a code example to the wording to clarify this design intent.
 
+Note that it is not in general guaranteed that both postconditions are evaluated with a checked semantic, and if they are, that both will be evaluated exactly once (see \cite{P2900R10} Section 3.5.8). Writing postcondition assertions such as the above, and expecting them to succeed, is therefore not a correct use of the proposed Contracts facility; the example above is used only to illustrate the point about materialised temporaries.
+
 \subsection{For a parameter odr-used in \tcode{post}, \tcode{const} can be part of dependent type}
 
-Whether or not a function parameter is declared \tcode{const}, and can therefore be odr-used in a postcondition assertion, is not always immediately visible. Consider:
-\begin{codeblock}
-template <typename T> 
-void f(T t) post(t > 0); 
-\end{codeblock}
-This function template may be instantiated with a type that is \tcode{const}-qualified, or a type that is not. However, this is not known when parsing this function template, as the variable \tcode{t} does not have a visible \tcode{const} specifier on it. It is therefore not immediately obvious when and how the above example should fail to compile.
-
-The answer is that the parameter \tcode{t} being odr-used in the postcondition assertion has a dependent type. This situation should be treated just like other situations where dependent types occur. In particular, the above function template declaration is well-formed in its own; whether or not the postcondition assertion makes the program ill-formed should be decided at the point where the template is instantiated:
-\begin{codeblock}
-int main() {
-  int i = 1;
-  f<int>(i);       // error
-  f<const int>(i); // OK
-}
-\end{codeblock}
-We believe that the above behaviour is already correctly specified by the wording in \cite{P2900R10} and no other behaviour makes sense. Nevertheless, below we propose adding a few words to a non-normative note as well as a code example to the wording for additional clarity.
+(This item was factored out into a separate paper \cite{P3489R0} after discussion of the previous revision of this paper in SG21 revealed that it is not merely a clarification, but a design decision is required to resolve the current ambiguity in \cite{P2900R10}.)
 
 \subsection{Lambdas can appear in redeclared \tcode{pre} and \tcode{post} sequences}
 
@@ -236,45 +223,6 @@ void f() pre (b1) pre (b2);  // error: not same by ODR
 \end{codeblock}
 \end{example}
 \end{addedblock}
-
-[...]
-
-If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, that parameter shall be declared \tcode{const} and
-shall not have array or function type.
-\begin{note}
-This requirement applies even to declarations that do not specify the \grammarterm{postcondition-specifier}. \added{The \tcode{const} qualifier of the parameter can be part of the dependent type. }Arrays and functions are still usable when
-declared with the equivalent pointer types ([dcl.fct]). 
-\end{note}
-\begin{example}
-\begin{codeblock}
-int f(const int i)
-post (r: r == i);
-int g(int i)
-post (r: r == i); // error: i is not declared const.
-int f(int i) // error: i is not declared const.
-{
-  return i;
-}
-
-int g(int i) // error: i is not declared const.
-{
-  return i;
-}
-\end{codeblock}
-\begin{addedblock}
-\begin{codeblock}
-template <typename T>
-void f(T t) post(t > 0);
-  
-int main() {
-  int i = 1;
-  f<int>(i);        // error 
-  f<const int>(i);  // OK
-}
-\end{codeblock}
-\end{addedblock}
-\end{example}
 \end{adjustwidth}
 
 Modify [dcl.contract.res] as follows:
@@ -291,6 +239,10 @@ still \added{in sequence with the evaluation of the postcondition assertions and
 \begin{example}
 \begin{addedblock}
 \begin{codeblock}
+% TD: This code example is not good because it relies on
+% each postcondition being evaluated exactly once with a 
+% checked semantic, which is not something P2900 guarantees.
+% We need a different example to illustrate the point here!
 int f()
   post(r : ++const_cast<int&>(r) == 1)
   post(r : ++const_cast<int&>(r) == 2) // The postcondition check is guaranteed to succeed.
@@ -321,6 +273,15 @@ int main() {
 \end{codeblock}
 \end{example}
 \end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Revision history}
+
+\begin{itemize}
+\item \textbf{R0}, 2024-10-31: Initial version, presented to SG21 on 2024-10-31
+\item \textbf{R1}, 2024-11-01: Incorporated SG21 feedback, removed item 1.3
+\end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

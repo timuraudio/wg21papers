@@ -67,7 +67,7 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 
 \begin{tabular}{ll}
 Document \#: & D3487R0 \\
-Date: &2024-10-31 \\
+Date: &2024-11-02 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -268,10 +268,10 @@ The proposed wording changes are relative to the wording proposed in \cite{P2900
 
 Remove all wording that relates to:
 \begin{itemize}
-\item The \tcode{pre} identifier with special meaning;
+\item The \tcode{post} identifier with special meaning;
 \item The \emph{postcondition-specifier} and \emph{result-name-introducer} grammar non-terminals;
 \item Postcondition assertions and result names;
-\item The \tcode{pre} enumeration value in \tcode{std::contracts::assertion_kind}.
+\item The \tcode{post} enumeration value in \tcode{std::contracts::assertion_kind}.
 \end{itemize}
 The exact wording diff is not provided here due to its length.
 
@@ -333,12 +333,11 @@ non-reference parameter of that function, that parameter shall be declared \tcod
 \begin{note}
 This requirement applies even to declarations
 that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\added{An \emph{id-expression} that denotes a non-reference parameter in the predicate of a postcondition assertion denotes the same object as in the function body, even if the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]).}
 \end{note}
 \begin{example}
 \tcode{[...]}
 \end{example}
-
-\added{If the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]), the corresponding \emph{id-expression} in the predicate of a postcondition assertion denotes the same object as in the function body.}
 \end{adjustwidth}
 
 \subsection{Option 6}
@@ -362,7 +361,7 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section*{Acknowledgements}
-Thanks to Alisdair Meredith and John Lakos for their helpful remarks during drafting of this paper.
+Thanks to Alisdair Meredith, John Lakos, and Jens Maurer for their helpful remarks during drafting of this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

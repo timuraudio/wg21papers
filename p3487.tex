@@ -122,7 +122,7 @@ One of the design goals of \cite{P2900R10} is to allow the implementation to per
 
 For callee-side checks, the compiler would emit code to perform the precondition and postcondition checks when compiling the definition of the function. For caller-side checks, the compiler would instead emit code around the function call to perform the checks. Note that the precondition and postcondition assertions are part of the function declaration and thus known at every call site.
 
-Callee-side checks can be emitted in all cases. On the other hand, caller-side checks cannot be emitted in certain cases. One such case is an indirect call (e.g., through a pointer to function or pointer to member function), since the compiler does not know at the call site which concrete function will be called. Another such case is an ABI that requires function parameters to be destroyed callee-side (e.g., the Microsoft ABI), which means that postconditions cannot be checked callee-side without an ABI break, as postconditions must be evaluated before destruction of function parameters.
+Callee-side checks can be emitted in all cases. On the other hand, caller-side checks cannot be emitted in certain cases. One such case is an indirect call (e.g., through a pointer to function or pointer to member function), since the compiler does not know at the call site which concrete function will be called. Another such case is an ABI that requires function parameters to be destroyed callee-side (e.g., the Microsoft ABI), which means that postconditions cannot be checked caller-side without an ABI break, as postconditions must be evaluated before destruction of function parameters.
 
 Even though not all checks can be performed caller-side in all cases, the ability to perform at least \emph{some} caller-side checks is important. With this ability, the user can enable contract checks to diagnose defects when working with a library that has been compiled with contract checks off (it can often be too costly or outright impossible to recompile the library with contract checks on and re-link the program). Caller-side checks also enable an implementation of contract checks on virtual functions as specified in \cite{P2900R10}: the caller-facing contract (that of the statically called function) can be checked caller-side, while the callee-facing contract (that of the final overrider selected by virtual dispatch) can be checked callee-side. Note that only the caller knows the caller-facing contract in this case.\footnote{How one could implement checking the caller-facing contract of a virtual function call on an ABI that requires function parameters to be destroyed callee-side, without forcing an ABI break, is currently still an open question, but this problem is only tangentially related to the problem discussed in this paper.}
 
@@ -242,7 +242,7 @@ We are aware of seven possible options for dealing with this problem. These opti
 \item Add an explicit provision that, when a non-reference function parameter is odr-used in a postcondition predicate and the type of the parameter satisfies the requirements for being passed in registers, the corresponding \grammarterm{id-expression} may refer either to the same object as it does in the function body or to the return object at the call site.
 \end{enumerate}
 
-We enumerated the options with an ``R'' prefix (for ``registers''), to distinguish them from the options from \cite{D3484R1} that have an ``V'' prefix (for ``virtual'') and the options from \cite{D3489R0} that have a ``D'' prefix (for ``dependent'').
+We enumerated the options with an ``R'' prefix (for ``registers''), to distinguish them from the options from \cite{D3484R1} that have a ``V'' prefix (for ``virtual'') and the options from \cite{D3489R0} that have a ``D'' prefix (for ``dependent'').
 
 Below we discuss the tradeoffs of each option.
 
@@ -299,7 +299,7 @@ However, the tradeoff of Option~R7 is that it adds the above footgun to the C++ 
 
 \section{Proposal}
 
-With regards to parameters odr-used in \emph{preconditions}, we propose to add a provision to \cite{P2900R10} hat a precondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy, as discussed in Section~\ref{pre}.
+With regards to parameters odr-used in \emph{preconditions}, we propose to add a provision to \cite{P2900R10} that a precondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy, as discussed in Section~\ref{pre}.
 
 With regards to parameters odr-used in \emph{postconditions}, we believe that Options R1 --- R7 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all of these options to determine which option has more consensus in SG21. 
 
@@ -439,7 +439,7 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section*{Acknowledgements}
-Thanks to Alisdair Meredith, John Lakos, Jens Maurer, and Mungo Gill for their helpful remarks during drafting of this paper.
+Thanks to Alisdair Meredith, John Lakos, Jens Maurer, and Mungo Gill for their helpful remarks during drafting of this paper. Thanks to Oliver Rosten for his review of the paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

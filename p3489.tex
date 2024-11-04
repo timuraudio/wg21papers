@@ -67,7 +67,7 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 
 \begin{tabular}{ll}
 Document \#: & D3489R0 \\
-Date: &2024-11-01 \\
+Date: &2024-11-04 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -122,43 +122,53 @@ However, it is less clear what should happen if the template above is instantiat
 \begin{codeblock}
 int main() {
   int i = 1;
-  f<int>(i);  // OK?
+  f<const int>(i);  // OK?
 }
 \end{codeblock}
 
 \section{Possible solutions}
 
 We are aware of two possible options for resolving the ambiguity:
+
+
+% custom enumerators with D prefix:
+\renewcommand\labelenumi{D\arabic{enumi}.}
+\renewcommand\theenumi\labelenumi
+
 \begin{enumerate}
 \item Require the parameter declaration to have an explicit \tcode{const} qualifier, i.e., make the above template declaration ill-formed regardless of whether and how the template is instantiated;
 \item Allow the \tcode{const} qualifier to be part of the dependent type, i.e., do not make the above template declaration ill-formed, but make it ill-formed to instantiate the template with a type that is not \tcode{const}.
 \end{enumerate}
 
+We enumerated the options with a ``D'' prefix (for ``dependent''), to distinguish them from the options from \cite{D3484R1} that have a ``V'' prefix (for ``virtual'') and the options from \cite{D3487R0} that have a ``R'' prefix (for ``registers'').
+
 Below we discuss the tradeoffs of each option.
 
-\subsection*{Option 1}
+\subsection*{Option D1}
 
-Option~1 is the more conservative option. It forces the user to express their intent directly by  declaring the parameter \tcode{const} explicitly. It also catches a defect due to a missing \tcode{const} sooner, as the error will be triggered already when the template is declared, and not when it is instantiated, which may happen much later and in a different component of the program. Finally, it also prevents the user from writing brittle templates with postcondition assertions that might or might not compile depending on the template parameter. Note that the template parameter might be \emph{deduced}, in which case it might not be obvious at all whether the parameter type is actually \tcode{const} or not.
+Option~D1 is the more conservative option. It forces the user to express their intent directly by  declaring the parameter \tcode{const} explicitly. It also catches a defect due to a missing \tcode{const} sooner, as the error will be triggered already when the template is declared, and not when it is instantiated, which may happen much later and in a different component of the program. Finally, it also prevents the user from writing brittle templates with postcondition assertions that might or might not compile depending on the template parameter. Note that the template parameter might be \emph{deduced}, in which case it might not be obvious at all whether the parameter type is actually \tcode{const} or not.
 
-The tradeoff is that Option~1 makes programs ill-formed that do not contain a defect, such as the last example above. The parameter type of \tcode{f<const int>} is actually \tcode{const}, and \cite{P2900R10} normally allows a parameter of such a type to be odr-used in a postcondition assertion; there is no other reason why this program should be ill-formed.
+The tradeoff is that Option~D1 makes programs ill-formed that do not contain a defect, such as the last example above. The parameter type of \tcode{f<const int>} is actually \tcode{const}, and \cite{P2900R10} normally allows a parameter of such a type to be odr-used in a postcondition assertion; there is no other reason why this program should be ill-formed.
 
 \subsection*{Option 2}
 
-Option~2 is the more permissive option. It only rejects programs where, after the template is instantiated (which may involve type deduction and overload resolution), the parameter type is actually found to not be \tcode{const} and therefore may be modified in the function body; the \tcode{const} does not need to be explicit at the point of declaration. 
+Option~D2 is the more permissive option. It only rejects programs where, after the template is instantiated (which may involve type deduction and overload resolution), the parameter type is actually found to not be \tcode{const} and therefore may be modified in the function body; the \tcode{const} does not need to be explicit at the point of declaration. 
 
-The tradeoffs are the inverse of Option~1: if the user got it wrong, the defect will be caught later, and this approach can lead to brittle templates with postcondition assertions that might or might not compile depending on the template parameter.
+The tradeoffs are the inverse of Option~D1: if the user got it wrong, the defect will be caught later, and this approach can lead to brittle templates with postcondition assertions that might or might not compile depending on the template parameter.
 
 \section{Proposal}
 
 We believe that both options are worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose both options, to determine which option has more consensus in SG21. 
 
-Note that Choosing Option~1 would leave the door open to adopting Option~2 at some point in the future, whereas the opposite is not true.
+Note that Choosing Option~D1 would leave the door open to adopting Option~D2 at some point in the future, whereas the opposite is not true.
+
+Note further that \cite{D3487R0} --- which deals with a different problem regarding parameters in postconditions --- proposes the more extreme options R1 (removing postcondition assertions from \cite{P2900R10} altogether), R2 (disallowing odr-use of \emph{any} parameters in postcondition assertions), and R3 (disallowing odr-use of \emph{non-reference} parameters in postcondition assertions). Options R1 --- R3 from \cite{D3487R0} would remove the issue discussed in this paper and should therefore be considered alongside Options D1 and D2 as possible solutions.
 
 \section{Wording}
 
 The proposed wording changes are relative to the wording proposed in \cite{P2900R10}.
 
-\subsection{Option 1}
+\subsection{Option D1}
 
 Modify [dcl.contract.func] as follows:
 
@@ -195,7 +205,7 @@ void f(T t) post(t > 0);  // error: parameter not declared \tcode{const} but odr
 \end{example}
 \end{adjustwidth}
 
-\subsection{Option 2}
+\subsection{Option D2}
 
 Modify [dcl.contract.func] as follows:
 
@@ -240,8 +250,9 @@ int main() {
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%\section*{Acknowledgements}
-%Nothing here yet
+\section*{Acknowledgements}
+
+Thanks to Oliver Rosten for his review of the paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

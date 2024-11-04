@@ -57,7 +57,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
-\title{Preconditions and postconditions odr-using a \\ parameter that may be passed in registers}
+\title{Postconditions odr-using a parameter \\ that may be passed in registers}
 \author{
 Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
 Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
@@ -73,7 +73,7 @@ Audience: & SG21, EWG
 \end{tabular}
 
 \begin{abstract}
-This paper considers the case where a non-reference parameter is odr-used in a postcondition and is eligible to be passed via registers (its type has at least one eligible trivial copy or move constructor and a trivial or deleted destructor). This may lead to the postcondition predicate seeing an older copy of the parameter object. This in turn can lead to unexpected behaviour. We propose several alternatives for how to address this problem in the Contracts MVP \cite{P2900R10}.
+This paper considers the case where a non-reference parameter is odr-used in the predicate of a precondition or postcondition assertion and is eligible to be passed via registers. To enable caller-side checking of preconditions and postconditions, we need to add a provision to the the Contracts MVP \cite{P2900R10} that allows the check to observe either the caller-side or the callee-side version of the parameter object. However, for postconditions, this can lead to surprising behaviour. We propose several alternatives for how to address this problem.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -92,10 +92,10 @@ This paper considers the case where a non-reference parameter is odr-used in a p
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-This paper is the second part of a trilogy of papers dealing with known issues in the Contracts MVP \cite{P2900R10} regarding preconditions and postconditions odr-using non-reference function parameters:
+This paper is the second part of a trilogy of papers dealing with known issues in the Contracts MVP \cite{P2900R10} regarding postconditions odr-using non-reference function parameters:
 \begin{itemize}
 \item \cite{D3484R1} Postconditions odr-using a parameter modified in an overriding function;
-\item \cite{D3487R0} Pre/postconditions odr-using a parameter that may be passed in registers;
+\item \cite{D3487R0} Postconditions odr-using a parameter that may be passed in registers;
 \item \cite{D3489R0} Postconditions odr-using a parameter of dependent type.
 \end{itemize}
 These issues should be considered together, and ideally resolved in a consistent way.

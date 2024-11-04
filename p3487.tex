@@ -57,7 +57,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
-\title{Postconditions odr-using a parameter \\ that may be passed in registers}
+\title{Preconditions and postconditions odr-using a \\ parameter that may be passed in registers}
 \author{
 Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
 Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
@@ -67,7 +67,7 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 
 \begin{tabular}{ll}
 Document \#: & D3487R0 \\
-Date: &2024-11-02 \\
+Date: &2024-11-04 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -92,10 +92,10 @@ This paper considers the case where a non-reference parameter is odr-used in a p
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-This paper is the second part of a trilogy of papers dealing with known issues in the Contracts MVP \cite{P2900R10} regarding postconditions odr-using non-reference function parameters:
+This paper is the second part of a trilogy of papers dealing with known issues in the Contracts MVP \cite{P2900R10} regarding preconditions and postconditions odr-using non-reference function parameters:
 \begin{itemize}
 \item \cite{D3484R1} Postconditions odr-using a parameter modified in an overriding function;
-\item \cite{D3487R0} Postconditions odr-using a parameter that may be passed in registers;
+\item \cite{D3487R0} Pre/postconditions odr-using a parameter that may be passed in registers;
 \item \cite{D3489R0} Postconditions odr-using a parameter of dependent type.
 \end{itemize}
 These issues should be considered together, and ideally resolved in a consistent way.
@@ -103,20 +103,39 @@ These issues should be considered together, and ideally resolved in a consistent
 \section{Background}
 \label{bg}
 
-For efficiency reasons, the major ABIs used for implementations of C++ allow objects to be passed to a function and returned from a function via \emph{registers} when the type of the object satisfies certain requirements  (\href{https://timsong-cpp.github.io/cppwp/n4950/class.temporary#3}{[class.temporary]/3}):
+For efficiency reasons, the major ABIs used for implementations of C++ allow objects to be passed to a function and returned from a function via \emph{registers} when the type of the object satisfies certain requirements. The C++ Standard accommodates such passing and returning via registers in \href{https://timsong-cpp.github.io/cppwp/n4950/class.temporary#3}{[class.temporary]/3} as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 When an object of class type \tcode{X} is passed to or returned from a function, if \tcode{X} has at least one eligible copy or move constructor ([special]), each such constructor is trivial, and the destructor of \tcode{X} is either trivial or deleted, implementations are permitted to create a temporary object to hold the function parameter or result object. The temporary object is constructed from the function argument or return value, respectively, and the function's parameter or return object is initialised as if by using the eligible trivial constructor to copy the temporary (even if that constructor is inaccessible or would not be selected by overload resolution to perform a copy or move of the object).
 \end{adjustwidth}
 
-Effectively, such objects passed and returned via registers do not exist in memory and do not have an address; their value is instead accessed by materialising a temporary copy. In C++ today, this specification peculiarity causes no friction, because there is (with one minor exception\footnote{An object that meets the requirements to be passed in a register may still have a user-provide constructor that may observe its address through the use of \tcode{this}, and that address may then differ from the address seen for the parameter within the function body.}) no context where the pre-temporary copy versions of these objects could be directly observable by the user. However, the Contracts MVP \cite{P2900R10} adds precondition and postcondition assertions, which can be such a context where that pre-temporary object is not only observable, but usable by name.
+Effectively, such objects passed and returned via registers do not exist in memory and do not have an address; their value is instead accessed by materialising a temporary copy. In C++ today, this specification peculiarity causes no friction, because there is (with one minor exception\footnote{An object that meets the requirements to be passed in a register may still have a user-provide constructor that may observe its address through the use of \tcode{this}, and that address may then differ from the address seen for the parameter within the function body.}) no context where the pre-temporary copy versions of these objects could be directly observable by the user. 
+The current wording does not say it explicitly, but there is an assumption within it that, once a temporary has been created to ``hold the function parameter or result object'', that temporary will be referred to whenever the name that denotes the object is used going forward.
 
-The current wording does not say it explicitly, but there is an assumption within it that, once a temporary has been created to ``hold the function parameter or result object'', that temporary will be referred to whenever the parameter name is used going forward.   In practice in C++ today, that is always the case.
+In practice in C++ today, that is always the case. However, the Contracts MVP \cite{P2900R10} adds function-contract assertions (precondition and postcondition assertions). Depending on how we specify them, they could create a new context where the pre-temporary copy versions of  parameter objects and/or return objects are not only observable, but usable by name. We therefore must clarify exactly what semantics we want to allow in those cases, and what that means for implementations and for users.
 
-Precondition assertions, even if checked caller-side, will potentially observe the pre-temporary object but will do so before the copy is made to pass the object into a function.   Postcondition assertions, however, if implemented as caller-side checks that only know about the pre-temporary object, will be referencing the object \emph{after} it has also been copied and the copy has been used within the function body.
-In both of these cases we must clarify exactly what semantics we want to allow, and what that means for implementations and for users.
+\section{Discussion}
 
-For the case of an object \emph{returned from} a function, which can be observed in a postcondition assertion via the introduced \emph{result name}, the specification proposed in \cite{P2900R10} already contains an explicit provision for objects returned via registers:
+\subsection{Caller-side checking}
+
+One of the design goals of \cite{P2900R10} is to allow the implementation to perform precondition and postcondition checks either callee-side or caller-side. A discussion of implementation strategies can be found in \cite{P3267R0} and \cite{P3321R0}; a discussion of the motivation and use cases for both caller-side and callee-side checks can be found in \cite{P3228R1}, \cite{P3264R1}, \cite{P3270R0}, \cite{P3321R0}, and references therein. We provide a very brief summary below,.
+
+For callee-side checks, the compiler would emit code to perform the precondition and postcondition checks when compiling the definition of the function. For caller-side checks, the compiler would instead emit code around the function call to perform the checks. Note that the precondition and postcondition assertions are part of the function declaration and thus known at every call site.
+
+Callee-side checks can be emitted in all cases. On the other hand, caller-side checks cannot be emitted in certain cases. One such case is an indirect call (e.g., through a pointer to function or pointer to member function), since the compiler does not know at the call site which concrete function will be called. Another such case is an ABI that requires function parameters to be destroyed callee-side (e.g., the Microsoft ABI), which means that postconditions cannot be checked callee-side without an ABI break, as postconditions must be evaluated before destruction of function parameters.
+
+Even though not all checks can be performed caller-side in all cases, the ability to perform at least \emph{some} caller-side checks is important. With this ability, the user can enable contract checks to diagnose defects when working with a library that has been compiled with contract checks off (it can often be too costly or outright impossible to recompile the library with contract checks on and re-link the program). Caller-side checks also enable an implementation of contract checks on virtual functions as specified in \cite{P2900R10}: the caller-facing contract (that of the statically called function) can be checked caller-side, while the callee-facing contract (that of the final overrider selected by virtual dispatch) can be checked callee-side. Note that only the caller knows the caller-facing contract in this case.\footnote{How one could implement checking the caller-facing contract of a virtual function call on an ABI that requires function parameters to be destroyed callee-side, without forcing an ABI break, is currently still an open question, but this problem is only tangentially related to the problem discussed in this paper.}
+
+\subsection{Preconditions and parameters}
+\label{pre}
+
+Precondition checks can only observe objects passed to a function, i.e., the function parameters, not objects returned from the function. \cite{P2900R10} currently does not contain an explicit provision that would allow precondition checks to observe the pre-temporary copy parameter objects. It follows therefore from [class.temporary] that precondition checks must observe the same parameter object as the function body. This makes caller-side precondition checks unimplementable with the current specification.
+
+We can fix this problem by adding an explicit provision to \cite{P2900R10} that a precondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy. If the precondition check observes the pre-temporary object, it will do so before the copy is made to pass the object into a function. If it observes the temporary copy, it will observe the same object as the function body. In either case, there is no problem.
+
+\subsection{Postconditions and the return object}
+
+Unlike precondition checks, postcondition checks can observe both parameters and the return object. \cite{P2900R10} contains an explicit provision that allows postcondition checks to observe either the caller-side or the callee-side version of the return object:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the implementation is permitted to introduce a temporary object for the return value
@@ -139,7 +158,11 @@ int main() {
 
 In the example above, if \tcode{X} is \emph{not} a type eligible to be passed via registers, the postcondition check of \tcode{f} is guaranteed to pass, because \tcode{r} must denote the return object \tcode{x} in \tcode{main()}; however, if \tcode{X} \emph{is} a type eligible to be passed via registers, the postcondition check may\footnote{In practice, whether this check fails will depend on both optimization levels and whether \tcode{f} is inlined into \tcode{main()}.} fail, because \tcode{r} may instead denote a temporary object.
 
-So far, so good. However, \cite{P2900R10} has not explicitly considered the other half of this phenomenon --- the case of an object \emph{passed to} a function, i.e., a non-reference parameter. Consider:
+This behaviour may be surprising to a user not familiar with the rules for returning objects via registers, but there is no actual problem --- this behaviour is an exact mirror image of parameters in postcondition assertions. Postcondition checks that refer to the return object may therefore be implemented either caller-side or callee-side with the current specification.
+
+\subsection{Postconditions and parameters}
+
+The third and last case to consider is a postcondition assertion odr-using a non-reference parameter:
 
 \begin{codeblock}
 X* ptr;
@@ -148,13 +171,18 @@ void f(const X x) post (ptr == &x) {
   ptr = &x;
 }
 \end{codeblock}
-If \tcode{X} is a type eligible to be passed via registers, is this postcondition guaranteed to pass or not? \cite{P2900R10} is silent on this issue; the wording could be read one way or another.
 
-At this point, we could decide to clarify in \cite{P2900R10} that the postcondition is \emph{not} guaranteed to pass in this case, consistent with the return object case, and move on. However, such a specification would have surprising consequences which are worth considering first.
+If \tcode{X} is a type eligible to be passed via registers, is this postcondition guaranteed to pass or not?
 
-\section{The problem}
+Just like for precondition assertions, \cite{P2900R10} currently does not contain an explicit provision that would allow postcondition checks to observe the pre-temporary copy parameter objects. It follows therefore from [class.temporary] that postcondition checks, like precondition checks, must observe the same parameter object as the function body; the postcondition assertion above is guaranteed to pass.
 
-If the postcondition assertion is allowed to see a different copy of a parameter object than the function body, the problem is that these two versions of the same object could diverge, rendering the postcondition's actual meaning significantly more difficult to reason about. Any parameter odr-used in a postcondition must be declared \tcode{const}, but that means that the function body could still modify any \tcode{mutable} members of that class, and the postcondition assertion may not see those modifications.
+This makes caller-side precondition checks unimplementable with the current specification (other reasons why they might be unimplementable, in particular an ABI that requires function parameters to be destroyed callee-side, notwithstanding).
+
+Just like for the previous two cases, we could add an explicit provision to \cite{P2900R10} that a postcondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy. However, unlike for preconditions, for postconditions we now run into the problem that the temporary copy is made when the function is called, but the postcondition assertion is evaluated when the function returns, and arbitrary code can be executed in between. 
+
+\cite{P2900R10} requires every parameter odr-used in a postcondition assertion  to be declared \tcode{const} on all declarations of the function, and requires that function to not be a coroutine, which guarantees that the parameter object that the function body observes is not modified between the function call and its return. However, if the parameter is passed in registers, and the postcondition observes the pre-temporary copy parameter object, these two versions of the parameter object could diverge. This has surprising consequences and renders the postcondition's actual meaning significantly more difficult to reason about. 
+
+In particular, even if the parameter object is \tcode{const}, the function body could still modify any \tcode{mutable} members of that class. If the postcondition assertion is allowed to observe the pre-temporary copy version of the object, it will not see such modifications.
 
 Now, of course we should not write postconditions that directly depend on such mutable state anyway, and if we do, we have already shot ourselves in the foot. But the problem at hand is more subtle: we may have a type whose correctness is connected to that mutable state.
 
@@ -187,7 +215,7 @@ public:
   }
 };
  \end{codeblock}
-Note that our \tcode{RandomInteger} class, as defined above, has a trivial copy constructor and a trivial destructor and is therefore eligible to be passed via registers. This leads to a footgun as soon as we pass such an object to a function as a non-reference parameter, and simultaneously odr-use that parameter in the postcondition predicate of the function: 
+Note that our \tcode{RandomInteger} class, as defined above, has a trivial copy constructor and a trivial destructor and is therefore eligible to be passed via registers. This leads to a new footgun: 
  \begin{codeblock}
 int f(const RandomInteger i)
 post(r: r & i.value() == 0) {
@@ -196,9 +224,7 @@ post(r: r & i.value() == 0) {
  \end{codeblock}
 If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code will break. The postcondition assertion will see a different integer value returned from \tcode{i.value()} than the body of the function, and thus fail where it should pass or vice versa, even though for any user reading this code without a deep understanding of objects being passed in registers will see nothing obviously incorrect with this code.
 
-Such code works in C++ today because after the parameter object has been packed into registers and passed to the function,  the original object will never be touched by anything again (remember that the type also needs to have a trivial or deleted destructor, not just an eligible trivial copy or move constructor). However, the presence of postcondition assertions that can odr-use this object changes that. If we want to allow an implementation to check postcondition assertions \emph{caller-side}, then these postcondition assertions must see the original object before it was forked and passed to the function via registers, thus creating the footgun described above.
-
-\section{Possible solutions}
+Such code works in C++ today because after the parameter object has been packed into registers and passed to the function,  the original object will never be touched by anything again (remember that the type also needs to have a trivial or deleted destructor, not just an eligible trivial copy or move constructor). However, allowing a postcondition check to observe the original object --- which is required to enable caller-side postcondition checks --- changes that, which creates the footgun above.
 
 We are aware of six possible options for dealing with this problem. These are, from most to least
 restrictive:
@@ -208,15 +234,15 @@ restrictive:
 \item Remove the ability to odr-use \emph{any} function parameters in postcondition predicates.
 \item Remove the ability to odr-use any \emph{non-reference} function parameters in postcondition predicates.
 \item Remove the ability to odr-use non-reference function parameters in postcondition predicates if the type of the parameter satisfies the requirements for being passed via registers.
-\item Require that when a non-reference function parameter is odr-used in a postcondition predicate, the corresponding \grammarterm{id-expression} must refer to the same object as it does in the function body.
-\item Specify that, when a non-reference function parameter is odr-used in a postcondition predicate and the type of the parameter satisfies the requirements for being passed in registers, the corresponding \grammarterm{id-expression} may refer to a different copy of the object than it does in the function body.
+\item Clarify that when a non-reference function parameter is odr-used in a postcondition predicate, the corresponding \grammarterm{id-expression} must refer to the same object as it does in the function body (status quo in \cite{P2900R10}).
+\item Add an explicit provision that, when a non-reference function parameter is odr-used in a postcondition predicate and the type of the parameter satisfies the requirements for being passed in registers, the corresponding \grammarterm{id-expression} may refer either to the same object as it does in the function body or to the return object at the call site.
 \end{enumerate}
 
 Below we discuss the tradeoffs of each option.
 
 \subsection*{Option 1}
 
-Option~1 would be a rather drastic measure at this point. Consider that postcondition assertions are significantly more difficult to specify than preconditions (see \cite{P1323R2}, \cite{P3007R0}, and \cite{P3098R0}), and unlike preconditions, postcondition assertions have so far already generated several known issues that needed fixing in the specification of \cite{P2900R10} (see \cite{P3387R0}, \cite{P3460R0}, \cite{P3483R0}, \cite{D3484R1}, and \cite{D3489R0}). Option~1 would remove \emph{all} known and unknown footguns from postcondition assertions by removing the feature itself.
+Option~1 would be a rather drastic measure at this point. However, consider that postcondition assertions are significantly more difficult to specify than preconditions (see \cite{P1323R2}, \cite{P3007R0}, and \cite{P3098R0}), and unlike preconditions, postcondition assertions have so far already generated several known issues that needed fixing in the specification of \cite{P2900R10} (see \cite{P3387R0}, \cite{P3460R0}, \cite{P3483R0}, \cite{D3484R1}, and \cite{D3489R0}). Option~1 would remove \emph{all} known and unknown footguns from postcondition assertions by removing the feature itself.
 
 We believe that \cite{P2900R10} would still be viable and useful without postcondition assertions. Postcondition assertions have significantly fewer uses than precondition assertions, and their value can to a certain extent also be achieved with good unit test coverage. 
 
@@ -242,29 +268,45 @@ Unlike Options 1 --- 3, Option 4 is not a radical solution that removes vast swa
 
 \subsection*{Option 5}
 
-Option~5 removes the above footgun without making any code ill-formed. It is therefore arguably the optimal choice with respect to the user experience of dealing with code like the above. However, Option~5 comes with a cost: it would make it impossible to implement caller-side postcondition checking without an ABI break.
+Option~5 is the status quo. It is the only solution that both avoids the above footgun and is not a breaking change to \cite{P2900R10}: postconditions odr-using a \tcode{const} non-reference parameter of a non-coroutine function remain well-formed. Option~5 is therefore arguably the optimal choice with respect to the immediate user experience when dealing with code such as the above. However, Option~5 comes with a high cost: implementing caller-side postcondition checks remains impossible without an ABI break.
 
-Not allowing caller-side postcondition checking would prevent the simplest implementations of virtual function contract checking.  It would also make it impossible to enable contract checking for functions whose implementation is in a translation unit that was compiled without contract checks enabled. The alternative, imposing an ABI break on all users who wish to add postcondition assertions to their functions, would arguably do significant harm to the adoption of Contracts in the C++ ecosystem, which is why one of the fundamental design principles of the Contracts MVP (\cite{P2900R10} Principle 16) is to avoid such an ABI break.
+The necessary ABI break to enable caller-side postcondition checks --- and by extension, to implement full contract checks on virtual functions as specified by \cite{P2900R10} --- would consist of no longer passing function parameters via registers if they are odr-used in the postcondition assertion. However, imposing an ABI break on all users who wish to add postcondition assertions to their functions would arguably do significant harm to the adoption of Contracts in the C++ ecosystem, which is why one of the fundamental design principles of the Contracts MVP (\cite{P2900R10} Principle 16) is to avoid such an ABI break.
 
 \subsection*{Option 6}
 
-Option~6 makes the behaviour of objects passed to a function in registers consistent with the behaviour of objects returned from a function in registers. It is therefore arguably the optimal choice with respect to having a straightforward specification and implementation of the feature, enabling caller-side checking, avoiding ABI issues, not making any user code unnecessarily ill-formed, and not imposing any unnecessary run-time cost on the user.
+Option~6 makes the behaviour of postconditions with respect to objects passed to a function in registers consistent with the behaviour for objects returned from a function in registers, as well as with the behaviour of preconditions as proposed in Section~\ref{pre}. Option~6 is therefore arguably the optimal choice with respect to having a straightforward specification and implementation of the feature, enabling caller-side checking, avoiding ABI issues, not making any user code unnecessarily ill-formed, and not imposing any unnecessary run-time cost on the user.
 
-However, the tradeoff of Option~6 is that the above footgun remains. Note that the footgun only occurs in rare edge cases, in particular when a \tcode{const} object eligible to be passed via registers is used as a non-reference parameter and its type relies on mutable state for its correctness, and a postcondition assertion would break if it happens to observe an earlier version of that mutable state. Note further that such cases could potentially be mitigated by an implementation issuing a warning if a type eligible to be passed in registers has \tcode{mutable} members (including in any of its subtypes), is used as the type of a non-reference function parameter, and that parameter is odr-used in a postcondition assertion of that function or another function that that function overrides.
+However, the tradeoff of Option~6 is that it adds the above footgun to the C++ language. Note that the footgun only occurs in rare edge cases, in particular when a \tcode{const} object eligible to be passed via registers is used as a non-reference parameter and its type relies on mutable state for its correctness, and a postcondition assertion would break if it happens to observe an earlier version of that mutable state. Note further that such cases could potentially be mitigated by an implementation issuing a warning if a type eligible to be passed in registers has \tcode{mutable} members (including in any of its subtypes), is used as the type of a non-reference function parameter, and that parameter is odr-used in a postcondition assertion of that function or another function that that function overrides.
 
 \section{Proposal}
 
-We believe that Options 1 --- 6 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all of these options to determine which option has more consensus in SG21. 
+With regards to parameters odr-used in \emph{preconditions}, we propose to add a provision to \cite{P2900R10} hat a precondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy, as discussed in Section~\ref{pre}.
 
-Note that choosing Option~1 would leave the door open to adopting any of the other options without breaking changes at some point in the future; Option~2 could only be evolved towards Options 3 -- 6; Option~3 could only be evolved towards Options 4 -- 6; Option~4 could only be evolved towards Options 5 or 6; while Options 5 and 6 are mutually exclusive and cannot be evolved towards any of the other options without breaking changes once adopted.
+With regards to parameters odr-used in \emph{postconditions}, we believe that Options 1 --- 6 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all of these options to determine which option has more consensus in SG21. 
+
+Note that choosing Option~1 would leave the door open to adopting any of the other options without breaking changes at some point in the future; Option~2 could only be evolved towards Options 3 -- 6; Option~3 could only be evolved towards Options 4 -- 6; Option~4 could only be evolved towards Options 5 or 6; finally, Options 5 and 6 are mutually exclusive and cannot be evolved towards any of the other options without breaking changes once adopted.
 
 Note further that choosing Options 1, 2, or 3 would also remove the source of the issues discussed in the two companion papers \cite{D3484R1} and \cite{D3489R0}.
-
 \section{Wording}
 
 The proposed wording changes are relative to the wording proposed in \cite{P2900R10}.
 
-\subsection{Option 1}
+\subsection*{Preconditions}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\added{If the predicate of a precondition assertion of a function or-uses ([basic.def.odr]) a non\-reference parameter of that function, and the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]), it is unspecified whether the corresponding \grammarterm{id-expression} in the predicate of the precondition assertion denotes that temporary object or the original parameter object.} If the predicate of a postcondition assertion of a function odr-uses \removed{([basic.def.odr]) }a non\-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type. 
+\begin{note}
+This requirement applies even to declarations
+that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\begin{example}
+\tcode{[...]}
+\end{example}
+\end{adjustwidth}
+
+\subsection*{Postconditions --- Option 1}
 
 Remove all wording that relates to:
 \begin{itemize}
@@ -275,7 +317,7 @@ Remove all wording that relates to:
 \end{itemize}
 The exact wording diff is not provided here due to its length.
 
-\subsection{Option 2}
+\subsection*{Postconditions --- Option 2}
 
 Modify [dcl.contract.func] as follows:
 
@@ -291,7 +333,7 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 \end{example}
 \end{adjustwidth}
 
-\subsection{Option 3}
+\subsection*{Postconditions --- Option 3}
 
 Modify [dcl.contract.func] as follows:
 
@@ -307,7 +349,7 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 \end{example}
 \end{adjustwidth}
 
-\subsection{Option 4}
+\subsection*{Postconditions --- Option 4}
 
 Modify [dcl.contract.func] as follows:
 
@@ -323,7 +365,7 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 \end{example}
 \end{adjustwidth}
 
-\subsection{Option 5}
+\subsection*{Postconditions --- Option 5}
 
 Modify [dcl.contract.func] as follows:
 
@@ -340,7 +382,7 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 \end{example}
 \end{adjustwidth}
 
-\subsection{Option 6}
+\subsection*{Postconditions --- Option 6}
 
 Modify [dcl.contract.func] as follows:
 

@@ -67,7 +67,7 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 
 \begin{tabular}{ll}
 Document \#: & D3489R0 \\
-Date: &2024-11-04 \\
+Date: &2024-11-06 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -146,16 +146,15 @@ Below we discuss the tradeoffs of each option.
 
 \subsection*{Option D1}
 
-Option~D1 is the more conservative option. It forces the user to express their intent directly by  declaring the parameter \tcode{const} explicitly. It also catches a defect due to a missing \tcode{const} sooner, as the error will be triggered already when the template is declared, and not when it is instantiated, which may happen much later and in a different component of the program. Finally, it also prevents the user from writing brittle templates with postcondition assertions that might or might not compile depending on the template parameter. Note that the template parameter might be \emph{deduced}, in which case it might not be obvious at all whether the parameter type is actually \tcode{const} or not.
+Option~D1 is the more conservative option. It forces the user to express their intent directly by  declaring the parameter \tcode{const} explicitly. It also catches a defect due to a missing \tcode{const} sooner, as the error will be triggered already when the template is declared, and not when it is instantiated, which may happen much later and in a different component of the program. Finally, it also prevents the user from writing brittle templates with postcondition assertions that might or might not compile depending on the template parameter. When deducing a template argument from a by-value parameter, \tcode{const} is not deduced as part of that type. So the parameter will only be \tcode{const} when specified explicitly in the template argument list. It does not seem to be useful to have templates that either do or do not compile depending on whether that \tcode{const} on the template argument list is there.
 
-The tradeoff is that Option~D1 makes programs ill-formed that do not contain a defect, such as the last example above. The parameter type of \tcode{f<const int>} is actually \tcode{const}, and \cite{P2900R10} normally allows a parameter of such a type to be odr-used in a postcondition assertion; there is no other reason why this program should be ill-formed.
+The tradeoff is that Option~D1 makes programs ill-formed that do not contain a defect, such as the last example above. The parameter type of \tcode{f<const int>} is actually \tcode{const}, and \cite{P2900R10} normally allows a parameter of such a type to be odr-used in a postcondition assertion; nevertheless, this program would be rejected.
 
 \subsection*{Option D2}
 
-Option~D2 is the more permissive option. It only rejects programs where, after the template is instantiated (which may involve type deduction and overload resolution), the parameter type is actually found to not be \tcode{const} and therefore may be modified in the function body; the \tcode{const} does not need to be explicit at the point of declaration. 
+Option~D2 is the more permissive option. It only rejects programs where, after the template is instantiated, the parameter type is actually found to not be \tcode{const} and therefore may be modified in the function body; the \tcode{const} does not need to be explicit at the point of declaration. 
 
-The tradeoffs are the inverse of Option~D1: if the user got it wrong, the defect will be caught later, and this approach can lead to brittle templates with postcondition assertions that might or might not compile depending on the template parameter.
-
+The tradeoffs are the inverse of Option~D1: if the user got it wrong, the defect will be caught later rather than earlier, and this approach can lead to brittle templates with postcondition assertions that might or might not compile depending on the template parameter. It is not clear whether being more permissive here actually gains anything significant or useful.
 \section{Proposal}
 
 We believe that both options are worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose both options, to determine which option has more consensus in SG21. 
@@ -174,7 +173,7 @@ Modify [dcl.contract.func] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, \removed{that parameter shall be declared \tcode{const} }\added{the declaration of that parameter shall have a \tcode{const} qualifier, }and
+non-reference parameter of that function, \removed{that parameter shall be declared \tcode{const} }\added{all declarations of that parameter shall have a \tcode{const} qualifier }and
 shall not have array or function type.
 \begin{note}
 This requirement applies even to declarations that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when
@@ -211,10 +210,10 @@ Modify [dcl.contract.func] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, that parameter shall be declared \tcode{const} and
-shall not have array or function type. 
+non-reference parameter of that function, \removed{that parameter shall be declared \tcode{const} and
+shall not have }\added{the type of that parameter shall be \tcode{const} and shall not be an }array or function type. 
 \begin{note}
-This requirement applies even to declarations that do not specify the \grammarterm{postcondition-specifier}. \added{The \tcode{const} qualifier of the parameter may be part of the dependent type. }Arrays and functions are still usable when
+This requirement applies even to declarations that do not specify the \grammarterm{postcondition-specifier}. \added{The \tcode{const} qualifier of the parameter may be part of a dependent type. }Arrays and functions are still usable when
 declared with the equivalent pointer types ([dcl.fct]). 
 \end{note}
 \begin{example}

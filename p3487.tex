@@ -176,7 +176,7 @@ If \tcode{X} is a type eligible to be passed via registers, is this postconditio
 
 Just like for precondition assertions, \cite{P2900R10} currently does not contain an explicit provision that would allow postcondition checks to observe the pre-temporary copy parameter objects. It follows therefore from [class.temporary] that postcondition checks, like precondition checks, must observe the same parameter object as the function body; the postcondition assertion above is guaranteed to pass.
 
-This makes caller-side precondition checks unimplementable with the current specification (other reasons why they might be unimplementable, in particular an ABI that requires function parameters to be destroyed callee-side, notwithstanding).
+This makes caller-side precondition checks unimplementable with the current specification without an ABI break that changes the ABI to no longer pass parameters via registers (other reasons why they might be unimplementable, in particular an ABI that requires function parameters to be destroyed callee-side, notwithstanding).
 
 Just like for the previous two cases, we could add an explicit provision to \cite{P2900R10} that a postcondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy. However, unlike for preconditions, for postconditions the fact that the addresses of the object that the contract assertion sees and the object that the function body sees might be different (which in itself is harmless) is no longer the only observable effect of such a provision. In addition to that, we now also run into the problem that the temporary copy is made when the function is called, but the postcondition assertion is evaluated when the function returns. There is a period in between during which arbitrary code could be executed that can change the state of the parameter object.
 
@@ -224,7 +224,7 @@ post(r: r & i.value() == 0) {
  \end{codeblock}
 If there is no guarantee that the \tcode{i} in the postcondition assertion refers to the same object as the \tcode{i} in the function body, this code will break. The postcondition assertion will see a different integer value returned from \tcode{i.value()} than the body of the function, and thus fail where it should pass or vice versa, even though for any user reading this code without a deep understanding of objects being passed in registers will see nothing obviously incorrect with this code.
 
-Such code works in C++ today because after the parameter object has been packed into registers and passed to the function,  the original object will never be touched by anything again (remember that the type also needs to have a trivial or deleted destructor, not just an eligible trivial copy or move constructor). However, allowing a postcondition check to observe the original object --- which is required to enable caller-side postcondition checks --- changes that, which creates the footgun above.
+Such code works in C++ today because after the parameter object has been packed into registers and passed to the function,  the original object will never be touched by anything again (remember that the type also needs to have a trivial or deleted destructor, not just an eligible trivial copy or move constructor). However, allowing a postcondition check to observe the original object --- which is required to enable caller-side postcondition checks without an ABI break --- changes that, which creates the footgun above.
 
 We are aware of eight possible options for dealing with this problem. These options are, from most to least restrictive:
 
@@ -314,9 +314,9 @@ However, Option~R8 also comes with a high cost: implementing caller-side postcon
 
 With regards to parameters odr-used in \emph{preconditions}, we propose to add a provision to \cite{P2900R10} that a precondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy, as discussed in Section~\ref{pre}.
 
-With regards to parameters odr-used in \emph{postconditions}, we believe that Options R1 --- R8 are all worth considering and the tradeoffs of each option are sufficiently clear; a summary of these tradeoffs for each option can be found in Table~\ref{tradeoffs}. We propose all of these options to determine which option has more consensus in SG21.
+With regards to parameters odr-used in \emph{postconditions}, we believe that Options R1 --- R8 are all worth considering, and propose all of them to determine which option has more consensus in SG21. A summary of the tradeoffs for each option can be found in Table~\ref{tradeoffs}.
 
-Note that there are three requirements that are \emph{impossible} to satisfy simultaneously --- we need to choose two. These requirements are: allowing a postcondition predicate to odr-use non-reference parameters of \emph{any} type; avoiding the footgun created by parameter objects with \tcode{mutable} subobjects; and allowing caller-side checking of postconditions. If we are willing to abandon the first requirement, we can choose between Options R1 --- R6, which offer a spectrum between most restrictive and most brittle; if we are willing to abandon the second requirement, the optimal solution is Option~R7; if we are willing to abandon the third requirement, the optimal solution is Option~R8.
+Note that there are three requirements that are \emph{impossible} to satisfy simultaneously --- we need to choose two. These requirements are: allowing a postcondition predicate to odr-use non-reference parameters of \emph{any} type; avoiding the footgun created by parameter objects with \tcode{mutable} subobjects; and allowing caller-side checking of postconditions that odr-use non-reference parameters without an ABI break that removes passing via registers. If we are willing to abandon the first requirement, we can choose between Options R1 --- R6, which offer a spectrum between most restrictive and most brittle; if we are willing to abandon the second requirement, the optimal solution is Option~R7; if we are willing to abandon the third requirement, the optimal solution is Option~R8.
 
 Options R1 --- R3 do not offer any advantage over Options R4 --- R6 with regards to the specific issues discussed in this paper. However, R1 --- R3 may still be interesting because they would remove the source of the issues discussed in the two companion papers \cite{D3484R1} and \cite{D3489R0}. 
 
@@ -340,7 +340,7 @@ Allows odr-using non-reference parameters of at least scalar type& \no & \no  & 
 Allows odr-using non-reference parameters of any type& \no & \no  & \no  & \no & \no & \no & \yes & \yes \\ \hline
 Avoids brittle discrimination based on certain type traits& \yes & \yes  & \yes  & \maybe & \no & \no & \yes & \yes \\ \hline
 Makes it impossible to shoot yourself with the footgun& \yes & \yes  & \yes  & \yes & \yes & \yes & \no & \yes \\ \hline
-Allows caller-side checking of postconditions& \yes & \yes  & \yes  & \yes & \yes & \yes & \yes & \no \\ \hline
+Allows caller-side postcondition checking without ABI break& \yes & \yes  & \yes  & \yes & \yes & \yes & \yes & \no \\ \hline
 \end{tabular}
 \vspace{2mm}
 \caption{Main tradeoffs of proposed options R1 --- R8. Discriminating on whether the parameter is of scalar type (R4) is marked with a question mark because it is significantly less brittle than discriminating based on more complicated and non-obvious type traits (R5 and R6).}

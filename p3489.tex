@@ -150,7 +150,7 @@ Option~D1 is the more conservative option. It forces the user to express their i
 
 The tradeoff is that Option~D1 makes programs ill-formed that do not contain a defect, such as the last example above. The parameter type of \tcode{f<const int>} is actually \tcode{const}, and \cite{P2900R10} normally allows a parameter of such a type to be odr-used in a postcondition assertion; there is no other reason why this program should be ill-formed.
 
-\subsection*{Option 2}
+\subsection*{Option D2}
 
 Option~D2 is the more permissive option. It only rejects programs where, after the template is instantiated (which may involve type deduction and overload resolution), the parameter type is actually found to not be \tcode{const} and therefore may be modified in the function body; the \tcode{const} does not need to be explicit at the point of declaration. 
 

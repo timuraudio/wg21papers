@@ -67,7 +67,7 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 
 \begin{tabular}{ll}
 Document \#: & D3487R0 \\
-Date: &2024-11-04 \\
+Date: &2024-11-06 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -178,11 +178,11 @@ Just like for precondition assertions, \cite{P2900R10} currently does not contai
 
 This makes caller-side precondition checks unimplementable with the current specification (other reasons why they might be unimplementable, in particular an ABI that requires function parameters to be destroyed callee-side, notwithstanding).
 
-Just like for the previous two cases, we could add an explicit provision to \cite{P2900R10} that a postcondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy. However, unlike for preconditions, for postconditions we now run into the problem that the temporary copy is made when the function is called, but the postcondition assertion is evaluated when the function returns, and arbitrary code can be executed in between. 
+Just like for the previous two cases, we could add an explicit provision to \cite{P2900R10} that a postcondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy. However, unlike for preconditions, for postconditions the fact that the addresses of the object that the contract assertion sees and the object that the function body sees might be different (which in itself is harmless) is no longer the only observable effect of such a provision. In addition to that, we now also run into the problem that the temporary copy is made when the function is called, but the postcondition assertion is evaluated when the function returns. There is a period in between during which arbitrary code could be executed that can change the state of the parameter object.
 
 \cite{P2900R10} requires every parameter odr-used in a postcondition assertion  to be declared \tcode{const} on all declarations of the function, and requires that function to not be a coroutine, which guarantees that the parameter object that the function body observes is not modified between the function call and its return. However, if the parameter is passed in registers, and the postcondition observes the pre-temporary copy parameter object, these two versions of the parameter object could diverge. This has surprising consequences and renders the postcondition's actual meaning significantly more difficult to reason about. 
 
-In particular, even if the parameter object is \tcode{const}, the function body could still modify any \tcode{mutable} members of that class. If the postcondition assertion is allowed to observe the pre-temporary copy version of the object, it will not see such modifications.
+In particular, even if the parameter object is \tcode{const}, the function body could still modify any \tcode{mutable} subobjects of that object. If the postcondition assertion is allowed to observe the pre-temporary copy version of the object, it will not see such modifications.
 
 Now, of course we should not write postconditions that directly depend on such mutable state anyway, and if we do, we have already shot ourselves in the foot. But the problem at hand is more subtle: we may have a type whose correctness is connected to that mutable state.
 
@@ -226,7 +226,7 @@ If there is no guarantee that the \tcode{i} in the postcondition assertion refer
 
 Such code works in C++ today because after the parameter object has been packed into registers and passed to the function,  the original object will never be touched by anything again (remember that the type also needs to have a trivial or deleted destructor, not just an eligible trivial copy or move constructor). However, allowing a postcondition check to observe the original object --- which is required to enable caller-side postcondition checks --- changes that, which creates the footgun above.
 
-We are aware of seven possible options for dealing with this problem. These options are, from most to least restrictive:
+We are aware of eight possible options for dealing with this problem. These options are, from most to least restrictive:
 
 % custom enumerators with R prefix:
 \renewcommand\labelenumi{R\arabic{enumi}.}
@@ -234,12 +234,13 @@ We are aware of seven possible options for dealing with this problem. These opti
 
 \begin{enumerate}
 \item Remove postcondition assertions from \cite{P2900R10} entirely.
-\item Remove the ability to odr-use \emph{any} function parameters in postcondition predicates.
-\item Remove the ability to odr-use any \emph{non-reference} function parameters in postcondition predicates.
-\item Remove the ability to odr-use non-reference function parameters in postcondition predicates unless the parameter is of scalar type.\footnote{Scalar types are arithmetic types, enumeration types, pointer types, pointer-to-member types, \tcode{std::nullptr_t}, and $cv$-qualified versions of these types. Arithmetic types are integral and floating-point types; integral types include character types and \tcode{bool}.}
-\item Remove the ability to odr-use non-reference function parameters in postcondition predicates if the type of the parameter satisfies the requirements for being passed via registers.
-\item Clarify that when a non-reference function parameter is odr-used in a postcondition predicate, the corresponding \grammarterm{id-expression} must refer to the same object as it does in the function body (status quo in \cite{P2900R10}).
-\item Add an explicit provision that, when a non-reference function parameter is odr-used in a postcondition predicate and the type of the parameter satisfies the requirements for being passed in registers, the corresponding \grammarterm{id-expression} may refer either to the same object as it does in the function body or to the return object at the call site.
+\item Make it ill-formed to odr-use \emph{any} function parameter in a postcondition predicate.
+\item Make it ill-formed to odr-use any \emph{non-reference} function parameter in a postcondition predicate.
+\item  Add an explicit provision that, when a non-reference function parameter is odr-used in a postcondition predicate and the type of the parameter satisfies the requirements for being passed in registers, the corresponding \grammarterm{id-expression} may refer either to the same object as it does in the function body or to the return object at the call site, thereby allowing caller-side checking of a postcondition predicate that odr-uses a non-reference function parameter without an ABI break. Make it ill-formed to odr-use a non-reference function parameter in a postcondition predicate unless the parameter is of scalar type.\footnote{Scalar types are arithmetic types, enumeration types, pointer types, pointer-to-member types, \tcode{std::nullptr_t}, and $cv$-qualified versions of these types. Arithmetic types are integral and floating-point types; integral types include character types and \tcode{bool}.}
+\item Add the above provision. Make it ill-formed to odr-use a non-reference function parameter in a postcondition predicate if the type of the parameter satisfies the requirements for being passed via registers, unless it is of scalar type.
+\item Add the above provision. Make it ill-formed to odr-use a non-reference function parameter in a postcondition predicate if the type of the parameter satisfies the requirements for being passed via registers and has at least one \tcode{mutable} subobject (applies recursively to all member subobjects, base class subobjects, and array elements).
+\item Add the above provision and do nothing further. A postcondition may odr-use a non-reference function parameter of any type.
+\item Do not add the above provision. Instead, clarify that when a non-reference function parameter is odr-used in a postcondition predicate, the corresponding \grammarterm{id-expression} must refer to the same object as it does in the function body (status quo in \cite{P2900R10}); caller-side checking of a postcondition predicate that odr-uses a non-reference function parameter remains impossible without an ABI break. A postcondition may odr-use a non-reference function parameter of any type.
 \end{enumerate}
 
 We enumerated the options with an ``R'' prefix (for ``registers''), to distinguish them from the options from \cite{D3484R1} that have a ``V'' prefix (for ``virtual'') and the options from \cite{D3489R0} that have a ``D'' prefix (for ``dependent'').
@@ -275,39 +276,80 @@ However, allowing only reference parameters still significantly limits the set o
 
 \subsection*{Option R4}
 
-Option~R4 would allow by-value parameters of types that are not affected by the footgun and cannot be changed such that they would be affected by the footgun, i.e., scalar types. This would already enable many more useful postconditions compared to Options R1 --- R3.
+Option~R4 allows by-value parameters of types that are not affected by the footgun and cannot be changed such that they would be affected by the footgun, i.e., scalar types. This would already enable many more useful postconditions compared to Options R1 --- R3.
 
 However, if we were to change the type of a parameter from a built-in type to a user-defined type, for example from \tcode{int} to \tcode{BigInt}, or from \tcode{double} to \tcode{std::complex<double>}, the postcondition would stop compiling, with no workaround available. Additionally,  Option~R4 would make it significantly harder to add postconditions to generic code, including any templates designed to work with both built-in and user-defined types (which includes the entire STL and vast amounts of other generic libraries).
 
 \subsection*{Option R5}
 
-Option~R5 is less restrictive still: it limits postconditions to odr-using parameters of types that are not affected by the footgun. However, most users will not be familiar with the rules around types eligible to be passed in registers, which means that the compiler error they get will be very confusing to most users. Worse, the definition of user-defined types can change over time, which makes this option brittle. That a particular type is \emph{not} eligible to be passed via registers is not something that code should guarantee to its clients indefinitely in all cases; conversely, making a type trivially copyable and/or movable and trivially destructible should not break client code.
+Option~R5 is a relaxation of Option~R4. It allows by-value parameters of scalar type (disallowing them would remove the ability to write many simple and useful postcondition assertions), and in addition, it allows by-value parameters of any type as long as they are \emph{not} eligible to be passed via registers and therefore cannot not affected by the footgun.
+
+One downside of this approach is that most users will not be familiar with the rules around types eligible to be passed in registers, which means that the compiler error they get will likely be very confusing to them. Worse, the definition of user-defined types can change over time, which makes this option brittle. That a particular type is \emph{not} eligible to be passed via registers is not something that code should guarantee to its clients indefinitely in all cases; conversely, making a type trivially copyable and/or movable and trivially destructible should not break client code.
 
 We made a similar choice to not discriminate on particular type traits in the postcondition assertions of a function when we decided that whether a type is trivially movable should not affect whether a non-reference parameter of that type can be odr-used in the postcondition assertion of a coroutine (i.e., when we rejected \cite{P3387R0} Option 5b). Choosing Option~R5 here would be inconsistent with that design choice.
 
 \subsection*{Option R6}
 
-Option~R6 is the status quo. It is the only solution that both avoids the above footgun and is not a breaking change to \cite{P2900R10}: postconditions odr-using a \tcode{const} non-reference parameter of a non-coroutine function remain well-formed. Option~R6 is therefore arguably the optimal choice with respect to the immediate user experience when dealing with code such as the above.
+Option~R6 is a further relaxation of Option~R5. It carves out the narrowest possible prohibition on parameter types that can be odr-used in a postcondition predicate --- any type is allowed as long as it does not have the exact property that can lead to the footgun: types that are eligible to be passed in registers \emph{and} have \tcode{mutable} subobjects.
 
-However, Option~R6 also comes with a high cost: implementing caller-side postcondition checks remains impossible without an ABI break. The necessary ABI break to enable caller-side postcondition checks --- and by extension, to implement full contract checks on virtual functions as specified by \cite{P2900R10} --- would consist of no longer passing function parameters via registers if they are odr-used in the postcondition assertion. However, imposing an ABI break on all users who wish to add postcondition assertions to their functions would arguably do significant harm to the adoption of Contracts in the C++ ecosystem, which is why one of the fundamental design principles of the Contracts MVP (\cite{P2900R10} Principle 16) is to avoid such an ABI break.
+Option R6 is the least prohibitive option that both avoids the footgun and allows implementing caller-side postcondition checks without an ABI break. However, it suffers from the same problem as Option~R5: a very specific and seemingly unrelated change to a type can lead to the postcondition no longer compiling. For Option~R6, the error would be even less obvious for Option~R5, as it would occur when the user decides to add a \tcode{mutable} member to a type that happens to be eligible to be passed in registers, e.g. when the user does a refactoring such as the one we did with \tcode{RandomInteger} above, which is a relatively common technique. The result is brittle code, a very hard-to-understand compiler error, and no good workaround.
 
 \subsection*{Option R7}
 
 Option~R7 makes the behaviour of postconditions with respect to objects passed to a function in registers consistent with the behaviour for objects returned from a function in registers, as well as with the behaviour of preconditions as proposed in Section~\ref{pre}. Option~R7 is therefore arguably the optimal choice with respect to having a straightforward specification and implementation of the feature, enabling caller-side checking, avoiding ABI issues, not making any user code unnecessarily ill-formed, and not imposing any unnecessary run-time cost on the user.
 
-However, the tradeoff of Option~R7 is that it adds the above footgun to the C++ language. Note that the footgun only occurs in rare edge cases, in particular when a \tcode{const} object eligible to be passed via registers is used as a non-reference parameter and its type relies on mutable state for its correctness, and a postcondition assertion would break if it happens to observe an earlier version of that mutable state. Note further that such cases could potentially be mitigated by an implementation issuing a warning if a type eligible to be passed in registers has \tcode{mutable} members (including in any of its subtypes), is used as the type of a non-reference function parameter, and that parameter is odr-used in a postcondition assertion of that function or another function that that function overrides.
+However, the tradeoff of Option~R7 is that it adds the above footgun to the C++ language. Note that the footgun only occurs in rare edge cases, in particular when a \tcode{const} object eligible to be passed via registers is used as a non-reference parameter and its type relies on mutable state for its correctness, and a postcondition assertion would break if it happens to observe an earlier version of that mutable state. Note further that such cases could potentially be mitigated by an implementation issuing a warning if a type eligible to be passed in registers has \tcode{mutable} subobjects, is used as the type of a non-reference function parameter, and that parameter is odr-used in a postcondition assertion of that function or another function that that function overrides.
+
+\subsection*{Option R8}
+
+Option~R8 is a confirmation of the status quo. It is the only solution that both avoids the above footgun and is not a breaking change to \cite{P2900R10}: postconditions odr-using a \tcode{const} non-reference parameter of a non-coroutine function remain well-formed. Option~R8 is therefore arguably the optimal choice with respect to the immediate user experience when dealing with code such as the above.
+
+However, Option~R8 also comes with a high cost: implementing caller-side postcondition checks remains impossible without an ABI break. The necessary ABI break to enable caller-side postcondition checks --- and by extension, to implement full contract checks on virtual functions as specified by \cite{P2900R10} --- would consist of no longer passing function parameters via registers if they are odr-used in the postcondition assertion. However, imposing an ABI break on all users who wish to add postcondition assertions to their functions would arguably do significant harm to the adoption of Contracts in the C++ ecosystem, which is why one of the fundamental design principles of the Contracts MVP (\cite{P2900R10} Principle 16) is to avoid such an ABI break.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pagebreak
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Proposal}
 
 With regards to parameters odr-used in \emph{preconditions}, we propose to add a provision to \cite{P2900R10} that a precondition check is implicitly allowed to observe either the pre-temporary parameter object or the temporary copy, as discussed in Section~\ref{pre}.
 
-With regards to parameters odr-used in \emph{postconditions}, we believe that Options R1 --- R7 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all of these options to determine which option has more consensus in SG21. 
+With regards to parameters odr-used in \emph{postconditions}, we believe that Options R1 --- R8 are all worth considering and the tradeoffs of each option are sufficiently clear; a summary of these tradeoffs for each option can be found in Table~\ref{tradeoffs}. We propose all of these options to determine which option has more consensus in SG21.
 
-Note that choosing Option~R1 would leave the door open to adopting any of the other options without breaking changes at some point in the future; Option~R2 could be evolved towards Options R3 --- R7, but not R1, etc, until Option~R5, which could only be evolved towards Options R6 and R7 but not any others. Finally, Options R6 and R7 are mutually exclusive and cannot be evolved towards any of the other options without breaking changes once adopted.
+Note that there are three requirements that are \emph{impossible} to satisfy simultaneously --- we need to choose two. These requirements are: allowing a postcondition predicate to odr-use non-reference parameters of \emph{any} type; avoiding the footgun created by parameter objects with \tcode{mutable} subobjects; and allowing caller-side checking of postconditions. If we are willing to abandon the first requirement, we can choose between Options R1 --- R6, which offer a spectrum between most restrictive and most brittle; if we are willing to abandon the second requirement, the optimal solution is Option~R7; if we are willing to abandon the third requirement, the optimal solution is Option~R8.
 
-Note further that choosing Options R1 --- R3 would also remove the source of the issues discussed in the two companion papers \cite{D3484R1} and \cite{D3489R0}. 
+Options R1 --- R3 do not offer any advantage over Options R4 --- R6 with regards to the specific issues discussed in this paper. However, R1 --- R3 may still be interesting because they would remove the source of the issues discussed in the two companion papers \cite{D3484R1} and \cite{D3489R0}. 
+
+Note further that all options except Option~R8 form a chain of successive relaxations of the previous option. Therefore, choosing Option~R1 would leave the door open to adopting Options R2 --- R7 without breaking changes at some point in the future; Option~R2 could be evolved towards Options R3 --- R7, but not R1, etc. On the other hand, Option~R8 is mutually exclusive with any of the other options: an evolution from any of the other options towards Option~R8, or in the other direction, is impossible without breaking changes.
 
 Note finally that choosing Option R4 would be consistent with a possible relaxation of the rule for postconditions on coroutines to also accept non-reference parameters of scalar type.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\yes}{\includegraphics[width=4mm]{images/yes.png}}
+\newcommand{\no}{\includegraphics[width=4mm]{images/no.png}}
+\newcommand{\maybe}{\includegraphics[width=4mm]{images/maybe.png}}
+%\vspace{4mm}
+\begin{table}[b]
+\begin{tabular}{|p{5.4cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|}
+\hline 
+& R1 & R2 & R3 & R4 & R5 & R6 & R7 & R8 \\
+\hline
+Allows postcondition assertions in general & \no & \yes  & \yes  & \yes & \yes & \yes & \yes & \yes \\ \hline
+Allows odr-using reference parameters & \no & \no  & \yes  & \yes & \yes & \yes & \yes & \yes \\ \hline
+Allows odr-using non-reference parameters of at least scalar type& \no & \no  & \no  & \yes & \yes & \yes & \yes & \yes \\ \hline
+Allows odr-using non-reference parameters of any type& \no & \no  & \no  & \no & \no & \no & \yes & \yes \\ \hline
+Avoids brittle discrimination based on certain type traits& \yes & \yes  & \yes  & \maybe & \no & \no & \yes & \yes \\ \hline
+Makes it impossible to shoot yourself with the footgun& \yes & \yes  & \yes  & \yes & \yes & \yes & \no & \yes \\ \hline
+Allows caller-side checking of postconditions& \yes & \yes  & \yes  & \yes & \yes & \yes & \yes & \no \\ \hline
+\end{tabular}
+\vspace{2mm}
+\caption{Main tradeoffs of proposed options R1 --- R8. Discriminating on whether the parameter is of scalar type (R4) is marked with a question mark because it is significantly less brittle than discriminating based on more complicated and non-obvious type traits (R5 and R6).}
+\label{tradeoffs}
+\end{table}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pagebreak
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Wording}
 
@@ -383,15 +425,15 @@ that do not specify the \grammarterm{postcondition-specifier}.\removed{ Arrays a
 \begin{example}
 \tcode{[...]}
 \end{example}
+
+\added{If the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]), it is unspecified whether the corresponding \emph{id-expression} in the predicate of a postcondition assertion denotes that temporary object or the original parameter object.}
 \end{adjustwidth}
 
 \subsection*{Postconditions --- Option R5}
 
-Modify [dcl.contract.func] as follows:
-
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, that parameter shall be declared \tcode{const}\added{, }\removed{and }shall not have array or function type\added{, and shall not have a type for which the implementation is permitted to create a temporary object to hold the function parameter ([class.temporary])}.
+non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type. \added{If the parameter has a type for which the implementation is permitted to create a temporary object to hold the function parameter ([class.temporary]), it shall have scalar type ([basic.types.general]).}
 \begin{note}
 This requirement applies even to declarations
 that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
@@ -399,6 +441,8 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 \begin{example}
 \tcode{[...]}
 \end{example}
+
+\added{If the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]), it is unspecified whether the corresponding \emph{id-expression} in the predicate of a postcondition assertion denotes that temporary object or the original parameter object.}
 \end{adjustwidth}
 
 \subsection*{Postconditions --- Option R6}
@@ -407,15 +451,16 @@ Modify [dcl.contract.func] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type.
+non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type. \added{If the parameter has a type for which the implementation is permitted to create a temporary object to hold the function parameter ([class.temporary]), it shall not have any \tcode{mutable} subobjects ([dcl.stc]).}
 \begin{note}
 This requirement applies even to declarations
 that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
-\added{An \emph{id-expression} that denotes a non-reference parameter in the predicate of a postcondition assertion denotes the same object as in the function body, even if the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]).}
 \end{note}
 \begin{example}
 \tcode{[...]}
 \end{example}
+
+\added{If the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]), it is unspecified whether the corresponding \emph{id-expression} in the predicate of a postcondition assertion denotes that temporary object or the original parameter object.}
 \end{adjustwidth}
 
 \subsection*{Postconditions --- Option R7}
@@ -434,6 +479,23 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 \end{example}
 
 \added{If the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]), it is unspecified whether the corresponding \emph{id-expression} in the predicate of a postcondition assertion denotes that temporary object or the original parameter object. [ \emph{Note:} It follows that, for objects that can be passed in registers, the postcondition assertion might not see any modifications of \tcode{mutable} subobjects ([dcl.stc]) of the parameter object performed by the function or a function overriding it. --- \emph{end note} ]}
+\end{adjustwidth}
+
+\subsection*{Postconditions --- Option R8}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type.
+\begin{note}
+This requirement applies even to declarations
+that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\added{An \emph{id-expression} that denotes a non-reference parameter in the predicate of a postcondition assertion denotes the same object as in the function body, even if the implementation is permitted to introduce a temporary object for the parameter object value ([class.temporary]).}
+\end{note}
+\begin{example}
+\tcode{[...]}
+\end{example}
 \end{adjustwidth}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

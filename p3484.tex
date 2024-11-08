@@ -45,8 +45,8 @@ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) 
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P3484R1 \\
-Date: &2024-11-07 \\
+Document \#: & D3484R2 \\
+Date: &2024-11-09 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -60,12 +60,24 @@ This paper considers the case where an overridden function odr-uses a non-refere
 %\tableofcontents*
 %\pagebreak
 
-%\section*{Revision history}
+\section*{Revision history}
 
-%Revision 0 (2024-04-16)
-%\begin{itemize}
-%\item Original version
-%\end{itemize}
+Revision 2 (2024-11-??)
+\begin{itemize}
+\item{Introduced New proposal V3 to only require \tcode{const} on definitions of overrides}
+\item{Added deeper explanation of remote breakage scenarios}
+\end{itemize}
+
+Revision 1 (2024-11-7)
+\begin{itemize}
+\item{Explained relationship of this paper to companion papers \cite{P3487R0} and \cite{P3489R0}}
+\item{Prefix proposal numbers to be distinct from companion papers}
+\end{itemize}
+
+Revision 0 (2024-10-31)
+\begin{itemize}
+\item Original version
+\end{itemize}
 
 %\pagebreak
 
@@ -73,7 +85,7 @@ This paper considers the case where an overridden function odr-uses a non-refere
 
 This paper is the first part of a trilogy of papers dealing with known issues in the Contracts MVP \cite{P2900R10} regarding postconditions odr-using non-reference function parameters:
 \begin{itemize}
-\item \cite{D3484R1} Postconditions odr-using a parameter modified in an overriding function;
+\item \cite{D3484R2} Postconditions odr-using a parameter modified in an overriding function;
 \item \cite{D3487R0} Postconditions odr-using a parameter that may be passed in registers;
 \item \cite{D3489R0} Postconditions odr-using a parameter of dependent type.
 \end{itemize}
@@ -152,6 +164,19 @@ int main() {
 
 In the program above, even if the postcondition assertion of \tcode{Base::f} is checked, the fact that the implementation of \tcode{Derived::f} does \emph{not} satisfy the postcondition of \tcode{Base::f} is not caught, because the parameter \tcode{i} has been modified in \tcode{Derived::f}, rendering the postcondition assertion of \tcode{Base::f} meaningless. This is exactly the scenario that the specification in \cite{P2900R10} Section 3.4.4 seeks to avoid; nevertheless, the code above is well-formed according to the current specification. The more dangerous variant of this scenario that a parameter might be modified \emph{implicitly}, for example moved-from when returned by value, is also possible and well-formed.
 
+An important concern is that this modification of the function parameter can easily happen when there is no obvious modification of the parameters:
+\begin{codeblock}
+struct Base2 {
+  virtual std::string f(const std::string p) post(r : r.starts_with(p) );
+};
+class Derived2 : public Base2 {
+  std::string f(std::string p) override {
+    return p;
+  }
+};
+\end{codeblock}
+Due to examples such as this, where an implicit move from a function parameter would lead to a postcondition being evaluated with a parameter in a moved-from state, the requirement to add \tcode{const} was added to the design that evolved into \cite{P2900R10} long ago by SG21.  For this same reason even when a coding style dictates no modification of function parameters there is still a significant risk of bugs unless \tcode{const} is actually required on the definitions.
+
 Unlike other cases that may lead to a \tcode{const }parameter being modified in the function body, namely when \tcode{const} is dropped on a subsequent declaration of the \emph{same} function, or when the function is implemented as a coroutine (which are both ill-formed in \cite{P2900R10}), in this case \tcode{Base::f} does not know whether there are any functions overriding it, or how the corresponding parameter in those overriding functions is declared.
 
 \section{Possible solutions}
@@ -164,6 +189,7 @@ We are aware of four possible options for dealing with this problem. These are, 
 \begin{enumerate}
 \item Disallow odr-using any non-reference function parameter in a postcondition assertion that applies to a virtual function, regardless of whether that parameter is declared \tcode{const}, unless that function is marked \tcode{final} or is a member function of a class marked \tcode{final}.
 \item Require that if a non-reference parameter is odr-used in a postcondition assertion on a virtual function, that parameter must also be declared \tcode{const} in every declaration of every overriding function.
+\item Require that if a non-reference parameter is odr-used in a postcondition assertion on a virtual function, that parameter must also be declared \tcode{const} in the definition of every overriding function.
 \item Allow overriding functions to drop \tcode{const} from a non-reference function parameter, with no special provision, i.e., ``you get what you get'': in the virtual function call above, which invokes \tcode{Derived::f}, the postcondition check on \tcode{Base::f} succeeds even though \tcode{Derived::f} does not satisfy the postcondition of \tcode{Base::f}.
 \item Allow overriding functions to drop \tcode{const} from a non-reference function parameter, but make it undefined behaviour to actually modify a parameter object in an overriding function if that parameter is a non-reference parameter declared \tcode{const} in an overridden function.
 \end{enumerate}
@@ -201,7 +227,7 @@ Overall, Option~V1 might therefore be a disproportionately harsh measure for a r
 
 Option~V2 would also catch the bug in the example above and is a less restrictive choice than Option~V1: it would make only cases ill-formed where the parameter can actually be modified (when the overriding function actually drops the \tcode{const}). This option makes  the behaviour for overriding functions consistent with the behaviour of subsequent declarations of the \emph{same} function: if we redeclare a function, \emph{or} an overload of that function, and drop \tcode{const} on a parameter in that declaration, the program is ill-formed. Option~V2 thus seems more appealing than Option~V1.
 
-However, the tradeoff is that Option~V2 could also lead to remote code breakage, which directly violates Design Principle 15 of \cite{P2900R10}, ``No Client-Side Language Break''. In particular, adding a postcondition to a virtual function that odr-uses a \tcode{const} parameter would remotely break any client code that overrides that function and yet has not added the \tcode{const}, or any override that is implemented as a coroutine. 
+However, the tradeoff is that Option~V2 could also lead to remote code breakage, which directly violates Design Principle 15 of \cite{P2900R10}, ``No Client-Side Language Break''. In particular, adding a postcondition to a virtual function that odr-uses a \tcode{const} parameter would remotely break any client code that overrides that function and yet has not added the \tcode{const} to all declarations of the override, including the defintion --- including any override that is implemented as a coroutine.
 
 We anticipate that particularly the former case would be a frequent problem. Today, hardly anyone adds \tcode{const} to the declaration of a non-reference parameter as it has essentially no meaning; with \cite{P2900R10}, anyone who wishes to odr-use a parameter in a postcondition will \emph{have} to add the \tcode{const}, breaking any overriding functions.
 
@@ -209,24 +235,32 @@ The crucial difference to the coroutine case is that providing a definition for 
 
 \subsection*{Option V3}
 
-Option~V3 is the status quo\footnote{Since the current specification in that paper does not contain any special rules for parameter declarations on overriding functions, dropping \tcode{const} in such declarations is currently allowed in \cite{P2900R10} and ``you get what you get''.} in \cite{P2900R10}. It avoids the usage limitations imposed by Option~V1 and the remote code breakage imposed by Option~V2. However, this option too has tradeoffs.
+Option~V3 will catch all of the bugs caught by Option~V2, but inflicts a smaller number of required changes to derived types.  In particular, there is a significantly larger chance that derived classes which exist today will compile with no changes.
 
-One downside of Option~V3 is that, unlike Options V1 and V2, it does not actually catch the bug. As a partial remedy, an implementation could easily issue a \emph{warning} if an overriding function drops the \tcode{const} on a parameter odr-used in the postcondition assertion of an overridden function. The crucial difference to the coroutine case is that the implementation \emph{knows} that the function is virtual at the point of declaration. While we cannot normatively mandate such a warning, we can add a non-normative recommended practice note to the wording that such a warning be issued. 
+Additionally, upstream breakage with Option~V3  will only impact the translation units where a fix must be applied --- those with definitions of overrides that do not make the appropriate parameters \tcode{const}.   A library that makes use of a derived class which must be updated will still compile.  More notably, for users attempting to continue to link in binaries built in days past, as long as the function itself does not modify the function parameters in question (which is the case in the vast majority of cases, even when the parameters are not actually declared \tcode{const}), clients can continue to be rebuilt and linked against those binaries without issue or any need to access and update the source for the derived classes.
 
-Another downside of Option~V3 compared to Options V1 and V2 is that it would mean abandoning the static guarantee of the current \cite{P2900R10} design that, if a parameter is odr-used in a postcondition assertion, that parameter object \emph{will not be modified} between the call to a function and the evaluation of its postcondition assertions.
-
-It follows that a static analysis tool can no longer reason about the value of a function parameter in a postcondition, at least not without taking into account which function will be selected by virtual dispatch and what the body of that function does (both are typically unknowable at the call site). This greatly reduces the amount of useful information that a static analysis tool could extract from a postcondition assertion at the call site of a virtual function.
+Note that Option~V3 does \emph{not} remove the requirement that the parameter be declared \tcode{const} on the declaration where the postcondition itself appears, as that is neccessary to not have to reprocess earlier parts of the expression in a postcondition assertion once it is established that the postcondition odr-uses the parameter.  
 
 \subsection*{Option V4}
 
-Option~V4 is the option that was chosen in the past by C++2a Contracts \cite{P0542R5}. However, we can immediately discard it as unviable. Not only would this option fail to catch the bug in the example above, but it is also actively user-hostile: the mere act of adding a postcondition assertion to a program would have the potential to introduce new undefined behaviour, even if its predicate were written correctly. This directly violates Design Principle 13 of \cite{P2900R10}, ``Explicitly Define All New Behaviour''.
+Option~V4 is the status quo\footnote{Since the current specification in that paper does not contain any special rules for parameter declarations on overriding functions, dropping \tcode{const} in such declarations is currently allowed in \cite{P2900R10} and ``you get what you get''.} in \cite{P2900R10}. It avoids the usage limitations imposed by Option~V1 and the remote code breakage imposed by Option~V2 or Option~V3. However, this option too has tradeoffs.
+
+One downside of Option~V4 is that, unlike Options V1-V3, it does not actually catch the bug. As a partial remedy, an implementation could easily issue a \emph{warning} if an overriding function drops the \tcode{const} on a parameter odr-used in the postcondition assertion of an overridden function. The crucial difference to the coroutine case is that the implementation \emph{knows} that the function is virtual at the point of declaration. While we cannot normatively mandate such a warning, we can add a non-normative recommended practice note to the wording that such a warning be issued. 
+
+Another downside of Option~V4 compared to Options V1-V3 is that it would mean abandoning the static guarantee of the current \cite{P2900R10} design that, if a parameter is odr-used in a postcondition assertion, that parameter object \emph{will not be modified} between the call to a function and the evaluation of its postcondition assertions.
+
+It follows that a static analysis tool can no longer reason about the value of a function parameter in a postcondition, at least not without taking into account which function will be selected by virtual dispatch and what the body of that function does (both are typically unknowable at the call site). This greatly reduces the amount of useful information that a static analysis tool could extract from a postcondition assertion at the call site of a virtual function.
+
+\subsection*{Option V5}
+
+Option~V5 is the option that was chosen in the past by C++2a Contracts \cite{P0542R5}. However, we can immediately discard it as unviable. Not only would this option fail to catch the bug in the example above, but it is also actively user-hostile: the mere act of adding a postcondition assertion to a program would have the potential to introduce new undefined behaviour, even if its predicate were written correctly. This directly violates Design Principle 13 of \cite{P2900R10}, ``Explicitly Define All New Behaviour''.
 
 
 \section{Proposal}
 
-We believe that Options V1 --- V3 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all three options to determine which option has more consensus in SG21. 
+We believe that Options V1 --- V4 are all worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose all three options to determine which option has more consensus in SG21. 
 
-Note that choosing Option~V1 would leave the door open to adopting Option~V2 or Option~V3 without breaking changes at some point in the future, while Option~V2 could only be evolved towards Option~V3 but not Option~V1, and Option~V3 could not be evolved towards either of the other options.
+Note that choosing Option~V1 would leave the door open to adopting Option~V2-V4 without breaking changes at some point in the future, while Option~V2 could only be evolved towards Option~V3 or Option~V4, but not Option~V1, Option~V3 could only be evolved towards Option~V4, and Option~V4 could not be evolved towards either of the other options.
 
 Note further that \cite{D3487R0} --- which deals with a different problem regarding parameters in postconditions --- proposes the more extreme options R1 (removing postcondition assertions from \cite{P2900R10} altogether), R2 (disallowing odr-use of \emph{any} parameters in the postcondition assertions of \emph{any} functions), and R3 (disallowing odr-use of \emph{non-reference} parameters in the postcondition assertions of \emph{any} functions). Options R1 --- R3 from \cite{D3487R0} would remove the issue discussed in this paper and should therefore be considered alongside Options V1 --- V3 as possible solutions.
 
@@ -240,7 +274,7 @@ Modify [dcl.contract.func] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, that parameter shall be declared \tcode{const} and shall not have array or function type\added{; if the function is virtual
+non-reference parameter of that function, all declarations of that parameter shall have a \tcode{const} qualifier and shall not have array or function type\added{; if the function is virtual
 it shall be marked with the \grammarterm{virt-specifier} \tcode{final} (see [class.virtual]) or it shall be a a member function of a class with the
 \grammarterm{class-virt-specifier} \tcode{final} (see [class.pre])}.
 \begin{note}
@@ -258,7 +292,7 @@ Modify [dcl.contract.func] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function \added{$f$ }odr-uses ([basic.def.odr]) a
-non-reference parameter of \removed{that function}\added{$f$}, that parameter \added{and the corresponding parameter on any functions that override $f$ }shall be declared \tcode{const} and shall not have array or function type.
+non-reference parameter of \removed{that function}\added{$f$}, all declarations of that parameter \added{and the corresponding parameter on any functions that override $f$ }shall have a \tcode{const} qualifier and and shall not have array or function type.
 \begin{note}
 This requirement applies even to declarations
 that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
@@ -273,8 +307,27 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 Modify [dcl.contract.func] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function \added{$f$ }odr-uses ([basic.def.odr]) a
+non-reference parameter of \removed{that function}\added{$f$}, all declarations of
+that parameter shall have a \tcode{const} qualifier and shall not have array or function type
+\added{; the corresponding parameter declaration in the definition of any function $g$ that overrides $f$ shall hae a \tcode{const}
+qualifier and shall not have array or function type}.
+\begin{note}
+This requirement applies even to declarations
+that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\begin{example}
+\tcode{[...]}
+\end{example}
+\end{adjustwidth}
+
+\subsection*{Option~V4}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
 If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
-non-reference parameter of that function, that parameter shall be declared \tcode{const} and
+non-reference parameter of that function, all declarations of that parameter shall have a \tcode{cons} qualifier and
 shall not have array or function type.
 \begin{note}
 This requirement applies even to declarations
@@ -284,7 +337,7 @@ that do not specify the \grammarterm{postcondition-specifier}. Arrays and functi
 \tcode{[...]}
 \end{example}
 
-\added{\emph{Recommended practice:} Implementations should issue a diagnostic when an overriding function omits \tcode{const} from the declaration of a non-reference parameter whose corresponding parameter in an overridden function is odr-used in a postcondition assertion of that overridden function.}
+\added{\emph{Recommended practice:} Implementations should issue a diagnostic when an overriding function omits \tcode{const} from any declaration of a non-reference parameter whose corresponding parameter in an overridden function is odr-used in a postcondition assertion of that overridden function.}
 \end{adjustwidth}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -272,13 +272,13 @@ This option becomes more appealing if we include \cite{P3098R0} in the first ver
 
 Option~R3 is similar to Option~R2, except that it allows reference parameters, which are not affected by any of the issues surrounding copies of objects and are not affected by postcondition captures as proposed in \cite{P3098R0}.
 
-However, allowing only reference parameters still significantly limits the set of postconditions we can write. In addition, it encourages users to pass parameters by-reference instead by-value as this would be the only way to make the postcondition assertion compile, which can lead to more error-prone and less efficient code than the normally recommended pass-by-value. We therefore do not consider Option~R3 to be an improvement over Option~R2.
+However, allowing only reference parameters still significantly limits the set of postconditions we can write. In addition, it encourages users to pass parameters by-reference instead by-value as this would be the only way to make the postcondition assertion compile, which can lead to more error-prone and less efficient code for types where we might normally recommend pass-by-value. We therefore do not consider Option~R3 to be an improvement over Option~R2.
 
 \subsection*{Option R4}
 
 Option~R4 allows by-value parameters of types that are not affected by the footgun and cannot be changed such that they would be affected by the footgun, i.e., scalar types. This would already enable many more useful postconditions compared to Options R1 --- R3.
 
-However, if we were to change the type of a parameter from a built-in type to a user-defined type, for example from \tcode{int} to \tcode{BigInt}, or from \tcode{double} to \tcode{std::complex<double>}, the postcondition would stop compiling, with no workaround available. Additionally,  Option~R4 would make it significantly harder to add postconditions to generic code, including any templates designed to work with both built-in and user-defined types (which includes the entire STL and vast amounts of other generic libraries).
+However, if we were to change the type of a parameter from a built-in type to a user-defined type, for example from \tcode{int} to \tcode{BigInt}, or from \tcode{double} to \tcode{std::complex<double>}, the postcondition would stop compiling, with no workaround available. Additionally,  Option~R4 would make it significantly harder to add postconditions to generic code, including any templates designed to work with both built-in and user-defined types (which includes almost everything in the Standard Library and vast amounts of other generic libraries).
 
 \subsection*{Option R5}
 

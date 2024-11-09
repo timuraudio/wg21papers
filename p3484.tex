@@ -349,7 +349,6 @@ Table~\ref{tradeoffs} summarises the main tradeoffs of all options V1 --- V6 dis
 \section{Wording}
 
 The proposed wording changes are relative to the wording proposed in \cite{P2900R10}. Note that we do not explicitly call out the case of an overriding function being implemented as a coroutine, however as per the wording proposed in \cite{P2900R10}, a coroutine behaves as if the top-level $cv$-qualifiers in all parameter-declarations in the declarator of its defining declaration were removed.
-% TD: Sidenote: is this right? I think this is a bug in P2900R10: a coroutine should behave as if the top-level const qualifier were removed, but we probably do not want to implicitly remove volatile as well. Is that right?
 
 \subsection*{Option~V1}
 

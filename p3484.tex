@@ -299,11 +299,40 @@ It follows that a static analysis tool can no longer reason about the value of a
 
 Option~V6 is the option chosen in the past by C++2a Contracts \cite{P0542R5}. However, we consider it completely unviable. Not only would this option fail to prevent the bug in the example above, but it would make the situation even worse: not only would there be a broken postcondition, but the program would also have undefined behaviour. This approach is therefore actively user-hostile and violates Design Principle 13 of \cite{P2900R10}, ``Explicitly Define All New Behaviour''.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\yes}{\includegraphics[width=4mm]{images/yes.png}}
+\newcommand{\no}{\includegraphics[width=4mm]{images/no.png}}
+\newcommand{\maybe}{\includegraphics[width=4mm]{images/maybe.png}}
+%\vspace{4mm}
+\begin{table}[hb]
+\begin{tabular}{|p{8cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|}
+\hline 
+& V1 & V2 & V3 & V4 & V5 & V6 \\
+\hline
+Allows non-reference parameters to be odr-used in \tcode{post} on virtual functions & \no & \yes  & \yes  & \yes & \yes & \yes\\ \hline
+Prevents modification of non-reference parameters odr-used in \tcode{post} and associated bugs & \yes & \yes  & \yes  & \yes & \no & \no\\ \hline
+Adding \tcode{post} to a virtual function does not  break derived classes that override it& \yes & \no  & \no  & \no & \yes & \yes \\ \hline
+Adding \tcode{post} to a virtual function does not break users of a derived class that overrides it & \yes & \no  & \yes  & \yes & \yes & \yes\\ \hline
+Does not introduce new inconsistencies between overriding and non-overriding functions & \yes & \yes  & \no  & \yes & \yes & \yes\\ \hline
+No significant concerns regarding specifiability and implementability & \yes & \yes  & \yes  & \no & \yes & \yes\\ \hline
+Does not introduce new sources of undefined behaviour & \yes & \yes  & \yes  & \yes & \yes & \no\\ \hline
+\end{tabular}
+%\vspace{2mm}
+\caption{Main tradeoffs of proposed options V1 --- V6.}
+\label{tradeoffs}
+\end{table}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pagebreak
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \section{Proposal}
 
 We believe that Options V1 --- V3 as well as V5 are all worth considering, whereas Options V4 and V6 are completely unviable for the reasons listed above. We therefore propose Options V1 --- V3 as well as V5 to determine which option has more consensus in SG21. 
 
 Note that choosing Option~V1 would leave the door open to adopting V2, V3, or V5 without breaking changes at some point in the future, while Option~V2 could only be evolved towards Option~V3 or Option~V5, Option~V3 could only be evolved towards Option~V5, and Option~V5 could not be evolved towards either of the other options without breaking changes.
+
+Table~\ref{tradeoffs} summarises the main tradeoffs of all options V1 --- V6 discussed in the paper.
 
 \section{Wording}
 
@@ -394,7 +423,7 @@ Thanks to John Lakos and Oliver Rosten for their review of the paper.
 \begin{itemize}
 \item \textbf{R0}, 2024-10-31: Original version as presented to SG21 on 2024-10-31
 \item \textbf{R1}, 2024-11-07: Incorporated SG21 feedback; explained relationship of this paper to companion papers \cite{P3487R0} and \cite{P3489R0}; prefixed proposal numbers with ``V'' to be distinct from companion papers; various minor fixes
-\item \textbf{R2}, 2024-11-09: Introduced Option~V3 to only require \tcode{const} on definitions of overrides and Option~V4 to only require \tcode{const} on definitions of any functions; added deeper explanation of remote breakage scenarios
+\item \textbf{R2}, 2024-11-09: Introduced Option~V3 to only require \tcode{const} on definitions of overrides and Option~V4 to only require \tcode{const} on definitions of any functions; added deeper explanation of remote breakage scenarios; added table summarising tradeoffs
 \end{itemize}
 
 %\pagebreak

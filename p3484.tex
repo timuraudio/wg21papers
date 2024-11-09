@@ -283,7 +283,9 @@ int f(int i)
   post( r : r > i);  // ...because \tcode{post} is odr-using \tcode{i} here!
 \end{codeblock}
 
-An even more serious problem is that an implementation could now no longer correctly parse the preceding parts of the function declaration until it knows whether a parameter is odr-used in a postcondition. It would have to start parsing the function declaration assuming that the parameter is not \tcode{const}, and then if it sees a postcondition odr-using that parameter it would have to start over. This can even lead to paradoxes. Consider the following example where \tcode{i} is not odr-used if it is \tcode{const}, but odr-used if it is not:
+An even more serious problem is that an implementation could now no longer correctly parse the preceding parts of the function declaration until it knows whether a parameter is odr-used in a postcondition. It would have to start parsing the function declaration assuming that the parameter is not \tcode{const}, and then if it sees a postcondition odr-using that parameter it would have to start over. Parsing the function declaration could require instantiating templates, so the compiler might have to tentatively instantiate templates with a non-\tcode{const} type --- which can have side effects such as initialising a static class member --- and then somehow undo that instantiation if it turns out that the parameter actually has a \tcode{const} type because it is odr-used in a postcondition assertion.
+
+Such implicit \tcode{const}-ness of the parameter type being triggered by odr-use in a postcondition assertion can even lead to paradoxes. Consider the following example where \tcode{i} is not odr-used if it is \tcode{const}, but odr-used if it is not:
 \begin{codeblock}
 void f(int i)
   post([&]() {

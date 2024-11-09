@@ -328,11 +328,11 @@ Prevents modification of non-reference parameters odr-used in \tcode{post} and a
 Adding \tcode{post} to a virtual function does not  break derived classes that override it& \yes & \no  & \no  & \no & \yes & \yes \\ \hline
 Adding \tcode{post} to a virtual function does not break users of a derived class that overrides it & \yes & \no  & \yes  & \yes & \yes & \yes\\ \hline
 Does not introduce new inconsistencies between overriding and non-overriding functions & \yes & \yes  & \no  & \yes & \yes & \yes\\ \hline
-No significant concerns regarding specifiability and implementability & \yes & \yes  & \yes  & \no & \yes & \yes\\ \hline
-Does not introduce new sources of undefined behaviour & \yes & \yes  & \yes  & \yes & \yes & \no\\ \hline
+No significant concerns regarding specifiability and implementability* & \yes & \yes  & \yes  & \no & \yes & \yes\\ \hline
+Does not introduce new sources of undefined behaviour* & \yes & \yes  & \yes  & \yes & \yes & \no\\ \hline
 \end{tabular}
-%\vspace{2mm}
-\caption{Main tradeoffs of proposed options V1 --- V6.}
+\vspace{2mm}
+\caption{Main tradeoffs of proposed options V1 --- V6. Options that do not satisfy a requirement marked with an asterisk* are considered unviable by the authors of this paper.}
 \label{tradeoffs}
 \end{table}
 

@@ -240,14 +240,19 @@ int f(const int i) {  // \tcode{const} still needed here, ill-formed if missing
 \end{codeblock}
 Just like all the preceding options, this option would also prevent the bug in the example above: any program that tries to modify the parameter in the implementation of the function itself or any of its overrides would still be ill-formed. It would inflict the same amount of remote code breakage in overriding clients as Option~V3 (and less than Option~V2). Unlike Option~V3, it would also not introduce any inconsistencies between the requirements on the declarations of the overridden function and its overriding functions, and in fact remove any inconsistencies between virtual and non-virtual functions. The rule for all functions would be the same --- the \tcode{const} just needs to be on the definition.
 
-However, we believe that this option is highly problematic to the point of being unimplementable, and therefore we do not consider it viable. The first problem with dropping \tcode{const} on non-defining declarations of the function that actually has the postcondition is that the different declarations of that function still need to agree on whether the parameter is \tcode{const} or not, otherwise things quickly fall apart:
+However, we believe that this option is highly problematic to the point of being unimplementable, and therefore we do not consider it viable.  The primary problem arises from the cognitive load on a reader of an API attempting to understand it.  Such readers would be forced to, when reading a postcondition, understand that parameters will be treated as \tcode{const} in the function body without actually seeing that information in the declaration.  
+
+The next problem with dropping \tcode{const} on non-defining declarations of the function that actually has the postcondition is that the different declarations of that function still need to agree on whether the parameter is \tcode{const} or not, otherwise things quickly fall apart:\footnote{Since this option was first discussed, \cite{P3071R1} has been adopted into the Contracts MVP, often reffered to as \tcode{const}-ification.   With that change, it becomes harder to incorrectly depend on the \tcode{const}-ness of a function parameter, but it will always remain visible with \tcode{decltype}.  Changing the result of \tcode{decltype} is, of course, not an option as that removes any escape hatch from \tcode{const}-ification and breaks any code actually attempting to do computations with the type of a parameter instead of its value.}
 
 \begin{codeblock}
 template <typename T>
 bool g(T&& t);
 
+// A macro to access underlying variable of \tcode{const}-ified names
+#define UNCONST(x) const_cast<std::add_lvalue_reference_t<decltype(x)>>(x)
+
 int f(int i)  // \tcode{i} does not need to be \tcode{const} here, despite being odr-used in \tcode{post}
-  pre(g(i))   // does this now call \tcode{g<int>} instead of \tcode{g<const int>}?
+  pre(g(UNCONST(i)))   // does this now call \tcode{g<int&>} instead of \tcode{g<const int&>}?
   post(r : r > i);  
 
 void h() {
@@ -255,12 +260,17 @@ void h() {
 }
 
 int f(const int i)  // defining declaration: \tcode{const} required here
-  pre(g(i))  // this calls \tcode{g<const int>}
+  pre(g(UNCONST(i)))  // this calls \tcode{g<const int>}
   post( r : r > i) {
   return 7; 
 }
 \end{codeblock}
+% JMB: so the above code *with* pre/post on the defintiion is actually a non-equivalent set of functionc-ontract assertions, because the odr will identify that we are doing different things.
+%      we need another example where the pre/post are *not* repeated on the function definition, as in that case you would be generating code in the function body with callee-side checkign that then called non-const functions on a const variable (and that would require patching the odr to make IFNDR, or doing implicit const in the declarations which requires impossible backtracking)
+%      I'm writing this here because i think we need some slight restructuring that i don't have time to do this morning.
+With just the dropping of the \tcode{const} requirement we would need to accept the above code and the associated confusion that might arise from following different code paths for the same precondition depending on where code for it is generated.  To prevent that, we would need to introduce new rules into the odr that made the above ill-formed (and worse, it would be IFNDR).
 % TD: TODO: the above code example is not correct as `i` would actually be constified so `g(i)` would always call g<const int>. And if we const_cast it away, it would always call g<int>. So why is this a problem?  I don't get it. In your original example you used UNCONST but that's not part of the language. Josh, could you please fix the example above, but without using UNCONST, or replace it with another example illustrating the point? Thanks!
+% JMB: You need to decltype to remove the constification --- constification removes some of the footguns here, but doesn't remove the need to 
 
 Such code could only have well-defined behaviour if all declarations of \tcode{f} still agree that \tcode{i} is \tcode{const}. From this follows that \tcode{i} must somehow be \emph{implicitly} \tcode{const}-ified on all declarations of \tcode{f} if odr-used in the postcondition, even if the user did not explicitly declare \tcode{i} to be \tcode{const} on that declaration. This exact idea was already proposed once in \cite{P2829R0} and rejected at the time because of the serious flaws of this approach.
 
@@ -284,7 +294,10 @@ void f(int i)
   }() );
 \end{codeblock}
 
-It is our current view that the above problems render this approach unimplementable.
+It is our current view that the above problems render this approach unimplementable. 
+
+
+
 \subsection*{Option V5}
 
 Option~V5 is the status quo\footnote{Since the current specification in \cite{P2900R10} does not contain any special rules for parameter declarations on overriding functions, dropping \tcode{const} in such declarations is currently allowed and ``you get what you get''.} in \cite{P2900R10}. It avoids the usage limitations imposed by Option~V1 and the remote code breakage imposed by Option~V2 or Option~V3 and does not suffer from the implementation issues of Option~V4. However, this option too has tradeoffs.

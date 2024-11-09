@@ -253,7 +253,7 @@ bool g(T&& t);
 #define UNCONST(x) const_cast<std::add_lvalue_reference_t<decltype(x)>>(x)
 
 int f(int i)  // \tcode{i} does not need to be \tcode{const} here, despite being odr-used in \tcode{post}
-  pre(g(UNCONST(i)))   // does this now call \tcode{g<int&>} instead of \tcode{g<const int&>}?
+  pre(g(UNCONST(i)))   // does this now call \tcode{g<int\&>} instead of \tcode{g<const int\&>}?
   post(r : r > i);  
 
 void h() {
@@ -318,7 +318,7 @@ Option~V6 is the option chosen in the past by C++2a Contracts \cite{P0542R5}. Ho
 \newcommand{\no}{\includegraphics[width=4mm]{images/no.png}}
 \newcommand{\maybe}{\includegraphics[width=4mm]{images/maybe.png}}
 %\vspace{4mm}
-\begin{table}[hb]
+\begin{table}[t]
 \begin{tabular}{|p{8cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|}
 \hline 
 & V1 & V2 & V3 & V4 & V5 & V6 \\
@@ -335,10 +335,6 @@ Does not introduce new sources of undefined behaviour & \yes & \yes  & \yes  & \
 \caption{Main tradeoffs of proposed options V1 --- V6.}
 \label{tradeoffs}
 \end{table}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\pagebreak
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Proposal}
 

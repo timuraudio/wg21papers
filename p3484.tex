@@ -78,21 +78,21 @@ These issues should be considered together, and ideally resolved in a consistent
 The rationale for this rule is that it allows the assumption that a function will not modify the value of a non-reference parameter odr-used in a postcondition before that postcondition is checked. Human readers, compilers, and static analysis tools can rely on that property. Allowing such modification would render that check significantly less useful as it would be impossible to reason about the postcondition without taking into account what happens in the function definition, and would lead to surprising failures. Consider the following function declaration:
 \begin{codeblock}
 // Returns: a number guaranteed to be greater or equal to the number passed in
-int f(const int i) post (r: r >= i);
+Int f(const Int i) post (r: r >= i);
 \end{codeblock}
 Now, if we could drop the \tcode{const} on the defining declaration of \tcode{f}, we could write a dummy implementation of \tcode{f} as follows:
 \begin{codeblock}
-int f(int i) {  // \tcode{i} is not \tcode{const}
+Int f(Int i) {  // \tcode{i} is not \tcode{const}
   i = 0;
   return i;
 }
 \end{codeblock}
 Such an implementation blatantly fails to satisfy the postcondition of \tcode{f}, and is therefore incorrect. However, this defect cannot be caught by checking the postcondition assertion of \tcode{f}, because its predicate is now \tcode{0 >= 0} which evaluates to \tcode{true}:\footnote{There is an additional complication if the parameter type has at least one
-eligible copy or move constructor and each such constructor is trivial, and a trivial or deleted destructor, which is the case in the example above as the parameter type is \tcode{int}. In this case, the parameter is eligible to be passed via registers. SG21 chose option R7 from \cite{P3487R0}, which allows a postcondition check to observe the pre-temporary copy version of a parameter object passed via registers. This is required to enable caller-side checking of postconditions and make contract checks on virtual function calls as specified by \cite{P2900R10} implementable. It follows that, if the code above were allowed, the postcondition check could actually observe either the value \tcode{3} or the value \tcode{0} for the parameter \tcode{i}, depending on inlining, optimisation flags, etc.}
+eligible copy or move constructor and each such constructor is trivial, and a trivial or deleted destructor, which would be the case in the example above if the parameter type were \tcode{int}. In that case, the parameter would be eligible to be passed via registers. SG21 chose option R7 from \cite{P3487R0}, which allows a postcondition check to observe the pre-temporary copy version of a parameter object passed via registers. This is required to enable caller-side checking of postconditions and make contract checks on virtual function calls as specified by \cite{P2900R10} implementable. It follows that, if the code above were allowed, the postcondition check could actually observe either the value \tcode{3} or the value \tcode{0} for the parameter \tcode{i}, depending on inlining, optimisation flags, etc.   To separate these concerns, we will use parameters and return values of type \tcode{Int} throughout this paper, where that is a user-defined type that wraps an \tcode{int}, with all of the usual operator overloads, and most importantly with a user-provided non-trivial copy constructor.}
 \begin{codeblock}
 void test() {
-  int j = f(3); // no contract violation detected
-  // precondition does not hold --- \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
+  Int j = f(3); // no contract violation detected
+  // postcondition does not hold --- \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
 }
 \end{codeblock}
 In the above scenario, the postcondition fails to detect the bug because the implementation of \tcode{f} explicitly modifies the parameter. A possibly even more dangerous variant of this scenario occurs when such modifications are performed \emph{implicitly}. For example, if the parameter is not \tcode{const} on the defining declaration of \tcode{f}, it may be returned by value, which will perform an implicit move, i.e. the postcondition assertion would observe the parameter object in a moved-from state:
@@ -115,18 +115,18 @@ There is no expectation that the value will remain unchanged after the function 
 Let us now slightly modify the example above by making \tcode{f} a virtual function:
 \begin{codeblock}
 struct Base {
-  virtual int f(const int i) post (r: r >= i);
+  virtual Int f(const Int i) post (r: r >= i);
 };
 \end{codeblock}
 Note that if we override a virtual function, C++ allows dropping \tcode{const} from the parameter declaration in the overriding function, and \cite{P2900R10} currently does not have any provision to make such an override ill-formed:
 \begin{codeblock}
 struct Derived : Base {
-  int f(int i) override; // OK
+  Int f(Int i) override; // OK
 };
 \end{codeblock}
 This means that we can implement \tcode{Derived::f} such that it modifies the value of the parameter:
 \begin{codeblock}
-int Derived::f(int i) {
+Int Derived::f(Int i) {
   i = 0;
   return i;
 };
@@ -134,7 +134,7 @@ int Derived::f(int i) {
 \cite{P2900R10} Section 3.5.3 specifies the semantics of precondition and postcondition assertions on virtual functions: in a virtual function call, the function contract assertions of both the statically called function \tcode{Base::f} and the final overrider \tcode{Derived::f} are checked (see \cite{P3097R0} for discussion). However, if we now call \tcode{Derived::f} through a reference to \tcode{Base}, we are in for an unpleasant surprise:
 \begin{codeblock}
 void test(Base& b) {
-  int j = b.f(3);  // no contract violation detected
+  Int j = b.f(3);  // no contract violation detected
   // precondition does not hold --- \tcode{j} is now \tcode{0}, which is smaller than \tcode{3}!
 }
 
@@ -191,11 +191,11 @@ Option~V1 would prevent the bug in the example above and is the most conservativ
 Just like in the coroutine case, for non-\tcode{final} virtual functions the workaround would be to use a postcondition capture, once this post-MVP feature becomes available (see \cite{P3098R0}):
 \begin{codeblock}
 struct Base {
-  virtual int f(const int i) post (r: r >= i);     // error: cannot odr-use parameter \tcode{i} 
+  virtual Int f(const Int i) post (r: r >= i);     // error: cannot odr-use parameter \tcode{i} 
 };
 
 struct Base {
-  virtual int f(const int i) post [i] (r: r >= i); // OK: explicitly capturing \tcode{i} by copy
+  virtual Int f(const Int i) post [i] (r: r >= i); // OK: explicitly capturing \tcode{i} by copy
 }
 \end{codeblock}
 
@@ -216,6 +216,7 @@ Option~V2 would also prevent the bug in the example above and is a less restrict
 However, the tradeoff is that Option~V2 could also lead to remote code breakage, which directly violates Design Principle 15 of \cite{P2900R10}, ``No Client-Side Language Break''. In particular, adding a postcondition to a virtual function that odr-uses a \tcode{const} parameter would remotely break any client code that overrides that function and yet has not added the \tcode{const} to all declarations of the override, including the definition.
 % including any override that is implemented as a coroutine.
 % TD: Removing this point here as nobody will actually override a non-coroutine with a coroutine in practice and mentioning it here detracts from the main point.
+% jmb: why would you not?  Your base class function might also be pure and intended to be overriden with a coroutine --- which should be prevented if that parameter is by-value and is intended to have any meaning.
 
 We anticipate that with virtual functions, such remote code breakage would be a frequent problem. Today, hardly anyone adds \tcode{const} to the declaration of a non-reference parameter as it has essentially no meaning; with \cite{P2900R10}, anyone who wishes to odr-use a parameter in a postcondition will \emph{have} to add the \tcode{const}, breaking any overriding functions.
 
@@ -230,6 +231,7 @@ Option~V3 is also likely to inflict a smaller number of remote code breakage, as
 
 More notably, for users attempting to continue to link in binaries built in days past, as long as the function itself does not modify the function parameters in question (which is the case in the vast majority of cases, even when the parameters are not actually declared \tcode{const}), clients can continue to be rebuilt and linked against those binaries without issue or any need to access and update the source for the derived classes.
 % TD: We need to clarify whether this scenario would technically be an odr violation, or if not, why not?
+% JMB: Of course it's an odr violation, you're linking together code that has different source.  But ABI compatability is all about when you can link together things that are odr violations but are not actually problems.  I don't think we need to explain that here though.
 
 Note that Option~V3 does \emph{not} remove the requirement that the parameter be declared \tcode{const} on all declarations of the function that has the postcondition odr-using that parameter. This property of Option~V3 is also arguably its downside: it creates an inconsistency between the rules for the function that has the postcondition and the rules for function overriding it --- the former needs to have \tcode{const} on the parameter declaration on \emph{all} declarations of the function, while the latter need to have \tcode{const} on the parameter declaration only on the \emph{defining} declaration of the function. The other extreme for this alternative to lift the requirement of having \tcode{const} on all declarations is Option~V4, which we discuss below.
 

@@ -191,12 +191,12 @@ Option~V1 would prevent the bug in the example above and is the most conservativ
 Just like in the coroutine case, for non-\tcode{final} virtual functions the workaround would be to use a postcondition capture, once this post-MVP feature becomes available (see \cite{P3098R0}):
 \begin{codeblock}
 struct Base {
-  virtual Integer f(const Integer i) post (r: r >= i);     // error: cannot odr-use parameter \tcode{i} 
-};
+  virtual Integer f(const Integer i) post (r: r >= i);     // error: cannot odr-use
+};                                                         // parameter \tcode{i} here
 
 struct Base {
-  virtual Integer f(const Integer i) post [i] (r: r >= i); // OK: explicitly capturing \tcode{i} by copy
-}
+  virtual Integer f(const Integer i) post [i] (r: r >= i); // OK: explicitly capturing 
+};                                                         // parameter \tcode{i} by copy
 \end{codeblock}
 
 However, Option~V1 has several downsides.

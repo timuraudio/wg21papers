@@ -54,6 +54,16 @@
   \vspace{2mm}  \\ %
 }
 
+% Proposal color boxes
+\definecolor{proposalBG}{RGB}{147,112,219}
+
+\newcounter{proposalnum}
+\newtcbtheorem[use counter=proposalnum]{proposal}
+              {Proposal}
+              {colback=proposalBG!20!white,colbacktitle={proposalBG!40!white},coltitle={black}}
+              {prop}
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
@@ -214,6 +224,170 @@ If the predicate of a postcondition assertion of a function odr-uses ([basic.def
 This requirement applies even to declarations that do not specify the \emph{postcondition-specifier}. \added{The \tcode{const} qualifier of the parameter may be part of a dependent type. }Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
 \end{note}
 \end{adjustwidth}
+
+\section{Sequences of Evaluations and Repeated Evaluations}
+
+Previously, when we adopted multiple evaluations and elision,
+repeated evaluations of a contract assertion could happen
+after any number of following contract assertions
+and vacuous operations --- where vacuous operations included
+trivial initializations and the passing of control
+across a function invocation boundary.
+
+As we have been wording this requirement, the specificity
+of defining such vacuous operations has come under further
+scrutiny and it is not obvious that we can produce a very
+clear definition that is both correct and useful.
+
+On the other hand, we have recently done a huge amount of
+work refining the mechanisms around evaluating precondition
+and postcondition assertions before and afer parameters
+are passed to a function and control is transferred (\cite{P3487R0}).
+Due to that work, we now have a robust specification of how
+function contract assertions are evaluated that freely
+allows that sequence of evaluations to straddle the boundary
+between callers and callees.
+
+When considering the cases where we do want to allow repetition
+of contract assertion evaluations as an entire block,
+we have three primary use cases:
+\begin{itemize}
+\item{When a function is invoked, all of its caller-facing preconditions
+  are evaluated followed by all of its callee-facing preconditions.}
+\item{When a function returns, all of its callee-facing postconditions
+  are evaluated followed by all of its caller-facing postconditions.}
+\item{Within a function's body, multiple assertion statements might be
+  consecutive statements with no other statements between them.}
+\end{itemize}          
+In addition, there are more categories where we currently
+allow repetition that are not strictly needed:
+\begin{itemize}
+\item{When assertion statements are at the start of a function body,
+we currently consider them to be part of the same sequence of assertions
+as the preconditions of that function.}
+\item{Assertion statements that preceed a function invocation (when
+that function's parameters have vacuous initialization) are considered
+part of the same sequence as the preconditions of that function.}
+\item{When the first action in a function body is to invoke another
+function, the preconditions of both the enclosing and invoked function
+form a contract assertion sequence.}
+\item{Assertion statements may have trivially copyable or trivially initialized
+variables declared between and still remain part of a single sequence.}
+\item{The postconditions of one function may be part of a sequence
+with the preconditions of the next invoked function, although this is limitted
+by not being able to happen if any function parameters or temporaries are
+destroyed when the first function finishes its invocation.}
+\end{itemize}
+
+The current proposal in \cite{P2900R11} makes all of the above situations
+contract assertion sequences, and thus any contract assertion at the start
+of such sequences may be repeated again at the end.
+
+We propose to instead limit contract assertion sequences to be only
+those cases where we clearly identify batches of contract assertions
+and then specify that they be evaluated at once.
+
+Consider the following invocations:
+\begin{codeblock}
+void f()
+  pre(pre1())
+  pre(pre2())
+  post(post1())
+  post(post2())
+{
+  contract_assert(ca1());
+  contract_assert(ca2());
+  int i = 0;
+  contract_assert(ca3(i));
+}
+void g()
+{
+  f(); // checks pre1(), pre2(), ca1(), ca2(), ca3(i), post1(), post2()
+  f(); // checks pre1(), pre2(), ca1(), ca2(), ca3(i), post1(), post2()
+}
+\end{codeblock}
+In the above, the current rules will produce one single contract
+assertion sequences for the two consecutive invocations
+of \tcode{f}:
+\begin{itemize}
+\item{
+ \tcode{pre1()}, \tcode{pre2()}, \tcode{ca1()}, \tcode{ca2()}, \tcode{ca3(i)}, \tcode{post1()}, \tcode{post2()},
+ \tcode{pre1()}, \tcode{pre2()}, \tcode{ca1()}, \tcode{ca2()}, \tcode{ca3(i)}, \tcode{post1()}, \tcode{post2()}
+}
+\end{itemize}
+
+Removing destructors for the allowed vacuous
+operations between contract sasertions changes this to be
+three contract assertion sequences due to the destruction of
+the automatic variable \tocde{i} that occurs when the
+function \tcode{f} returns:
+\begin{itemize}
+\item{
+ \tcode{pre1()}, \tcode{pre2()}, \tcode{ca1()}, \tcode{ca2()}, \tcode{ca3(i)}
+}
+\item{
+ \tcode{post1()}, \tcode{post2()}
+ \tcode{pre1()}, \tcode{pre2()}, \tcode{ca1()}, \tcode{ca2()}, \tcode{ca3(i)}
+}
+\item{
+  \tcode{post1()}, \tcode{post2()}
+}
+\end{itemize}
+
+Limitting contract assertion sequences to contract assertions
+that we explicitly evaluate in sequence, along with assertion
+statements that are consecutive further breaks this
+into the following $8$ sequences:
+\begin{itemize}
+\item{
+ \tcode{pre1()}, \tcode{pre2()}
+}
+\item{
+ \tcode{ca1()}, \tcode{ca2()}
+}
+\item{
+ \tcode{ca3(i)}
+}
+\item{
+ \tcode{post1()}, \tcode{post2()}
+}
+\item{
+ \tcode{pre1()}, \tcode{pre2()}
+}
+\item{
+ \tcode{ca1()}, \tcode{ca2()}
+}
+\item{
+ \tcode{ca3(i)}
+}
+\item{
+  \tcode{post1()}, \tcode{post2()}
+}
+\end{itemize}
+
+The specification of the above sequences as sequences
+and allowing repetition within them is very simple and based
+largely on wording we have already built elsewhere for how
+these contract assertions are evaluated.
+
+The particular thing we lose is the ability to take
+the check of \tcode{pre1()} at the start of the longer
+sequences and move them past, for examples, checks of
+\tcode{ca1()} in the first or even the second invocation of f().
+This does not seem particularly compelling to retain.
+
+\begin{proposal}{Allow Repetition Only When Evaluating In Sequence}{evalinsequence}
+Allow repetitions of contract assertions within
+blocks of contract assertions that are evaluated in sequence,
+which includes the following sets of contrat assertions:
+\begin{itemize}
+\item{Caller-facing preconditions folowed by callee-facing precondtions
+of a function call.}
+\item{Callee-facing postconditions followed by caller-facing postconditions
+of a function call.}
+\item{Assertion statements that are consecutive statements.}
+\end{itemize}
+\end{proposal}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

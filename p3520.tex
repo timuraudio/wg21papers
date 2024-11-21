@@ -95,11 +95,76 @@ During CWG wording review of Contracts \cite{P2900R11} at the November 2024 Wroc
 
 \section{Specify the mode of termination}
 
-The current wording in \cite{P2900R11} says that if a contract violation occurs while evaluating a contract assertion with the enforce or quick-enforce semantic, "the program is terminated in an implementation-defined fashion".
+The current wording in \cite{P2900R11} says that if a contract violation occurs while evaluating a contract assertion with the enforce or quick-enforce semantic, ``the program is terminated in an implementation-defined fashion''.
 
 According to CWG, this specification is insufficient to determine which modes of termination are conforming. CWG is asking to enumerate the specific modes of termination that a conforming implementation is allowed to choose between.
 
 The following modes of termination exist in C++ today (ordered by severity):
+
+\begin{enumerate}
+\item \tcode{std::exit} --- Normal program termination with full cleanup
+\item \tcode{std::quick_exit} --- Normal program termination, but with less cleanup
+\item \tcode{std::_Exit} --- Normal program termination with minimal cleanup
+\item \tcode{std::terminate} --- Abnormal program termination, the C++ way
+\item \tcode{std::abort} --- Abnormal program termination, the C way
+\item \tcode{__builtin_trap}, \tcode{__builtin_verbose_trap}, \tcode{ __fastfail}, \tcode{__debugbreak}, etc. --- Implementation-defined abnormal termination modes with no cleanup
+\end{enumerate}
+
+These modes of termination perform the following actions (a question mark denotes that it is implementation-defined whether the action happens):
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pagebreak
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\yes}{\includegraphics[width=4mm]{images/yes.png}}
+\newcommand{\no}{\includegraphics[width=4mm]{images/no.png}}
+\newcommand{\maybe}{\includegraphics[width=4mm]{images/maybe.png}}
+%\vspace{4mm}
+\begin{table}[h!]
+\begin{tabular}{|p{8cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|}
+\hline 
+& 1 & 2 & 3 & 4 & 5 & 6 \\
+\hline
+Can be used for normal termination that returns \tcode{0} to the host environment & \yes & \yes  & \yes  & \no & \no & \no\\ \hline
+Calls destructors of static and thread local objects & \yes & \no  & \no  & \no & \no & \no\\ \hline
+Calls callback functions that can be defined by the user & \yes & \yes  & \no  & \yes & \yes & \no\\ \hline
+Flushes and closes streams, removes temporary files & \yes & \maybe  & \maybe  & \maybe & \maybe & \no\\ \hline
+\end{tabular}
+\end{table}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+The callback functions called vary by each termination mode. \tcode{std::exit} calls functions registered with \tcode{std::atexit}. \tcode{std::quick_exit} calls functions registered with \tcode{std::at_quick_exit}. \tcode{std::terminate} calls the currently installed \tcode{std::termination_handler}; the default handler calls \tcode{std::abort}. \tcode{std::abort} raises a \tcode{SIGABRT} signal which may be caught by an appropriate signal handler.
+
+\tcode{std::exit} is called when \tcode{main} returns. \tcode{std::_Exit} is called by \tcode{std::exit} and \tcode{std::quick_exit} after they have performed their respective cleanup actions. \tcode{std::terminate} is usually called when an unrecoverable error occurs during exception handling, but has a few other notable use cases, e.g., destroying a joinable \tcode{std::thread}. \tcode{std::abort} is called by a failing \tcode{cassert}. All termination modes can be directly invoked by the user. All termination modes except 6 require calling into a C or C++ standard library function.
+
+In all cases, termination after a contract violation results from a \emph{defect} in the program; therefore, only the abnormal modes of termination seem appropriate. The following modes of termination (which are all abnormal modes) are either already used by existing implementations of \cite{P2900R11} or were requested as options by compiler vendors:
+
+\begin{itemize}
+\item \tcode{std::terminate} --- used by the Clang implementation for quick-enforce when predicate evaluation exits via an exception;
+\item \tcode{std::abort} --- to make the default behaviour of a contract violation identical to that of a failed \tcode{cassert};
+\item as-if by \tcode{std::abort} --- requested by a compiler vendor in order to be able to raise a \tcode{SIGABRT} signal without having to call a standard library function ;
+\item \tcode{__builtin_trap} and \tcode{__builtin_debug_trap} --- used by the Clang implementation for quick-enforce when the predicate evaluates to \tcode{false} to minimize code size and the amount of instructions executed after a contract violation.
+\end{itemize}
+
+Therefore, we propose to allow exactly these options. Proposed wording:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\begin{addedblock}
+When the program is \emph{contract-terminated}, depending on context:
+\begin{itemize}
+\item \tcode{std::terminate} is called,
+\item \tcode{std::abort} is called,
+\item execution is terminated as-if by performing the operations of \tcode{std::abort},
+\item execution is terminated.
+\end{itemize}
+\end{addedblock}
+
+If a contract violation occurs in a context that is not manifestly constant-evaluated and the evaluation semantic is quick-enforce, the program is \removed{terminated in an implementation-defined fashion}\added{contract-terminated}.
+
+If a contract violation occurs in a context that is not manifestly constant-evaluated and the evaluation semantic is enforce, [...] If the contract-violation handler returns normally and the evaluation semantic is enforce, the program is \removed{terminated in an implementation-defined fashion}\added{contract-terminated}.
+\end{adjustwidth}
 
 \section{Disallow lambdas inside contract redeclarations}
 

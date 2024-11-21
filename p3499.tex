@@ -1,0 +1,181 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{A first step towards strict predicates}
+\author{
+Lisa Lippincott \small(\href{mailto:lisa.e.lippincott@gmail.com}{lisa.e.lippincott@gmail.com}) \\
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3499R0 \\
+Date: &2024-11-19 \\
+Project: & Programming Language C++ \\
+Audience: & SG21, EWG
+\end{tabular}
+
+\begin{abstract}
+This paper proposes a possible design direction to achieve a compromise on the question whether the Contracts facility proposed in \cite{P2900R11} should provide support for strict contracts and thus increasing consensus on that proposal.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Introduction}
+
+It has been suggested in \cite{P3173R0} and \cite{P3362R0} that the Contracts MVP, as proposed in \cite{P2900R11}, is not viable unless it supports so-called \emph{strict} contracts, as proposed in \cite{P2680R1} and \cite{P3285R0}. Discussion of \cite{P2900R11} at the WG21 meeting in Wroc\l aw revealed that this issue is blocking EWG from gaining consensus on advancing the Contracts MVP into the C++ Standard.
+
+Strict contracts is an approach that restricts the predicates of contract assertions to expressions that can be statically proven to not introduce undefined behaviour (excluding data races) and to not have side effects outside of its cone of evaluation; predicates for which such a proof cannot be constructed are ill-formed. When undefined behaviour cannot be prevented statically (e.g., integer overflow), it is instead redefined to be some well-defined behaviour at runtime.
+
+This approach necessarily  constrains the set of expressions that are allowed in the predicates of strict contracts. For example, in a strict predicate it is not possible to call any function that itself has not been statically proven to satisfy the required properties. Such strict predicates are too restrictive for general use as a runtime contract checking facility. Therefore, \cite{P2680R1} and \cite{P3285R0} also allow the user to write predicates that do not satisfy the constraints of strict contracts, called \emph{relaxed contracts}. The semantics of relaxed contracts are equivalent to the semantics of contract assertions as proposed in \cite{P2900R11}.
+
+ In \cite{P3376R0} and \cite{P3386R0}, it was suggested that strict contracts, based on the principles that can be gleaned from \cite{P3285R0}, result in only a very small number of predicates that would be viable to express, with a huge amount of new language complexity needed to achieve anything beyond the most basic arithmetic operations. In particular, it is currently unclear whether or how it would be possible at all to use pointers and references to objects and to call member functions.
+ 
+However, as a starting point, we can specify strict contracts to only allow predicates for which we are confident that such proof can be constructed. This will initially be a very small set, but it provides a clear evolutionary path towards further expansion.
+
+We propose that strict contract assertions should be ill-formed unless the predicate expression consists of only the following kinds of subexpressions:
+
+\begin{itemize}
+\item literals of arithmetic or enumeration type,
+\item \emph{id-expression}s that denote a non-\tcode{volatile} variable with arithmetic or enumeration type (notably, this excludes pointers and references),
+\item unary-expressions where the operator is one of the following: \tcode{+}, \tcode{-}, \tcode{!}, \tcode{~}
+\item \emph{binary-expression}s where the operator is one of the following: \tcode{+}, \tcode{-}, \tcode{/}, \tcode{\%}, \tcode{*}, \tcode{!}, \tcode{~}, \tcode{\^}, \tcode{|}, \tcode{||}, \tcode{\&}, \tcode{\&\&}, \tcode{<<}, \tcode{>>},
+\item \emph{conditional-expression}s where the operator is \tcode{?!},
+\item \emph{relational-expression}s where the operator is \tcode{<}, \tcode{>}, \tcode{<=}, \tcode{>=},
+\item \emph{equality-expression}s where the operator is \tcode{==}, \tcode{!=},
+\item \emph{compare-expression}s where the operator is \tcode{<=>},
+\item core constant expressions of arithmetic or enumeration type.
+\end{itemize}
+
+If we restrict predicate expressions to just the above, we exclude modifications of \emph{any} variables and thus by extensions exclude any side effects outside of the cone of evaluation of the predicate. Further, we can enumerate all instances of undefined behaviour that can occur when evaluating such a predicate according to the C++ Standard today (see \cite{P1705R1}), excluding data races:
+
+\begin{itemize}
+\item Signed integer overflow or underflow,
+\item Converting a floating point value to a type that cannot represent that value,
+\item Division by zero,
+\item Shifting by a negative amount,
+\item Shifting by equal or greater than the bit-width of the type.
+\end{itemize}
+
+The next step is to redefine the above instances undefined behaviour to instead be well-defined behaviour when encountered during the evaluation of a strict contract predicate. There are two options to choose from:
+
+\begin{itemize}
+\item Specify that the evaluation should produce an unspecified \emph{erroneous} value,
+\item Specify that the behaviour is a contract violation; if the contract-violation handler is called, the value for \tcode{detection_mode} is a newly introduced enumeration value \tcode{arithmetic_error} (modulo name bikeshedding).
+\end{itemize}
+
+Further, we should non-normatively encourage an implementation to exhibit the same well-defined behaviour when the same situations are encountered in \emph{relaxed} predicates, thus providing a subset of the functionality proposed in \cite{P3100R1}.
+
+Finally, we need to syntactically distinguish strict and relaxed contract assertions. There are three options to choose from:
+
+\begin{itemize}
+\item The default syntax proposed in \cite{P2900R11} denotes a relaxed contract (status quo); strict contracts require an additional qualifier:
+\begin{codeblock}
+pre (x)         // relaxed contract
+pre strict (x)  // strict contract
+\end{codeblock}
+\item The default syntax proposed in \cite{P2900R11} denotes a strict contract (breaking change to \cite{P2900R11}); relaxed contracts require an additional qualifier (as proposed in \cite{P3285R0}):
+\begin{codeblock}
+pre (x)         // strict contract
+pre relaxed (x) // relaxed contract
+\end{codeblock}
+\item The default syntax is ill-formed; an additional qualifier is needed in all cases:
+\begin{codeblock}
+pre (x)         // syntax error
+pre strict (x)  // strict contract
+pre relaxed (x) // relaxed contract
+\end{codeblock}
+\end{itemize}
+
+We hope that this direction (in whichever variant) helps increase consensus for adding the Contracts facility proposed in \cite{P2900R11} to the C++ Working Draft.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Acknowledgements}
+%Thanks to Oliver Rosten for his review of the paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

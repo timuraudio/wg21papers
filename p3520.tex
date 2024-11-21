@@ -112,9 +112,9 @@ The following modes of termination exist in C++ today (ordered by severity):
 
 These modes of termination perform the following actions (a question mark denotes that it is implementation-defined whether the action happens):
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%
 \pagebreak
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \newcommand{\yes}{\includegraphics[width=4mm]{images/yes.png}}
@@ -137,18 +137,13 @@ Flushes and closes streams, removes temporary files & \yes & \maybe  & \maybe  &
 
 The callback functions called vary by each termination mode. \tcode{std::exit} calls functions registered with \tcode{std::atexit}. \tcode{std::quick_exit} calls functions registered with \tcode{std::at_quick_exit}. \tcode{std::terminate} calls the currently installed \tcode{std::termination_handler}; the default handler calls \tcode{std::abort}. \tcode{std::abort} raises a \tcode{SIGABRT} signal which may be caught by an appropriate signal handler.
 
-\tcode{std::exit} is called when \tcode{main} returns. \tcode{std::_Exit} is called by \tcode{std::exit} and \tcode{std::quick_exit} after they have performed their respective cleanup actions. \tcode{std::terminate} is usually called when an unrecoverable error occurs during exception handling, but has a few other notable use cases, e.g., destroying a joinable \tcode{std::thread}. \tcode{std::abort} is called by a failing \tcode{cassert}. All termination modes can be directly invoked by the user. All termination modes except 6 require calling into a C or C++ standard library function.
+\tcode{std::exit} is called when \tcode{main} returns. \tcode{std::_Exit} is called by \tcode{std::exit} and \tcode{std::quick_exit} after they have performed their respective cleanup actions. \tcode{std::terminate} is usually called when an unrecoverable error occurs during exception handling, but has a few other notable use cases, e.g., destroying a joinable \tcode{std::thread}. \tcode{std::abort} is called by a failing \tcode{cassert}. All termination modes can be directly invoked by the user.
 
-In all cases, termination after a contract violation results from a \emph{defect} in the program; therefore, only the abnormal modes of termination seem appropriate. The following modes of termination (which are all abnormal modes) are either already used by existing implementations of \cite{P2900R11} or were requested as options by compiler vendors:
+All termination modes except 6 call into a C or C++ standard library function, however an implementation is free to perform the actions equivalent to such a call without actually performing the call and thus without having to link in the standard library.
 
-\begin{itemize}
-\item \tcode{std::terminate} --- used by the Clang implementation for quick-enforce when predicate evaluation exits via an exception;
-\item \tcode{std::abort} --- to make the default behaviour of a contract violation identical to that of a failed \tcode{cassert};
-\item as-if by \tcode{std::abort} --- requested by a compiler vendor in order to be able to raise a \tcode{SIGABRT} signal without having to call a standard library function ;
-\item \tcode{__builtin_trap} and \tcode{__builtin_debug_trap} --- used by the Clang implementation for quick-enforce when the predicate evaluates to \tcode{false} to minimize code size and the amount of instructions executed after a contract violation.
-\end{itemize}
+In all cases, termination after a contract violation results from a \emph{defect} in the program; therefore, only the three abnormal modes of termination are appropriate. In addition, these three modes are exactly the options compiler vendors have requested or are already using for implementing of \cite{P2900R11}. Therefore, we propose to allow exactly these options.
 
-Therefore, we propose to allow exactly these options. Proposed wording:
+Proposed wording relative to \cite{P2900R11}:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \begin{addedblock}
@@ -156,15 +151,19 @@ When the program is \emph{contract-terminated}, depending on context:
 \begin{itemize}
 \item \tcode{std::terminate} is called,
 \item \tcode{std::abort} is called,
-\item execution is terminated as-if by performing the operations of \tcode{std::abort},
 \item execution is terminated.
 \end{itemize}
+\begin{note}
+Performing the actions of \tcode{std::terminate} or \tcode{std::abort} without actually making a library call is a conforming implementation of contract-terminating ([intro.abstract]).
+\end{note}
 \end{addedblock}
 
-If a contract violation occurs in a context that is not manifestly constant-evaluated and the evaluation semantic is quick-enforce, the program is \removed{terminated in an implementation-defined fashion}\added{contract-terminated}.
-
-If a contract violation occurs in a context that is not manifestly constant-evaluated and the evaluation semantic is enforce, [...] If the contract-violation handler returns normally and the evaluation semantic is enforce, the program is \removed{terminated in an implementation-defined fashion}\added{contract-terminated}.
+If a contract violation occurs in a context that is not manifestly constant-evaluated and the evaluation semantic is quick-enforce, the program is \removed{terminated in an implementation-defined fashion}\added{contract-terminated}. [...] If the contract-violation handler returns normally and the evaluation semantic is enforce, the program is \removed{terminated in an implementation-defined fashion}\added{contract-terminated}.
 \end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%
+\pagebreak
+%%%%%%%%%%%%%%%%%%%%
 
 \section{Disallow lambdas inside contract redeclarations}
 
@@ -172,7 +171,50 @@ sdfgd
 
 \section{Unify rules for parameters of dependent type}
 
-sdf
+\cite{P3489R0} added the rule that a parameter odr-used in a postcondition assertion needs to be explicitly declared \tcode{const}, even if it is a dependent type and the type would be \tcode{const} anyway:
+
+\begin{codeblock}
+template <typename T>
+void f(T t) post (t > 0);  // error: parameter must be declared \tcode{const} here
+\end{codeblock}
+
+However, we overlooked that this also excludes parameters declared via a type alias of a \tcode{const} type, which is unfortunate. For example, the following code should be well-formed:
+
+\begin{codeblock}
+using const_int_t = const int;
+void f(const_int_t i) post (i > 0);  // error but should be OK
+\end{codeblock}
+
+There are also examples where the parameter is declared via a type alias that is itself a dependent type. This case should arguably also be well-formed:
+
+\begin{codeblock}
+template <typename T>
+void f(std::add_const_t<T> t) post(t > 0);  // error: parameter must be declared \tcode{const} here
+\end{codeblock}
+
+Allowing the second and third example while making the first example ill-formed would require a peculiar carve-out. In light of this information, we recommend to revert the decision to choose Option D1 from \cite{P3489R0} and to choose Option D2 instead:
+\begin{codeblock}
+template <typename T>
+void f(T t) post (t > 0);  
+
+int main() {
+  f(1);              // error: deduced parameter type (\tcode{int}) is not \tcode{const}
+  f<int>(1);         // error: parameter type (\tcode{int}) is not \tcode{const}
+  f<const int>(1);   // OK
+}
+\end{codeblock}
+This option would also make the second and third example well-formed.
+
+Proposed wording relative to \cite{P2900R11}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a non-reference parameter of that function, \removed{all declarations of that parameter shall have a \tcode{const} qualifier}\added{the type of that parameter shall be \tcode{const}} and shall not have array or function type.
+
+\begin{note}
+This requirement applies even to declarations that do not specify the \emph{postcondition-specifier}. \added{The \tcode{const} qualifier of the parameter may be part of a dependent type. }Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\end{adjustwidth}
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %\section*{Acknowledgements}

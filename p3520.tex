@@ -185,11 +185,11 @@ using const_int_t = const int;
 void f(const_int_t i) post (i > 0);  // error but should be OK
 \end{codeblock}
 
-There are also examples where the parameter is declared via a type alias that is itself a dependent type. This case should arguably also be well-formed:
+There are also examples where the parameter is declared via a type alias that is itself dependent. This case should arguably also be well-formed:
 
 \begin{codeblock}
 template <typename T>
-void f(std::add_const_t<T> t) post(t > 0);  // error: parameter must be declared \tcode{const} here
+void f(std::add_const_t<T> t) post(t > 0);  // error but should be OK
 \end{codeblock}
 
 Allowing the second and third example while making the first example ill-formed would require a peculiar carve-out. In light of this information, we recommend to revert the decision to choose Option D1 from \cite{P3489R0} and to choose Option D2 instead:

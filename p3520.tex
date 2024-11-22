@@ -266,7 +266,7 @@ Previously, when we adopted multiple evaluations and elision,
 repeated evaluations of a contract assertion could happen
 after any number of following contract assertions
 and vacuous operations --- where vacuous operations included
-trivial initializations and the passing of control
+trivial initialisations and the passing of control
 across a function invocation boundary.
 
 As we have been wording this requirement, the specificity
@@ -276,7 +276,7 @@ clear definition that is both correct and useful.
 
 On the other hand, we have recently done a huge amount of
 work refining the mechanisms around evaluating precondition
-and postcondition assertions before and afer parameters
+and postcondition assertions before and after parameters
 are passed to a function and control is transferred (\cite{P3487R0}).
 Due to that work, we now have a robust specification of how
 function contract assertions are evaluated that freely
@@ -300,16 +300,16 @@ allow repetition that are not strictly needed:
 \item{When assertion statements are at the start of a function body,
 we currently consider them to be part of the same sequence of assertions
 as the preconditions of that function.}
-\item{Assertion statements that preceed a function invocation (when
-that function's parameters have vacuous initialization) are considered
+\item{Assertion statements that precede a function invocation (when
+that function's parameters have vacuous initialisation) are considered
 part of the same sequence as the preconditions of that function.}
 \item{When the first action in a function body is to invoke another
 function, the preconditions of both the enclosing and invoked function
 form a contract assertion sequence.}
-\item{Assertion statements may have trivially copyable or trivially initialized
+\item{Assertion statements may have trivially copyable or trivially initialised
 variables declared between and still remain part of a single sequence.}
 \item{The postconditions of one function may be part of a sequence
-with the preconditions of the next invoked function, although this is limitted
+with the preconditions of the next invoked function, although this is limited
 by not being able to happen if any function parameters or temporaries are
 destroyed when the first function finishes its invocation.}
 \end{itemize}
@@ -417,8 +417,8 @@ Proposed wording relative to \cite{P2900R11}:
 \removed{A \emph{contract assertion sequence} is a sequence of contract assertions that are consecutive.}\added{The following sets of contract assertions constitute a \emph{contract assertion sequence}:}
 \begin{addedblock}
 \begin{itemize}
-\item The caller-facing precondition assertions followed by the callee-facing precondtion assertions that apply to a function call;
-\item The callee-facing postcondition assertions followed by the caller-facing postcondtion assertions that apply to a function call;
+\item The caller-facing precondition assertions followed by the callee-facing precondition assertions that apply to a function call;
+\item The callee-facing postcondition assertions followed by the caller-facing postconidtion assertions that apply to a function call;
 \item Assertion statements that are consecutive statements.
 \end{itemize}
 \end{addedblock}

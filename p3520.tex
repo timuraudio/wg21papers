@@ -77,7 +77,7 @@ Andrzej Krzemie\' nski \small(\href{mailto:akrzemi@gmail.com}{akrzemi@gmail.com}
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D3520R0 \\
+Document \#: & P3520R0 \\
 Date: &2024-11-21 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
@@ -105,7 +105,7 @@ During CWG wording review of Contracts \cite{P2900R11} at the November 2024 Wroc
 
 \section{Specify the mode of termination}
 
-The current wording in \cite{P2900R11} says that if a contract violation occurs while evaluating a contract assertion with the enforce or quick-enforce semantic, ``the program is terminated in an implementation-defined fashion''.
+The current wording in \cite{P2900R11} specifies that if a contract violation occurs while evaluating a contract assertion with the enforce or quick-enforce semantic, ``the program is terminated in an implementation-defined fashion''.
 
 According to CWG, this specification is insufficient to determine which modes of termination are conforming. CWG is asking to enumerate the specific modes of termination that a conforming implementation is allowed to choose between.
 
@@ -177,7 +177,42 @@ If a contract violation occurs in a context that is not manifestly constant-eval
 
 \section{Disallow lambdas inside contract redeclarations}
 
-sdfgd
+The current wording in \cite{P2900R11} specifies that the function contract assertion sequence of a function can be repeated on a redeclaration if all repetitions consist of the same function contract
+specifiers in the same order. A function contract specifier $c1$ on a function declaration $d1$ is  the same as a function contract specifier $c2$ on a function declaration $d2$ if they are of the same assertion kind (\tcode{pre} or \tcode{post)}) and  their predicates $p1$ and $p2$ would
+satisfy the one-definition rule (odr) if placed in an imaginary function body on the declarations $d1$
+and $d2$, respectively, except the names of function parameters, names of template parameters, and the result name may be different.
+
+This rule implies that the two lambda expressions that appear inside the predicates $p1$ and $p2$ are considered to be the same lambda expression if the odr considers the hypothetical function
+definitions containing those predicates to be the same:
+
+\begin{codeblock}
+void f() pre([]{ return true; }());
+void f() pre([]{ return true; }());  // OK
+\end{codeblock}
+
+However, if parameter names are involved, it might result in two lambdas that are not token-identical but would still have to be considered identical under the rule above, for example:
+
+\begin{codeblock}
+int f(int i, int j) pre([&](){ return i + j > 5 ; }());
+int f(int k, int l) pre([&](){ return k + l > 5 ; }());  // OK
+\end{codeblock}
+
+As it turns out, implementing the behaviour above requires unreasonable heroics both on the specification side and on the implementation side. If it is not sufficient to token-compare the lambdas, it becomes necessary to fully parse them, but in at least one compiler this cannot be done without creating a distinct closure type for each lambda. In addition, everywhere in the language specification lexically repeating a lambda declares a new lambda with a distinct closure type. We should not break this property.
+
+Completely banning lambda expressions from being used in contract assertions, or completely banning the repetition of contract assertions on redeclarations seems too harsh because there are important use cases for both (see \cite{P2890R2} and \cite{P3066R0}). The ideal compromise is to allow the repetition of contract assertions on redeclarations, but only if they do not contain a lambda:
+
+\begin{codeblock}
+void f() pre([]{ return true; }());  // OK
+void f() pre([]{ return true; }());  // error
+\end{codeblock}
+
+Proposed wording relative to \cite{P2900R11}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A \emph{function-contract-specifier-seq} $s1$ is the same as a \emph{function-contract-specifier-seq} $s2$ if $s1$ and $s2$ consist of the same \emph{function-contract-specifier}s in the same order. A  \emph{function-contract-specifier} $c1$ on a function declaration $d1$ is the same as a \emph{function-contract-specifier} $c2$ on a function declaration $d2$ if their predicates ([basic.contract.general]), $p1$ and $p2$, would satisfy the one-definition rule ([basic.def.odr]) if placed in function definitions on the declarations $d1$ and $d2$, respectively, except for renaming of parameters, renaming of template parameters, and renaming of the result name ([dcl.contract.res]), if any. 
+
+\added{[\emph{Note:} If a \emph{lambda-expression} is a subexpression of $p1$, and $p1$ and $p2$ are in the same translation unit, they are not the same ([expr.prim.lambda]). --- \emph{end note}]}
+\end{adjustwidth}
 
 \section{Unify rules for parameters of dependent type}
 
@@ -319,7 +354,7 @@ of \tcode{f}:
 Removing destructors for the allowed vacuous
 operations between contract sasertions changes this to be
 three contract assertion sequences due to the destruction of
-the automatic variable \tocde{i} that occurs when the
+the automatic variable \tcode{i} that occurs when the
 function \tcode{f} returns:
 \begin{itemize}
 \item{
@@ -376,18 +411,27 @@ sequences and move them past, for examples, checks of
 \tcode{ca1()} in the first or even the second invocation of f().
 This does not seem particularly compelling to retain.
 
-\begin{proposal}{Allow Repetition Only When Evaluating In Sequence}{evalinsequence}
-Allow repetitions of contract assertions within
-blocks of contract assertions that are evaluated in sequence,
-which includes the following sets of contrat assertions:
+Proposed wording relative to \cite{P2900R11}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\removed{A \emph{contract assertion sequence} is a sequence of contract assertions that are consecutive.}\added{The following sets of contract assertions constitute a \emph{contract assertion sequence}:}
+\begin{addedblock}
 \begin{itemize}
-\item{Caller-facing preconditions folowed by callee-facing precondtions
-of a function call.}
-\item{Callee-facing postconditions followed by caller-facing postconditions
-of a function call.}
-\item{Assertion statements that are consecutive statements.}
+\item The caller-facing precondition assertions followed by the callee-facing precondtion assertions that apply to a function call;
+\item The callee-facing postcondition assertions followed by the caller-facing postcondtion assertions that apply to a function call;
+\item Assertion statements that are consecutive statements.
 \end{itemize}
-\end{proposal}
+\end{addedblock}
+
+At any point within a contract-assertion sequence, any previously evaluated contract assertion
+may be evaluated again with the same or a different evaluation semantic. Such repeated
+evaluations of a contract assertion may happen up to an implementation-defined number
+of times. [ Note: For example, all function contract assertions might be evaluated twice for
+a single function invocation, once in the caller’s translation unit as part of the invoking
+expression and once in the callee’s translation unit as part of the function definition. This
+allowance also extends to evaluations of contract assertions during constant evaluation.
+— end note ]
+\end{adjustwidth}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

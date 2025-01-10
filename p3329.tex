@@ -1,0 +1,346 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+% To make Josh's \iref command work here
+\renewcommand{\iref}[1]{([#1])}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Making erroneous behaviour consistent with Contracts}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3329R0 \\
+Date: &2025-01-13 \\
+Project: & Programming Language C++ \\
+Audience: & EWG, LEWG
+\end{tabular}
+
+\begin{abstract}
+This paper proposes the first step towards \cite{P3100R1} --- a unified framework for describing and handling incorrect C++ programs. In this framework, undefined behavior, erroneous behavior, and contract violations are all different aspects of a coherent whole. While most of the changes proposed in \cite{P3100R1} can wait until C++29, this paper contains the part that needs to be adopted for C++26 to avoid setting in stone inconsistencies between the concepts of ``erroneous behaviour'' on the one hand and ``contract violation'' on the other hand that would permanently preclude future evolution towards \cite{P3100R1}.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\section{Motivation and context}
+
+TODO
+
+\section{Proposed design}
+
+TODO
+
+\section{Proposed wording}
+
+The changes proposed in this section are relative to the C++ Working Draft \cite{N5001} with  the changes proposed in \cite{P2900R13} already applied.
+
+Replace ``contract assertion'' with ``explicit contract assertion'' in all places in the wording that do not apply to implicit contract assertions (not reproduced here because of the large amount of such places).
+
+Remove [defns.erroneous]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\removed{\textbf{erroneous behavior}}
+
+\removed{well-defined behavior that the implementation is recommended to diagnose}
+
+\removed{[ \emph{Note to entry:} Erroneous behavior is always the consequence of incorrect program code. Implementations are allowed, but not required, to diagnose it ([intro.compliance.general]). Evaluation of a constant expression ([expr.const]) never exhibits behavior specified as erroneous in Clause 4 through Clause 15.--- \emph{end note} ]}
+\end{adjustwidth}
+
+Modify footnote 3 in [intro.compliance.general] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+“Correct execution” can include undefined behavior and \removed{erroneous behavior}\added{contract violations ([basic.contract])}, depending on the data being processed; see Clause 3 and [intro.execution].
+\end{adjustwidth}
+
+Modify [intro.abstract] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A conforming implementation executing a well-formed program shall produce the same observable behavior as one of the possible executions of the corresponding instance of the abstract machine with the same program and the same input. However, if any such execution contains an undefined operation, this document places no requirement on the implementation executing that program with that input (not even with regard to operations preceding the first undefined operation). \removed{If the execution contains an operation specified as having erroneous behavior, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution at an unspecified time after that operation.}
+
+\removed{\emph{Recommended practice:} An implementation should issue a diagnostic when such an operation is executed.}
+
+\removed{[ \emph{Note:} An implementation can issue a diagnostic if it can determine that erroneous behavior is reachable under an implementation-specific set of assumptions about the program behavior, which can result in false positives. --- \emph{end note} ]}
+\end{adjustwidth}
+
+Modify [basic.contract.general] as follows:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Contract assertions \removed{allow the programmer to }specify properties of the state of the program that are expected to hold at certain points during execution.
+
+\added{\emph{Explicit} c}\removed{C}ontract assertions are introduced by \emph{precondition-specifier}s, \emph{postcondition-specifier}s ([dcl.contract.func]), and \emph{assertion-statement}s ([stmt.contract.assert]). \added{\emph{Implicit} contract assertions are inserted into the program by the implementation.}
+
+Each contract assertion has a \emph{predicate}, which is an expression of type \tcode{bool}. \removed{[ \emph{Note:} The value of the predicate is used to identify program states that are expected. --- \emph{end notea} ]} \added{If it is determined during program execution that the predicate has a value other than \tcode{true}, a \emph{contract violation} occurs. A contract violation is always the consequence of incorrect program code.}
+\end{adjustwidth}
+
+Modify [basic.contract.eval] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+An evaluation of a contract assertion uses one of the following four \emph{evaluation semantics}: \emph{ignore}, \emph{observe}, \emph{enforce}, or \emph{quick-enforce}. Observe, enforce, and quick-enforce are checking semantics; enforce and quick-enforce are terminating semantics.
+
+Which evaluation semantic is used for any given evaluation of a contract assertion is implementation-defined. \added{During constant evaluation, an implicit contract assertion is always evaluated with the enforce semantic.} [ \emph{Note:} The evaluation semantics can differ for different evaluations of the same contract assertion, including evaluations during constant evaluation. --- \emph{end note} ]
+% TD: This note looks a bit weird now with the addition before it. Any idea how to improve it?
+
+\emph{Recommended practice:} An implementation should provide the option to translate a program such that all evaluations of contract assertions use the ignore semantic as well as the option to translate a program such that all evaluations of contract assertions use the enforce semantic. By default, evaluations of contract assertions should use the enforce semantic.
+% TD: That recommended practice also no longer works because we now recommend that the implementation should provide something that we say shall never happen in the previous paragraph. But carving out an exception for implicit contract assertions during constant evaluation right here also seems really ugly. Do you have any better idea?
+\end{adjustwidth}
+
+Modify [basic.indet] as follows:
+
+% TD: It seems like the latest draft N5001 has different wording than the below; this diff needs to be rebased on that.
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+When storage for an object with automatic or dynamic storage duration
+is obtained,
+the bytes comprising the storage for the object
+have the following initial value:
+\begin{itemize}
+\item
+If the object has dynamic storage duration, or
+is the object associated with a variable or function parameter
+whose first declaration is marked with
+the \tcode{[[indeterminate]]} attribute\iref{dcl.attr.indet},
+the bytes have \emph{indeterminate values};
+\item
+otherwise, the bytes have \emph{erroneous values},
+where each value is determined by the implementation
+independently of the state of the program.
+\end{itemize}
+If no initialization is performed for an object (including subobjects),
+such a byte retains its initial value
+until that value is replaced\iref{dcl.init.general,expr.ass}.
+If any bit in the value representation has an indeterminate value,
+the object has an indeterminate value;
+otherwise, if any bit in the value representation has an erroneous value,
+the object has an erroneous value\iref{conv.lval}.
+\begin{note}
+Objects with static or thread storage duration are zero-initialized,
+see~\iref{basic.start.static}.
+\end{note}
+
+%JMB: I don't think we want to try to introduce the assume semantic
+%     in this mailing.  If we did, i would change the following slightly
+%     to include indeterminate in the new paragraph and take all mention of behaviour
+%     out of the following paragraph
+%TD: I agree. We don't need the assume semantic here as we wouldn't
+%     allow this particular implicit contract assertion to be evaluated with that
+%     semantic anyway; you're supposed to use [[indeterminate]] instead.
+
+\begin{addedblock}
+The evaluation of any builtin operation has an implicit postcondition that it
+does not produce an erroneous value.  Except in the following cases,
+if any operand of a builtin operation is erroneous then the value
+produced by that operation is erroneous:
+\begin{itemize}
+\item [...]
+\end{itemize}
+\end{addedblock}
+
+Except in the following cases,
+if an indeterminate value is produced by an evaluation,
+the behavior is undefined
+ and if an erroneous value is produced by an evaluation
+\removed{, the behavior is erroneous and}
+the result of the evaluation is the value so produced \removed{but is not erroneous}
+\added{and it is erroneous}:
+
+\begin{itemize}
+\item
+  If an indeterminate or erroneous value of
+  unsigned ordinary character type\iref{basic.fundamental}
+  or \tcode{std::byte} type\iref{cstddef.syn}
+  is produced by the evaluation of:
+  \begin{itemize}
+  \item
+    the second or third operand of a conditional expression\iref{expr.cond},
+  \item
+    the right operand of a comma expression\iref{expr.comma},
+  \item
+    the operand of a cast or conversion\iref{conv.integral,
+    expr.type.conv,expr.static.cast,expr.cast}
+    to an unsigned ordinary character type
+    or \tcode{std::byte} type\iref{cstddef.syn}, or
+  \item
+    a discarded-value expression\iref{expr.context},
+  \end{itemize}
+  then the result of the operation is an indeterminate value or
+  that erroneous value, respectively.
+\item
+  If an indeterminate or erroneous value of
+  unsigned ordinary character type or \tcode{std::byte} type
+  is produced by the evaluation of
+  the right operand of a simple assignment operator\iref{expr.ass}
+  whose first operand is an lvalue of
+  unsigned ordinary character type or \tcode{std::byte} type,
+  an indeterminate value or that erroneous value, respectively, replaces
+  the value of the object referred to by the left operand.
+\item
+  If an indeterminate or erroneous value of unsigned ordinary character type
+  is produced by the evaluation of the initialization expression
+  when initializing an object of unsigned ordinary character type,
+  that object is initialized to an indeterminate
+  value or that erroneous value, respectively.
+\item
+  If an indeterminate value of
+  unsigned ordinary character type or \tcode{std::byte} type
+  is produced by the evaluation of the initialization expression
+  when initializing an object of \tcode{std::byte} type,
+  that object is initialized to an indeterminate value or
+  that erroneous value, respectively.
+\end{itemize}
+Converting an indeterminate or erroneous value of
+unsigned ordinary character type or \tcode{std::byte} type
+produces an indeterminate or erroneous value, respectively.
+In the latter case,
+the result of the conversion is the value of the converted operand.
+
+\begin{addedblock}
+Except in the following cases, if an operand of a builtin operator
+is an erroneous value then the result of that operation is errroneous:
+\begin{itemize}
+\item Multiplication where one of the operands is a non-erroneous
+  zero value,
+%jmb: I can't think of any other needed exceptions - comma and ternary operators are
+%  covered by the previous paragraph.
+% TD: So it should not be a bullet list at all?
+\end{itemize}
+\end{addedblock}
+\end{adjustwidth}
+
+Modify [expr.const], paragraph 10 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+An expression $E$ is a \emph{core constant expression} unless the evaluation of $E$, following the rules of the abstract machine ([intro.abstract]), would evaluate one of the following:
+\begin{itemize}
+\item [...]
+\item an operation that would have undefined \removed{or erroneous }behavior as specified in Clause 4 through Clause 15;
+\item [...]
+\end{itemize}
+\end{adjustwidth}
+
+Modify [dcl.attr.indet], paragraph 3 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+[ \emph{Note:} Reading from an uninitialized variable that is marked \tcode{[[indeterminate]]} can cause undefined behavior.
+\begin{adjustwidth}{0.3cm}{0.3cm}
+\tcode{void f(int);}\\
+\tcode{void g() \{}\\
+\phantom{\tcode{xx}}\tcode{int x [[indeterminate]], y;}\\
+\phantom{\tcode{xx}}\tcode{f(y);} \phantom{\tcode{xxxxxxx}} \emph{// \removed{erroneous behavior}\added{contract violation} ([basic.indet])}\\
+\phantom{\tcode{xx}}\tcode{f(y);} \phantom{\tcode{xxxxxxx}} \emph{// undefined behavior}\\
+\tcode{\}} \\
+\\
+\tcode{[...]}
+\end{adjustwidth}
+--- \emph{end note} ]
+\end{adjustwidth}
+
+Modify [nullablepointer.requirements], paragraph 2 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A value-initialized object of type \tcode{P} produces the null value of the type. The null value shall be equivalent only to itself. A default-initialized object of type \tcode{P} may have an indeterminate or erroneous value.
+
+\emph{Note:} perations involving indeterminate values can cause undefined behavior, and operations involving erroneous values can cause \removed{erroneous behavior}\added{contract violations} ([basic.indet]).--- \emph{end note} ]
+\end{adjustwidth}
+
+Modify [bit.cast], paragraph 2 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+For each bit $b$ in the value representation of the result that is indeterminate or erroneous, let $u$ be the smallest object containing that bit enclosing $b$:
+\begin{itemize}
+\item  If $u$ is of unsigned ordinary character type or \tcode{std::byte} type, $u$ has an indeterminate value if any of the bits in its value representation are indeterminate, or otherwise has an erroneous value.
+\item Otherwise, if $b$ is indeterminate, the behavior is undefined.
+\item Otherwise, \removed{the behavior is erroneous}\added{an implicit contract violation ([basic.contract]) occurs}, and the result is as specified above.
+\end{itemize}
+The result does not otherwise contain any indeterminate or erroneous values.
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Acknowledgements}
+% None so far
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}

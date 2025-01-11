@@ -14,7 +14,7 @@
 \usepackage[most]{tcolorbox}
 
 % To make Josh's \iref command work here
-\renewcommand{\iref}[1]{([#1])}
+\renewcommand{\iref}[1]{ ([#1])}
 
 % Indent code that needs to be outside of codeblock because we need green underline
 \newcommand{\codetab}[0]{\phantom{\tcode{xx}}}
@@ -279,6 +279,7 @@ If any bit in the value representation has an indeterminate value,
 the object has an indeterminate value;
 otherwise, if any bit in the value representation has an erroneous value,
 the object has an erroneous value\iref{conv.lval}.
+
 \begin{note}
 Objects with static or thread storage duration are zero-initialized,
 see~\iref{basic.start.static}.
@@ -293,12 +294,12 @@ see~\iref{basic.start.static}.
 %     semantic anyway; you're supposed to use [[indeterminate]] instead.
 
 \begin{addedblock}
-The evaluation of any builtin operation includes an implicit postcondition assertion
+The evaluation of any builtin operation includes an implicit postcondition assertion 
 that it does not produce an erroneous value.  Except in the following cases,
 if any operand of a builtin operation is erroneous then the value
 produced by that operation is erroneous:
 \begin{itemize}
-\item [...]
+\item  % TD: Josh, what was supposed to go in here? Your email just has a lone bullet point with nothing after it
 \end{itemize}
 \end{addedblock}
 
@@ -368,7 +369,7 @@ is an erroneous value then the result of that operation is errroneous:
   zero value,
 %jmb: I can't think of any other needed exceptions - comma and ternary operators are
 %  covered by the previous paragraph.
-% TD: So it should not be a bullet list at all?
+% TD: Josh, so maybe if there is just one bullet, this should not be a bullet list at all?
 \end{itemize}
 \end{addedblock}
 \end{adjustwidth}

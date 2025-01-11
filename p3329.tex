@@ -150,7 +150,7 @@ Calling a user-defined contract-violation handler on erroneous behaviour is alre
 
 The same strategy can be applied in the same way to all other cases where the implementation determines at runtime that the program code has a bug. This includes all occurrences of undefined behaviour which \cite{P2795R5}, Section ``The Broader Picture'' lists as a ``candidate for conversion to erroneous behaviour'': signed integer overflow, unrepresentable arithmetic conversions, bad bitshifts, and so on. We make all these operations safe by specifying the appropriate implicit precondition or postcondition assertions and a well-defined fallback behaviour; see \cite{P3100R1}. It also includes implicit contract violations inserted by Profiles; see \cite{P3081R1}.
 
-Note that --- apart from the issue discussed in Section~\ref{damocles} --- the change proposed here is \emph{non-breaking}: a conforming implementation of \cite{P2795R5} will remain conforming with this paper.
+Note that --- apart from the issue discussed in Section~\ref{damocles} --- the change proposed here is \emph{non-breaking}: a conforming implementation of \cite{P2795R5} will remain conforming with this paper. Note further that while we propose to rephrase erroneous behaviour entirely in terms of implicit contract assertions and thus remove the notion of \emph{erroneous behaviour} from the C++ Standard, the notion of \emph{erroneous value} remains useful and we do not modify the definition of that term in any way.
 
 \subsection{Extending the contract-violation handling API}
 

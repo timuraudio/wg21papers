@@ -122,7 +122,9 @@ post (r: !is_erroneous(r) {
 }
 \end{codeblock}
 
-Even though conceptually, the two notions are the same, unfortunately the terminology between them is incompatible, and worse, there are subtle differences in specification:
+Even though conceptually, the two notions are the same,\footnote{
+% TD: I'm not sure about this footnote - any thoughts? Maybe there's a better way to phrase it? I was trying to address some of the stuff John L said that in his head, EB and contracts are different things.
+It has been suggested that erroneous behaviour is conceptually different from a contract violation. A more accurate description is that erroneous behaviour is a specific flavour of contract violation: on the one hand, we know that there is a bug in the code (therefore, it is a contract violation), on the other hand we also know that ignoring the bug and continuing program execution cannot lead to undefined behaviour (because an erroneous value is \emph{not} an indeterminate value). This flavour is perfectly compatible with the general notion of contract assertions --- since contract assertions are, first and foremost, \emph{correctness checks}, all contract assertions guard against bugs, but not all contract assertions guard against undefined behaviour. This is true for explicit (user-authored) contract assertions as well as for implicit ones.} unfortunately the terminology between them is incompatible, and worse, there are subtle differences in specification:
 \begin{itemize}
 \item While printing a diagnostic message --- also known as the \emph{default contract-violation handler}\footnote{Strictly speaking, the effects of the default contract-violation handler are implementation-defined, so an implementation could choose to do anything, but the recommended practice in \cite{P2900R13} is that the default contract-violation handler prints a diagnostic message, and we expect this recommended practice to be followed on all major compilers. Note that this behaviour is also backwards-compatible with the default behaviour of the C \tcode{assert} macro.} --- is recommended behaviour for both contract violations and erroneous behaviour, \cite{P2900R13} allows the user to override this behaviour and install their own user-defined contract-violation handler, while erroneous behaviour does not. 
 
@@ -135,8 +137,7 @@ Even though conceptually, the two notions are the same, unfortunately the termin
 
 To remove the above inconsistencies and pave the way towards a unified standard framework for reasoning about incorrect programs, we need to change the terminology and specification of erroneous behaviour to align with Contracts --- \emph{before} shipping erroneous behaviour in C++26.
 
-% TD: I'm not sure about the next paragraph (neither the content nor where to stick it) so I commented it out for now - any thoughts? Somehow it feels simultaneously important and unnecessary.
-%It has been suggested that erroneous behaviour is conceptually different from a contract violation. A more accurate description is that erroneous behaviour is a specific flavour of contract violation: on the one hand, we know that there is a bug in the code (therefore, it is a contract violation), on the other hand we also know that ignoring the bug and continuing program execution cannot lead to undefined behaviour (because an erroneous value is \emph{not} an indeterminate value). This flavour is perfectly compatible with the general notion of contract assertions --- since contract assertions are, first and foremost, \emph{correctness checks}, all contract assertions guard against bugs, but not all contract assertions guard against undefined behaviour. This is true for explicit (user-authored) contract assertions as well as for implicit ones.
+
 
 \section{Proposed design}
 

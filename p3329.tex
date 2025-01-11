@@ -102,7 +102,37 @@ This paper proposes the first step towards \cite{P3100R1} --- a unified framewor
 
 \section{Motivation and context}
 
-TODO
+C++ is at an inflection point. To effectively address the safety and security challenges currently facing the C++ ecosystem, a \emph{holistic} strategy is needed.
+
+A key part of this strategy is to introduce to the C++ Standard a unified framework for describing programs that are \emph{incorrect}, i.e. whose source code has a bug, and mitigating such bugs during program execution, without leaving the behaviour undefined. This approach is complementary to introducing \emph{static} language guarantees that make unsafe constructs ill-formed, and targets bugs that cannot be prevented statically.
+
+Such a unified framework is being proposed in \cite{P3100R1}. That proposal is large and the proposed specification is not yet complete; it is thus not in scope for C++26. However, there is a small subset of \cite{P3100R1} that must be applied \emph{before} we ship C++26, otherwise we would be setting in stone inconsistencies that would permanently preclude future evolution towards \cite{P3100R1}. This paper proposes to apply just this part to the C++26 Working Draft.
+
+The issue is that we have \emph{two} separate specification tools for describing incorrect programs heading towards C++26: \emph{erroneous behaviour} (\cite{P2795R5}; already merged into the C++26 WD) and \emph{contract violation} (\cite{P2900R13}). Both convey the same concept: a program that encounters erroneous behaviour --- or a contract violation --- is known to be defective, yet its behaviour at that point is well-defined. Both offer the implementation essentially the same options for mitigation --- [intro.abstract] specifies:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the execution contains an operation specified as having erroneous behaviour, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution at an unspecified time after that operation.
+\end{adjustwidth}
+Note that the four possible combinations of issuing a diagnostic or not, and terminating execution or not, map exactly to the four evaluation semantics in \cite{P2900R13}: \emph{ignore}, \emph{observe}, \emph{enforce}, and \emph{quick-enforce}. An expression \tcode{E} that results in an erroneous value is thus essentially equivalent to a call to the following function:
+\begin{codeblock}
+auto eval_E() 
+post (r: !is_erroneous(r) { 
+  return E;
+}
+\end{codeblock}
+Even though conceptually, the same thing is happening, unfortunately the terminology between the two features is incompatible, and worse, there are a handful of subtle differences in specification. 
+
+The first difference is that when a \cite{P2900R13} postcondition assertion is evaluated with a terminating semantic (\emph{enforce} or \emph{quick-enforce}) and a contract violation has been detected, the program is terminated immediately after the violation has been handled; on the other hand, if erroneous behaviour is encountered, termination happens ``at an unspecified time after that operation'', introducing some sort of ``Damocles semantic'' that makes it much harder to reason about the behaviour of the program.
+
+The second difference is that \cite{P2900R13} specifies exactly which modes of termination are conforming (namely, the three erroneous termination modes available in C++: \tcode{std::terminate}, \tcode{std::abort}, and immediate termination, such as via a trap instruction --- all of which have important use cases), while erroneous behaviour does not.
+
+The third difference is that while printing a diagnostic message is a default handling strategy for both contract violations and erroneous behaviour --- \cite{P2900R13} calls this the \emph{default contract-violation handler}\footnote{Strictly speaking, the effects of the default contract-violation handler are implementation-defined, so an implementation could choose to do anything, but the recommended practice in \cite{P2900R13} is that the default contract-violation handler prints a diagnostic message, and we expect this recommended practice to be followed on all major compilers. Note that this behaviour is also backwards-compatible with the default behaviour of the C \tcode{assert} macro.}  --- Contracts allow the user to override this behaviour and install their own user-defined contract-violation handler, while erroneous behaviour does not. Yet doing so is existing practice: UBSan, an implementation that detects erroneous behaviour, does in fact offer an API\footnote{All Clang sanitisers offer the API \tcode{__sanitizer_set_death_callback} for this purpose; ASan additionally offers a slightly more sophisticated API \tcode{__asan_set_error_report_callback}.} that allows the user to install a custom handler. As discussed in \cite{P3100R1}, there are many benefits in standardising an API for such callbacks via the replaceable contract-violation handler, and allowing any program defect detected during program execution, including erroneous behaviour, to trigger that same handler.
+
+The fourth and final difference concerns contract violations encountered during constant evaluation. If the evaluation of an expression results in erroneous behaviour, then according to the current specification in [expr.const], this disqualifies the expression from being a core constant expression, which in turn allows the user to SFINAE on whether an expression results in erroneous behaviour. This is incompatible with how contract violations are treated in \cite{P2900R13}: if an \emph{enforced} contract assertion fails during constant evaluation, the program is straight up ill-formed. A discussion of why such compile-time branching on the presence of a bug should never be allowed can be found in \cite{P2900R13} Section 3.1, which enshrines this design principle as the so-called \emph{Contracts Prime Directive}.
+
+The first step towards the unified framework proposed in \cite{P3100R1} is to change the terminology and specification of erroneous behaviour to align with Contracts, thereby removing all the inconsistencies described above, and to do so before shipping erroneous behaviour in C++26.
+
+% TD: I'm not sure we need the following paragraph, or whether it is even a good explanation. I initially added it to address John L's objection who was saying that EB and Contracts are totally different things. But now it feels like it's detracting so I commented it out again. Thoughts?
+%It has been suggested that erroneous behaviour is conceptually different from a contract violation. This is not true; rather, erroneous behaviour is a specific flavour of contract violation: on the one hand, we know that there is a bug in the code (therefore, it is a contract violation), on the other hand we also know that ignoring the bug and continuing program execution cannot lead to undefined behaviour (because an erroneous value is \emph{not} an indeterminate value). This flavour is perfectly compatible with the general notion of contract assertions --- since contract assertions are, first and foremost, \emph{correctness checks}, all contract assertions guard against bugs, but not all contract assertions guard against undefined behaviour. This is true for explicit (user-authored) contract assertions as well as for implicit ones.
 
 \section{Proposed design}
 

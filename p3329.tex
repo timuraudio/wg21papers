@@ -136,11 +136,40 @@ The first step towards the unified framework proposed in \cite{P3100R1} is to ch
 
 \section{Proposed design}
 
+\subsection{Implicit contract assertions}
+
+The first step towards a unified design is to extend the concept of \emph{contract assertion} in \cite{P2900R13} and to distinguish between \emph{explicit} contract assertions and \emph{implicit} contract assertions. Explicit contract assertions are those that \cite{P2900R13} proposes. They are authored by the \emph{user} by adding function contract specifiers --- \tcode{pre(...)} and \tcode{post(...)} --- and assertion statements --- \mbox{\tcode{contract_assert(...)}} --- to the program. By contrast, implicit contract assertions are generated and injected into the program by the \emph{implementation}.
+
+TODO 
+
+% - erroneous behaviour is entirely replaced by the notion of implicit contract assertion
+% - mention it can be applied in the same way to other defects that EB was considered for (signed integer overflow etc)
+% - mention that this is not the only place where implicit contract assertions play a role, cite Herb P3081 and potentially many more when we implement P3100 more fully
+
+\subsection{Extending the contract-violation handling API}
+
 TODO
+
+% - new kind
+% - new detection mode
+% - again mention profiles
+
+\subsection{Replacing the ``Damocles semantic'' by ``sticky'' erroneous values}
+
+TODO
+
+% TD: Josh, can you write up this part? I could try but I think you have a much deeper understanding of how this is supposed to work or why it is necessary
+
+\subsection{Constant evaluation}
+
+TODO
+
+% - always enforced
+% - No SFINAE on erroneous-ness
 
 \section{Proposed wording}
 
-The changes proposed in this section are relative to the C++ Working Draft \cite{N5001} with  the changes proposed in \cite{P2900R13} already applied.
+The changes proposed in this section are relative to the C++ Working Draft \cite{N5001} with the changes proposed in \cite{P2900R13} already applied.
 
 Replace ``contract assertion'' with ``explicit contract assertion'' in all places in the wording that do not apply to implicit contract assertions (not reproduced here because of the large amount of such places).
 
@@ -185,10 +214,10 @@ Modify [basic.contract.eval]:
 An evaluation of a contract assertion uses one of the following four \emph{evaluation semantics}: \emph{ignore}, \emph{observe}, \emph{enforce}, or \emph{quick-enforce}. Observe, enforce, and quick-enforce are checking semantics; enforce and quick-enforce are terminating semantics.
 
 Which evaluation semantic is used for any given evaluation of a contract assertion is implementation-defined. \added{During constant evaluation, an implicit contract assertion is always evaluated with the enforce semantic.} [ \emph{Note:} The evaluation semantics can differ for different evaluations of the same contract assertion, including evaluations during constant evaluation. --- \emph{end note} ]
-% TD: This note looks a bit weird now with the addition before it. Any idea how to improve it?
+% TD: Josh: This note looks a bit weird now with the addition before it. Any idea how to improve it?
 
 \emph{Recommended practice:} An implementation should provide the option to translate a program such that all evaluations of contract assertions use the ignore semantic as well as the option to translate a program such that all evaluations of contract assertions use the enforce semantic. By default, evaluations of contract assertions should use the enforce semantic.
-% TD: That recommended practice also no longer works because we now recommend that the implementation should provide something that we say shall never happen in the previous paragraph. But carving out an exception for implicit contract assertions during constant evaluation right here also seems really ugly. Do you have any better idea?
+% TD: Josh: That recommended practice also no longer works because we now recommend that the implementation should provide something that we say shall never happen in the previous paragraph. But carving out an exception for implicit contract assertions during constant evaluation right here also seems really ugly. Do you have any better idea?
 \end{adjustwidth}
 
 Modify [basic.indet] as follows:
@@ -233,8 +262,8 @@ see~\iref{basic.start.static}.
 %     semantic anyway; you're supposed to use [[indeterminate]] instead.
 
 \begin{addedblock}
-The evaluation of any builtin operation has an implicit postcondition that it
-does not produce an erroneous value.  Except in the following cases,
+The evaluation of any builtin operation includes an implicit postcondition assertion
+that it does not produce an erroneous value.  Except in the following cases,
 if any operand of a builtin operation is erroneous then the value
 produced by that operation is erroneous:
 \begin{itemize}

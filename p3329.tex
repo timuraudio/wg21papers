@@ -109,7 +109,7 @@ A key part of this strategy is to introduce to the C++ Standard a unified framew
 
 Such a unified framework is being proposed in \cite{P3100R1}. That proposal is large and the proposed specification is not yet complete; it is thus not in scope for C++26. However, there is a small subset of \cite{P3100R1} that must be applied \emph{before} we ship C++26, otherwise we would be setting in stone inconsistencies that would permanently preclude future evolution towards \cite{P3100R1}. This paper proposes to apply just this part to the C++26 Working Draft.
 
-The issue is that we have \emph{two} separate specification tools for describing incorrect programs heading towards C++26: \emph{erroneous behaviour} (\cite{P2795R5}; already merged into the C++26 WD) and \emph{contract violation} (\cite{P2900R13}). Both convey the same concept: a program that encounters erroneous behaviour --- or a contract violation --- is known to be defective, yet its behaviour at that point is well-defined. Both offer the implementation essentially the same options for mitigation --- [intro.abstract] specifies:
+The issue is that we have \emph{two} separate specification tools for describing incorrect programs heading towards C++26: \emph{erroneous behaviour} (\cite{P2795R5}; already merged into the C++26 WD) and \emph{contract violation} (\cite{P2900R13}). Both convey the same concept: a program that encounters erroneous behaviour --- or a contract violation --- is known to be defective, yet its behaviour at that point is well-defined. Both offer the implementation essentially the same options for mitigation. In the current C++26 WD, [intro.abstract] reads:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the execution contains an operation specified as having erroneous behaviour, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution at an unspecified time after that operation.
 \end{adjustwidth}
@@ -130,12 +130,12 @@ The \textbf{second} inconsistency is that, when a \cite{P2900R13} postcondition 
 
 The \textbf{third} inconsistency is that with \cite{P2900R13}, if the program is terminated due to a contract violation, that happens immediately after the violation has been handled; on the other hand, if erroneous behaviour is encountered, termination happens ``at an unspecified time after that operation'', introducing some sort of ``Damocles semantic'' that makes it much harder to reason about the behaviour of the program.
 
-Finally, the \textbf{fourth} inconsistency concerns contract violations encountered during constant evaluation. If the evaluation of an expression results in erroneous behaviour, then according to the current specification in [expr.const], this disqualifies the expression from being a core constant expression, which in turn allows the user to SFINAE on whether an expression results in erroneous behaviour. This is incompatible with how contract violations are treated in \cite{P2900R13}: if an \emph{enforced} contract assertion fails during constant evaluation, the program is straight up ill-formed. A discussion of why such compile-time branching on the presence of a bug should never be allowed can be found in \cite{P2900R13} Section 3.1, which enshrines this design principle as the so-called \emph{Contracts Prime Directive}.
+Finally, the \textbf{fourth} inconsistency concerns contract violations encountered during constant evaluation. According to the current specification, if an expression would evaluate an operation that would have erroneous behaviour, it does not qualify as a core constant expression, which in turn allows the user to SFINAE on whether an expression results in erroneous behaviour. This is incompatible with how contract violations are treated in \cite{P2900R13}: if an \emph{enforced} contract assertion fails during constant evaluation, the program is straight up ill-formed. 
 
 In order to remove all these inconsistencies and pave the way towards the unified framework proposed in \cite{P3100R1}, we need to change the terminology and specification of erroneous behaviour to align with Contracts, and we need to do so before shipping erroneous behaviour in C++26.
 
-% TD: I'm not sure we need the following paragraph, or whether it is even a good explanation. I initially added it to address John L's objection who was saying that EB and Contracts are totally different things. But now it feels like it's detracting so I commented it out again. Thoughts?
-%It has been suggested that erroneous behaviour is conceptually different from a contract violation. This is not true; rather, erroneous behaviour is a specific flavour of contract violation: on the one hand, we know that there is a bug in the code (therefore, it is a contract violation), on the other hand we also know that ignoring the bug and continuing program execution cannot lead to undefined behaviour (because an erroneous value is \emph{not} an indeterminate value). This flavour is perfectly compatible with the general notion of contract assertions --- since contract assertions are, first and foremost, \emph{correctness checks}, all contract assertions guard against bugs, but not all contract assertions guard against undefined behaviour. This is true for explicit (user-authored) contract assertions as well as for implicit ones.
+% TD: I'm not sure we need the following paragraph, or whether it is even a good explanation, or where to stick it. I initially added it to address John L's objection who was saying that EB and Contracts are totally different things. But now it feels like it's detracting so I commented it out again. Josh – any thoughts?
+%It has been suggested that erroneous behaviour is conceptually different from a contract violation. A more accurate description is that erroneous behaviour is a specific flavour of contract violation: on the one hand, we know that there is a bug in the code (therefore, it is a contract violation), on the other hand we also know that ignoring the bug and continuing program execution cannot lead to undefined behaviour (because an erroneous value is \emph{not} an indeterminate value). This flavour is perfectly compatible with the general notion of contract assertions --- since contract assertions are, first and foremost, \emph{correctness checks}, all contract assertions guard against bugs, but not all contract assertions guard against undefined behaviour. This is true for explicit (user-authored) contract assertions as well as for implicit ones.
 
 \section{Proposed design}
 
@@ -147,15 +147,20 @@ The second step is to recognise that the occurrence of erroneous behaviour --- s
 
 Note that the same strategy can be applied in the same way to all other cases where the implementation determines at runtime that the program code has a bug. This includes all occurrences of undefined behaviour which \cite{P2795R5}, Section ``The Broader Picture'' lists as a ``candidate for conversion to erroneous behaviour'': signed integer overflow, unrepresentable arithmetic conversions, bad bitshifts, and so on. We make all these operations safe by specifying the appropriate implicit precondition or postcondition assertions and a well-defined fallback behaviour; see \cite{P3100R1}. It also includes implicit contract violations inserted by Profiles; see \cite{P3081R1}.
 
+Note further that --- apart from the issue discussed in Section~\ref{damocles} --- the change proposed here is \emph{nonbreaking}: a conforming implementation of \cite{P2795R5} will remain conforming with this paper.
+
 \subsection{Extending the contract-violation handling API}
 
-TODO
+In order to introduce implicit contract assertions on top of \cite{P2900R13}, we need to extend the contract-violation handling API, which currently only covers explicit contract assertions. Specifically, we need to specify the state of the \mbox{\tcode{std::contracts::contract_violation}} object that a user-defined contract-violation handler will see when such an implicit contract assertion is violated. Only two small extensions to that API are needed. 
 
-% - new kind
-% - new detection mode
-% - again mention profiles
+The first extension concerns the \tcode{kind()} property of \tcode{contract_violation}, which returns an enum value that represents the syntactic form of the violated contract assertion. In addition to the three enumerators \tcode{pre}, \tcode{post}, and \tcode{assert} from \cite{P2900R13}, which represent explicit precondition assertions, postcondition assertions, and assertion statements, respectively, we propose a fourth enumerator \tcode{implicit}, which represents all forms of implicit contract assertions, including the ones resulting from erroneous values that we propose to introduce here. This is the same enumerator also proposed in \cite{P3100R1} (of which this paper is a subset) and in \cite{P3081R1} (Profiles).
+
+The second extension concerns the \tcode{detection_mode()} property of \tcode{contract_violation}, which returns an enum value that represents the particular failure mode. In addition to the three enumerators \tcode{predicate_false} and \tcode{evaluation_exception} from \cite{P2900R13}, we propose a third enumerator \tcode{erroneous_value}, which represents a contract violation due to an erroneous value being produced. Note that this is distinct from the evaluation of a boolean predicate returning \tcode{false} or exiting via an exception, because the determination that an erroneous value was produced (and therefore a contract violation occurred) takes place in an implementation-defined fashion and not necessarily by evaluating a boolean predicate; therefore, the existing two enumerators do not apply. This is again fully consistent with the direction in \cite{P3100R1} as well as with \cite{P3081R1}, which introduces its own values for \tcode{detection_mode()} for the new failure modes added by Profiles.
+
+The numeric values of the enumerators do not carry any special meaning (see \cite{P3327R0}, Section 3.4 for rationale), so it does not matter very much how we choose them. Here, we propose to make \tcode{assertion_kind::implicit} first in the list (value  \tcode{1}), because implicit contract assertions are the only ones that are \emph{not} introduced by a specifier and thus are distinct from all other kinds of assertions, including kinds we might add post-\cite{P2900R13} such as class invariants and procedural interfaces. However, if a breaking change to \cite{P2900R13} is not desired, we might as well  append it to the list (value \tcode{4}). As for \tcode{detection_mode}, any proposal adding a new detection mode to the Contracts framework simply appends them to the list.
 
 \subsection{Replacing the ``Damocles semantic'' by ``sticky'' erroneous values}
+\label{damocles}
 
 TODO
 
@@ -163,18 +168,36 @@ TODO
 
 \subsection{Interaction with \tcode{noexcept}}
 
-TODO
+Consider:
+\begin{codeblock}
+bool f() {
+  int x;
+  return noexcept(x + 1);
+}
+\end{codeblock}
+In C++ today, calling \tcode{f()} has defined behaviour (the indeterminate value is never accessed; the operand of \tcode{noexcept} is an unevaluated operand) and returns \tcode{true} (adding two integers can never throw an exception unless the behaviour is undefined). If we want to avoid breaking changes to the existing language, the result of the \tcode{noexcept} operator must remain the same with this proposal.
+
+However, since \tcode{x} has an erroneous value, evaluating \tcode{x + 1} may call the contract violation handler, which may throw an exception. With this proposal, it is therefore no longer true that \tcode{x + 1} can never throw an exception unless the behaviour is undefined.
+
+A detailed discussion of this problem can be found in \cite{P3541R1}. The possible solutions broadly fall into three categories: either accept the breaking change to the \tcode{noexcept} operator, or do not allow throwing violation handlers for implicit contract assertions, or redefine the  meaning of the \tcode{noexcept} operator to be "can never throw an exception \emph{unless there is a contract violation}". SG21 discussed this problem at great length and in the end achieved consensus that the only acceptable solution is the last one. We follow this decision in this paper.
+
+It is therefore possible for an implicit contract assertion to call a throwing contract-violation handler when violated, and for the evaluation of the expression to exit via that exception, even if the \tcode{noexcept} operator returns \tcode{true} for that expression.
+
+Note that this design is fully consistent with \cite{P3081R1}, which proposes the same behaviour for the implicit contract assertions inserted by Profiles.
 
 \subsection{Constant evaluation}
 
-TODO
+The change proposed here makes it impossible to SFINAE on whether an expression results in an erroneous value. Such compile-time branching on the presence of a bug should never be allowed; a detailed rationale can be found in \cite{P2900R13} Section 3.1, which enshrines this design principle in the so-called \emph{Contracts Prime Directive}.
 
-% - always enforced
-% - No SFINAE on erroneous-ness
+In \cite{P2900R13}, when an explicit contract assertion is encountered during constant evaluation, it can be \emph{ignored} --- the predicate is not evaluated at all, \emph{observed} --- if the predicate does not evaluate to \tcode{true}, a diagnostic (warning) is issued, or \emph{enforced} --- if the predicate does not evaluate to \tcode{true}, the program is ill-formed.
+
+For user-authored contract assertions, all three evaluation semantics have important use cases. The \emph{ignore} semantic is useful in code bases where constant evaluation of all contract predicates would have a prohibitively costly impact on compile time; the \emph{observe} semantic is useful when the author is not yet confident about the correctness of the check itself. However, implicit contract assertions do not fall in either category. We can therefore remove the possibility to SFINAE on whether an expression results in an erroneous value while preserving the property of the current C++26 WD that during constant evaluation, an erroneous value can never be produced, by specifying that during constant evaluation, implicit contract assertions can only be evaluated with the \emph{enforce} semantic. In short, with our proposal, if any implicit contract assertions fails during constant evaluation, the program is straight up ill-formed.
 
 \section{Proposed wording}
 
-The changes proposed in this section are relative to the C++ Working Draft \cite{N5001} with the changes proposed in \cite{P2900R13} already applied.
+The wording changes proposed in this section are relative to the C++ Working Draft \cite{N5001} with the changes proposed in \cite{P2900R13} (Contracts) already applied. The proposed changes are also designed to be compatible with \cite{P3081R1} (Profiles).
+
+% TD: TODO: Josh: any wording related to the change in meaning of the noexcept operator is still missing from the paper because I don't know what to do. It looks like wording for this is being drafted on-the-fly by various parties on the reflector. Can you add something reasonable for now, in the appropriate place? Thanks!
 
 Replace ``contract assertion'' with ``explicit contract assertion'' in all places in the wording that do not apply to implicit contract assertions (not reproduced here because of the large amount of such places).
 
@@ -413,7 +436,7 @@ Modify [contracts.syn]:
 \codetab \tcode{enum class detection_mode : \emph{unspecified}} \\
 \codetab \codetab \tcode{predicate_false = 1,} \\
 \codetab \codetab \tcode{evaluation_exception = 2\added{, }} \\
-\codetab \codetab \tcode{\added{erroneous_value = 1}} \\
+\codetab \codetab \tcode{\added{erroneous_value = 3}} \\
 \codetab \tcode{\};} 
 \end{adjustwidth}
 

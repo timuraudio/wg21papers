@@ -79,8 +79,9 @@ Project: & Programming Language C++ \\
 Audience: & SG21, EWG, LEWG
 \end{tabular}
 
+%JMB: make up your mind as to how you want to spell behavior
 \begin{abstract}
-This paper proposes the first step towards \cite{P3100R1} --- a unified framework for describing and handling incorrect C++ programs. In this framework, undefined behavior, erroneous behavior, and contract violations are all different aspects of a coherent whole. While most of the changes proposed in \cite{P3100R1} can wait until C++29, this paper contains the part that needs to be adopted for C++26 to avoid setting in stone inconsistencies between the concepts of ``erroneous behaviour'' on the one hand and ``contract violation'' on the other hand that would permanently preclude future evolution towards \cite{P3100R1}.
+This paper proposes the first step towards \cite{P3100R1} --- a unified framework for describing and handling incorrect C++ programs. In this framework, undefined behavior, erroneous behavior, and contract violations are all different aspects of a coherent whole. While most of the changes proposed in \cite{P3100R1} can wait until C++29, this paper contains the part that needs to be adopted for C++26 to avoid setting in stone inconsistencies between the concepts of ``erroneous behaviour'' on the one hand and ``contract violation'' on the other hand that would permanently preclude future evolution towards \cite{P3100R1}.  Not only does this pave the way for a brigher future, we believe it also clarifies the scope of erroneous behaviors already adopted.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -107,13 +108,14 @@ C++ is at an inflection point. To effectively address the safety and security ch
 
 A key part of this strategy is to introduce to the C++ Standard a unified framework for describing programs that are \emph{incorrect}, i.e. whose source code has a bug, and mitigating such bugs during program execution, without leaving the behaviour undefined. This approach is complementary to introducing \emph{static} language guarantees that make unsafe constructs ill-formed, and targets bugs that cannot be prevented statically.
 
-Such a unified framework is being proposed in \cite{P3100R1}. That proposal is large and the proposed specification is not yet complete; it is thus not in scope for C++26. However, there is a small subset of \cite{P3100R1} that must be applied \emph{before} we ship C++26, otherwise we would be setting in stone inconsistencies that would permanently preclude future evolution towards \cite{P3100R1}. This paper proposes to apply just this part to the C++26 Working Draft.
+Such a unified framework is being proposed in \cite{P3100R1}. That proposal is large and the proposed specification is not yet complete; it is thus not in scope for C++26. However, there is a small subset of \cite{P3100R1} that must be applied \emph{before} we ship C++26, otherwise we would be setting in stone inconsistencies that would greatly hinder future evolution towards \cite{P3100R1}. This paper proposes to apply just this part to the C++26 Working Draft.
 
-The issue is that we currently have \emph{two} separate specification tools for describing incorrect programs, both of which are heading towards C++26: \emph{erroneous behaviour} (\cite{P2795R5}; already merged into the C++26 WD) and \emph{contract violation} (\cite{P2900R13}). Both convey the same concept: a program that encounters erroneous behaviour --- or a contract violation --- is known to be defective, yet its behaviour at that point is well-defined. Both offer the implementation essentially the same options for mitigation. In the current C++26 WD, [intro.abstract] reads:
+The issue is that we currently have \emph{two} separate specification tools for describing incorrect programs, both of which are heading towards C++26: \emph{erroneous behaviour} (\cite{P2795R5}; already merged into the C++26 WD) and \emph{contract violations} (\cite{P2900R13}). Both convey the same concept: a program that encounters erroneous behaviour --- or a contract violation --- is known to be defective, yet its behaviour at that point is well-defined. Both offer the implementation essentially the same options for mitigation. In the current C++26 WD, [intro.abstract] reads:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the execution contains an operation specified as having erroneous behaviour, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution at an unspecified time after that operation.
 \end{adjustwidth}
-Note that the four possible combinations of issuing a diagnostic or not, and terminating execution or not, map exactly to the four evaluation semantics in \cite{P2900R13}: \emph{ignore}, \emph{observe}, \emph{enforce}, and \emph{quick-enforce}. An expression \tcode{E} that evaluates to an erroneous value is thus essentially equivalent to the following function:
+%JMB: eh, this is equating "issue a diagnostic" with invoking a user-provided contract-violation handler.   That's a stretch.
+Note that issuing a diagnostic and terminating is isomorphic to the \emph{quick-enforce} semantic, while opting to not check and let the program continue as-is is equivalent to the \emph{ignore} semantic.   Other than not being hooked into the contract-violation handler, an expression \tcode{E} that evaluates to an erroneous value is thus essentially equivalent to the following function:
 
 \begin{codeblock}
 auto eval_E() 
@@ -122,15 +124,20 @@ post (r: !is_erroneous(r) {
 }
 \end{codeblock}
 
-Even though conceptually, the two notions are the same,\footnote{
-% TD: I'm not sure about this footnote - any thoughts? Maybe there's a better way to phrase it? I was trying to address some of the stuff John L said that in his head, EB and contracts are different things.
-It has been suggested that erroneous behaviour is conceptually different from a contract violation. A more accurate description is that erroneous behaviour is a specific flavour of contract violation: on the one hand, we know that there is a bug in the code (therefore, it is a contract violation), on the other hand we also know that ignoring the bug and continuing program execution cannot lead to undefined behaviour (because an erroneous value is \emph{not} an indeterminate value). This flavour is perfectly compatible with the general notion of contract assertions --- since contract assertions are, first and foremost, \emph{correctness checks}, all contract assertions guard against bugs, but not all contract assertions guard against undefined behaviour. This is true for explicit (user-authored) contract assertions as well as for implicit ones.} unfortunately the terminology between them is incompatible, and worse, there are subtle differences in specification:
+If we break them down, we can see that the two approaches to handling incorrect programs are very similar in shape and differ primarily in nomenclature:
+\begin{itemize}
+\item{\emph{Erroneous behavior} identifies behavior that is incorrect (yet well defined) and implies the condition under which that behavior is reached.}
+\item{\emph{Contract checking} identifies explicitly the condition where incorrect behavior is identified and leaves unnamed the (possibly well-defined but possibly undefined) behavior that follows a violation}
+\end{itemize}
+From that, it's clear that any case where you have well-defined behavior after a contract violation what you really have \emph{is} erroneous behavior.  Similarly, any case where you have a condition that identifies erroneous behavior, what you have is a contract assertion on that condition.   The only difference is that erroneous behavior is the well-defined behaviors that follow a contract violation, while contract violations can also be followed by undefined behavior (if \emph{ignored}, \emph{observed}, or \emph{assumed}).
+
+Understanding now that erroneous behavior is a specific category of behavior that might follow a contract violation, we must then consider the concrete differences in the behaviors specified for erroneous in the draft Standard today and how a contract violation followed by matching well-defined behavior would behave:
 \begin{itemize}
 \item While printing a diagnostic message --- also known as the \emph{default contract-violation handler}\footnote{Strictly speaking, the effects of the default contract-violation handler are implementation-defined, so an implementation could choose to do anything, but the recommended practice in \cite{P2900R13} is that the default contract-violation handler prints a diagnostic message, and we expect this recommended practice to be followed on all major compilers. Note that this behaviour is also backwards-compatible with the default behaviour of the C \tcode{assert} macro.} --- is recommended behaviour for both contract violations and erroneous behaviour, \cite{P2900R13} allows the user to override this behaviour and install their own user-defined contract-violation handler, while erroneous behaviour does not. 
 
 \item When a contract assertion is evaluated with a terminating semantic (\emph{enforce} or \emph{quick-enforce}) and a contract violation has been detected, \cite{P2900R13} specifies exactly which modes of termination are conforming (namely, the three erroneous termination modes available in C++: \tcode{std::terminate}, \tcode{std::abort}, and immediate termination, such as via a trap instruction --- all of which have important use cases), while erroneous behaviour does not.
 
-\item If the program is terminated due to a contract violation, termination happens immediately after the violation has been handled; on the other hand, if erroneous behaviour is encountered, termination happens ``at an unspecified time after that operation'', introducing some sort of ``Damocles semantic'' that makes it much harder to reason about the behaviour of the program.
+\item If the program is terminated due to a contract violation, termination happens as part of evaluating the contract assertion and immediately after the violation has been handled; on the other hand, if erroneous behaviour is encountered, termination happens ``at an unspecified time after that operation'', introducing some sort of ``Damocles semantic'' that makes it much harder to reason about the behaviour of the program.  Essentially, with erroneous behavior as specified today, a program effectively enters an ``erroneous state'' once any erroneous behavior happens, and the program may be unceremoniously terminated at any point after that.  The expectation is that it will be either reasonably soon or never, but the specification gives significantly more freedom.
 
 \item If an expression would evaluate an operation that would have erroneous behaviour, it does not qualify as a core constant expression, which in turn allows the user to SFINAE on whether an expression results in erroneous behaviour. On the other hand, if an \emph{enforced} contract assertion fails during constant evaluation, the program is straight up ill-formed. 
 \end{itemize}
@@ -145,13 +152,13 @@ To remove the above inconsistencies and pave the way towards a unified standard 
 
 The first  and most important step towards the unified framework proposed in \cite{P3100R1} is to extend the notion of \emph{contract assertion} by distinguishing between \emph{explicit} and \emph{implicit} contract assertions. Explicit contract assertions are those that \cite{P2900R13} proposes. They are added to the program explicitly using function contract specifiers (\tcode{pre}, \tcode{post}) and assertion statements (\mbox{\tcode{contract_assert}}). By contrast, implicit contract assertions are not directly visible in code, but injected into the program by the implementation. Otherwise, explicit and implicit contract assertions behave the same. Importantly, they can be evaluated with the same four evaluation semantics --- \emph{ignore}, \emph{observe}, \emph{enforce}, and \emph{quick-enforce} --- and call the same global contract-violation handler. 
 
-The second step is to recognise that the occurrence of erroneous behaviour --- such as when a builtin operation results in an erroneous value --- is equivalent to the violation of an implicit contract assertion that the operation does \emph{not} result in an erroneous value. We can then remove the notion of erroneous behaviour from C++ entirely and instead say that the evaluation of any builtin operation includes an implicit postcondition assertion that it does not produce an erroneous value. Following \cite{P2900R13}, that implicit postcondition assertion can then be evaluated with any of the four evaluation semantics, a violation can trigger the contract-violation handler, etc. This modification instantly removes all inconsistencies described in Section~\ref{motivation}.
+The second step is to recognise that the occurrence of erroneous behaviour --- such as when a builtin operation results in an erroneous value --- is equivalent to the violation of an implicit contract assertion that the operation does \emph{not} result in an erroneous value. We can then remove the notion of erroneous behaviour from the Standard specification entirely and instead say that the evaluation of any builtin operation includes an implicit postcondition assertion that it does not produce an erroneous value. Following \cite{P2900R13}, that implicit postcondition assertion can then be evaluated with any of the four evaluation semantics, a violation can trigger the contract-violation handler, etc. This modification instantly removes all inconsistencies described in Section~\ref{motivation}.
 
 Calling a user-defined contract-violation handler on erroneous behaviour is already existing practice: UBSan, an implementation that detects erroneous behaviour, offers an API\footnote{All Clang sanitisers offer the API \tcode{__sanitizer_set_death_callback} for this purpose; ASan additionally offers a slightly more sophisticated API \tcode{__asan_set_error_report_callback}.} that allows the user to install such a custom handler. As discussed in \cite{P3100R1}, there are many benefits in standardising an API for such callbacks via the replaceable contract-violation handler, and allowing any program defect detected during program execution, including erroneous behaviour, to trigger that same handler.
 
 The same strategy can be applied in the same way to all other cases where the implementation determines at runtime that the program code has a bug. This includes all occurrences of undefined behaviour which \cite{P2795R5}, Section ``The Broader Picture'' lists as a ``candidate for conversion to erroneous behaviour'': signed integer overflow, unrepresentable arithmetic conversions, bad bitshifts, and so on. We make all these operations safe by specifying the appropriate implicit precondition or postcondition assertions and a well-defined fallback behaviour; see \cite{P3100R1}. It also includes implicit contract violations inserted by Profiles; see \cite{P3081R1}.
 
-Note that --- apart from the issue discussed in Section~\ref{damocles} --- the change proposed here is \emph{non-breaking}: a conforming implementation of \cite{P2795R5} will remain conforming with this paper. Note further that while we propose to rephrase erroneous behaviour entirely in terms of implicit contract assertions and thus remove the notion of \emph{erroneous behaviour} from the C++ Standard, the notion of \emph{erroneous value} remains useful and we do not modify the definition of that term in any way.
+Note that --- apart from the issue discussed in Section~\ref{damocles} --- the change proposed here is \emph{non-breaking}: a conforming implementation of \cite{P2795R5} will remain conforming with this paper. Note further that while we propose to rephrase erroneous behaviour entirely in terms of implicit contract assertions and thus remove the notion of \emph{erroneous behaviour} from the C++ Standard, the notion of \emph{erroneous value} remains useful, and in fact we propose below that it should be extended in order to more clearly achieve its original goals.
 
 \subsection{Extending the contract-violation handling API}
 
@@ -166,9 +173,16 @@ The numeric values of the enumerators do not carry any special meaning (see \cit
 \subsection{Replacing the ``Damocles semantic'' by ``sticky'' erroneous values}
 \label{damocles}
 
-TODO
+We, as a community, are lucky enough to already have implementations that identify and trap on uses of uninitialized values.  The issue, however, is that the implementation of such checks is often done as instrumentation of compiled code, and thus can be a less than direct mapping of reading of C++ expression that does a first uninitialized read to the instructions that can be turned into a diagnostic error of some kind.   In practice, it is not the read of the uninitialized value that is identified but rather the first case where a branch is taken based on that value --- and this can be much later than the actual read.
+
+On the other hand, such implementations will never notice an uninitialized read and then set a timer, wait an arbitrary time, and terminate the program while it is doing something completely unrelated.  The specification of erroneous behavior today allows this choice unnecessarily.
+
+To fix this, we propose that erroneous values be ``sticky'' in a way that they are not today.  The specification today takes the approach that once you read an erroneous value the value itself is then ``cleaned'' and no longer toxic, but comes with the downside that all following program behavior is now erroneous and thus at risk of termination.    By having erroneous values propagate with the data, however, we can extend the scope of the problematic data sufficiently to cover all realistic implementations while avoiding the more toxic threat of eventual and surprising termination at a later date.
+
+In practice, we don't expect the erroneous of a value to transport beyond a single function or translation unit, but we should still allow for that possibility if an adventurous platform chooses to do so.   Therefore, we simply make any operation whose result is dependent on an erroneous value produce an erroneous value.   A program that discards all such data and moves on is in no threat of unexpected termination, while leaving us maximal flexibility for identifying the bug when it is most convenient to do so.
 
 % TD: Josh, can you write up this subsection? I could try but I think you have a much deeper understanding of how this is supposed to work or why it is necessary
+% JMB: I think i did.
 
 \subsection{Interaction with \tcode{noexcept}}
 
@@ -203,7 +217,7 @@ The wording changes proposed in this section are relative to the C++ Working Dra
 
 % TD: TODO: Josh: any wording related to the change in meaning of the noexcept operator is still missing from the paper because I don't know what to do. It looks like wording for this is being drafted on-the-fly by various parties on the reflector. Can you add something reasonable for now, in the appropriate place? Thanks!
 
-Replace ``contract assertion'' with ``explicit contract assertion'' in all places in the wording that do not apply to implicit contract assertions (not reproduced here because of the large amount of such places).
+Replace ``contract assertion'' with ``explicit contract assertion'' in all places in the wording that do not apply to implicit contract assertions.  This complete list will be reproduced when a core-approved version of the wording in \cite{P2900R13} is available.
 
 Remove [defns.erroneous]:
 
@@ -247,9 +261,11 @@ An evaluation of a contract assertion uses one of the following four \emph{evalu
 
 Which evaluation semantic is used for any given evaluation of a contract assertion is implementation-defined. \added{During constant evaluation, an implicit contract assertion is always evaluated with the enforce semantic.} [ \emph{Note:} The evaluation semantics can differ for different evaluations of the same contract assertion, including evaluations during constant evaluation. --- \emph{end note} ]
 % TD: Josh: This note looks a bit weird now with the addition before it. Any idea how to improve it?
+% JMB: Eh, it doesn't look particularly weird to me.  We could put it in between the two sentences instead, and i think that'd address the weirdness you see, but i think i like that ordering less.
 
-\emph{Recommended practice:} An implementation should provide the option to translate a program such that all evaluations of contract assertions use the ignore semantic as well as the option to translate a program such that all evaluations of contract assertions use the enforce semantic. By default, evaluations of contract assertions should use the enforce semantic.
+\emph{Recommended practice:} An implementation should provide the option to translate a program such that all evaluations of contract assertions use the ignore semantic as well as the option to translate a program such that all evaluations of \added{explicit} contract assertions use the enforce semantic. By default, evaluations of \added{explicit} contract assertions should use the enforce semantic.
 % TD: Josh: That recommended practice also no longer works because we now recommend that the implementation should provide something that we say shall never happen in the previous paragraph. But carving out an exception for implicit contract assertions during constant evaluation right here also seems really ugly. Do you have any better idea?
+% JMB: I think just make this about explicit contract assertions.  I don't think we need to invite spending even more time discussing recommended practices.
 \end{adjustwidth}
 
 Modify [basic.indet] as follows:
@@ -295,12 +311,18 @@ see~\iref{basic.start.static}.
 \begin{addedblock}
 The evaluation of any builtin operation includes an implicit postcondition assertion 
 that it does not produce an erroneous value.  Except in the following cases,
-if any operand of a builtin operation is erroneous then the value
-produced by that operation is erroneous:
+if any operand of a built-in operator is erroneous then the value
+produced by that operator is erroneous:
 \begin{itemize}
-\item  % TD: Josh, what was supposed to go in here? Your email just has a lone bullet point with nothing after it
+\item  If the built-in operation is \tcode{*} or \tcode{&} and the other operand is a non-erroneous zero value.
+\item  If the built-in operation is \tcode{|} and the other operand is a non-erroneous value whose base-2 representation all of whose coefficients are \tcode{1}.
+% do we also allow a-a to be non-erroneous?  nah.
 \end{itemize}
 \end{addedblock}
+%JMB: We might improve the wording later if we don't add to the list, but at the moment this is the list i've got.
+%     I'm still mulling over whether we want to allow some form of laundering of erroneous values with
+%     byte arrays, but I keep coming down on the side of "no, that's silly, we shouldn't" and so the only thing
+%     left is expressions whose result does not depend on the value. 
 
 Except in the following cases,
 if an indeterminate value is produced by an evaluation,
@@ -360,17 +382,6 @@ produces an indeterminate or erroneous value, respectively.
 In the latter case,
 the result of the conversion is the value of the converted operand.
 
-\begin{addedblock}
-Except in the following cases, if an operand of a builtin operator
-is an erroneous value then the result of that operation is errroneous:
-\begin{itemize}
-\item Multiplication where one of the operands is a non-erroneous
-  zero value,
-%jmb: I can't think of any other needed exceptions - comma and ternary operators are
-%  covered by the previous paragraph.
-% TD: Josh, so maybe if there is just one bullet, this should not be a bullet list at all?
-\end{itemize}
-\end{addedblock}
 \end{adjustwidth}
 
 Modify [expr.const], paragraph 10:
@@ -406,7 +417,7 @@ Modify [nullablepointer.requirements], paragraph 2:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 A value-initialized object of type \tcode{P} produces the null value of the type. The null value shall be equivalent only to itself. A default-initialized object of type \tcode{P} may have an indeterminate or erroneous value.
 
-\emph{Note:} perations involving indeterminate values can cause undefined behavior, and operations involving erroneous values can cause \removed{erroneous behavior}\added{contract violations} ([basic.indet]).--- \emph{end note} ]
+\emph{Note:} Operations involving indeterminate values can cause undefined behavior, and operations involving erroneous values can cause \removed{erroneous behavior}\added{contract violations} ([basic.indet]).--- \emph{end note} ]
 \end{adjustwidth}
 
 Modify [bit.cast], paragraph 2:

@@ -68,6 +68,7 @@
 \author{
 Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
 Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+Ga\v sper A\v zman \small(\href{mailto:gasper.azman@gmail.com}{gasper.azman@gmail.com}) \\
 }
 \date{}
 \maketitle
@@ -112,14 +113,17 @@ Such a unified framework is being proposed in \cite{P3100R1}. That proposal is l
 The issue is that we currently have \emph{two} separate specification tools for describing incorrect programs, both of which are independently heading towards C++26: \emph{erroneous behaviour} (\cite{P2795R5}; already merged into the C++26 WD) and \emph{contract violations} (\cite{P2900R13}). Both convey the same concept: at some point during execution, a program is found to be defective, yet its behaviour at that point is still well-defined. Furthermore, both provide essentially the same set of four possible evaluation semantics. According to [intro.abstract] in the current C++26 WD:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 If the execution contains an operation specified as having erroneous behaviour, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution at an unspecified time after that operation.
-\end{adjustwidth}
+\end{adjustwidth} 
 %JMB: eh, this is equating "issue a diagnostic" with invoking a user-provided contract-violation handler.   That's a stretch.
 %TD: Agreed. I massaged the wording a bit more here, please check.
+
+\pagebreak % Inserted manually for layout reasons
+
 Note the following equivalence between the options allowed by erroneous behaviour and the contract evaluation semantics proposed in \cite{P2900R13}:
 \begin{itemize}
   \item issuing a diagnostic and terminating is isomorphic to using the \emph{enforce} semantic with the default contract-violation handler;\footnote{Strictly speaking, the effects of the default contract-violation handler are implementation-defined; in theory, an implementation could choose to do anything it wants. However, the recommended practice in \cite{P2900R13} is that the default contract-violation handler prints a diagnostic message. We expect this recommended practice to be followed on all major compilers. Note that this behaviour is also backwards-compatible with the default behaviour of the C \tcode{assert} macro.}
   \item  terminating without issuing the diagnostic is isomorphic to the \emph{quick-enforce} semantic;
-  \item issuing the diagnostic without terminating is isomorphic to the \emph{ovserve semantic};
+  \item issuing the diagnostic without terminating is isomorphic to the \emph{observe semantic};
   \item opting to not check for erroneous values and let the program continue as-is is equivalent to the \emph{ignore} semantic.
   \end{itemize}
 
@@ -127,7 +131,7 @@ Other than not being hooked into a user-replaceable contract-violation handler, 
 
 \begin{codeblock}
 auto eval_E() 
-post (r: !is_erroneous(r) { 
+post (r: !is_erroneous(r)) { 
   return E;
 }
 \end{codeblock}

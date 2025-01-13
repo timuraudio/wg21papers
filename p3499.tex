@@ -57,24 +57,24 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
-\title{A first step towards strict predicates}
+\title{Exploring strict contract predicates}
 \author{
-Lisa Lippincott \small(\href{mailto:lisa.e.lippincott@gmail.com}{lisa.e.lippincott@gmail.com}) \\
 Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Lisa Lippincott \small(\href{mailto:lisa.e.lippincott@gmail.com}{lisa.e.lippincott@gmail.com}) \\
 Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
 }
 \date{}
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & D3499R0 \\
-Date: &2024-11-19 \\
+Document \#: & P3499R0 \\
+Date: &2025-01-13 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
 
 \begin{abstract}
-This paper proposes a possible design direction to achieve a compromise on the question whether the Contracts facility proposed in \cite{P2900R11} should provide support for strict contracts and thus increasing consensus on that proposal.
+The lack of support for so-called \emph{strict contracts} --- contract assertions that cannot have undefined behaviour when evaluated --- is the subject of sustained opposition to \cite{P2900R13}, the Contracts facility proposed for C++26. In this paper, we explore an actionable --- i.e., specifiable and implementable --- design for such a feature.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -95,17 +95,15 @@ This paper proposes a possible design direction to achieve a compromise on the q
 
 \section{Introduction}
 
-It has been suggested in \cite{P3173R0} and \cite{P3362R0} that the Contracts MVP, as proposed in \cite{P2900R11}, is not viable unless it supports so-called \emph{strict} contracts, as proposed in \cite{P2680R1} and \cite{P3285R0}. Discussion of \cite{P2900R11} at the WG21 meeting in Wroc\l aw revealed that this issue is blocking EWG from gaining consensus on advancing the Contracts MVP into the C++ Standard.
+It has been suggested in \cite{P3173R0} and \cite{P3362R0} that the Contracts facility as proposed in \cite{P2900R13} is not fit for standardisation unless it supports so-called \emph{strict} contracts, as proposed in \cite{P2680R1} and \cite{P3285R0}. While EWG and LEWG have approved the design of \cite{P2900R13} and forwarded it to wording review for inclusion in C++, the issue of strict contracts remains a subject of sustained opposition against it.
 
 Strict contracts is an approach that restricts the predicates of contract assertions to expressions that can be statically proven to not introduce undefined behaviour (excluding data races) and to not have side effects outside of its cone of evaluation; predicates for which such a proof cannot be constructed are ill-formed. When undefined behaviour cannot be prevented statically (e.g., integer overflow), it is instead redefined to be some well-defined behaviour at runtime.
 
-This approach necessarily  constrains the set of expressions that are allowed in the predicates of strict contracts. For example, in a strict predicate it is not possible to call any function that itself has not been statically proven to satisfy the required properties. Such strict predicates are too restrictive for general use as a runtime contract checking facility. Therefore, \cite{P2680R1} and \cite{P3285R0} also allow the user to write predicates that do not satisfy the constraints of strict contracts, called \emph{relaxed contracts}. The semantics of relaxed contracts are equivalent to the semantics of contract assertions as proposed in \cite{P2900R11}.
+This approach necessarily  constrains the set of expressions that are allowed in the predicates of strict contracts. For example, in a strict predicate it is not possible to call any function that itself has not been statically proven to satisfy the required properties. Such strict predicates are too restrictive for general use as a runtime contract checking facility. Therefore, \cite{P2680R1} and \cite{P3285R0} also allow the user to write predicates that do not satisfy the constraints of strict contracts, called \emph{relaxed contracts}. The semantics of relaxed contracts are equivalent to the semantics of contract assertions as proposed in \cite{P2900R13}.
 
- In \cite{P3376R0} and \cite{P3386R0}, it was suggested that strict contracts, based on the principles that can be gleaned from \cite{P3285R0}, result in only a very small number of predicates that would be viable to express, with a huge amount of new language complexity needed to achieve anything beyond the most basic arithmetic operations. In particular, it is currently unclear whether or how it would be possible at all to use pointers and references to objects and to call member functions.
- 
-However, as a starting point, we can specify strict contracts to only allow predicates for which we are confident that such proof can be constructed. This will initially be a very small set, but it provides a clear evolutionary path towards further expansion.
+Unfortunately, the proponents of strict contracts have not produced a complete specification, and it appears doubtful whether the approach is indeed specifiable and implementable. Deeper analysis of the idea in \cite{P3376R0} and \cite{P3386R0} revealed that strict contracts, based on the principles that can be gleaned from \cite{P3285R0}, result in only a very small number of predicates that would be viable to express, with a huge amount of new language complexity needed to achieve anything beyond the most basic arithmetic operations. In particular, we do not yet know whether or how one could use pointers and references to objects, and call member functions, in a strict contract predicate, as we are not aware of any technique applicable to C++ that could prove that a pointer or reference points to a valid object. It seems possible or even likely that no approach using \emph{local} static analysis, such as the \tcode{std::object_address} sketch provided in \cite{P3285R0}, could provide such a proof, and that only the introduction of \emph{global} language constraints on referring to objects can achieve this, such as a borrow checker (\cite{P3390R0}), mutable value semantics (\cite{Racordon2022}), or outlawing mutation of objects altogether as practiced in pure functional languages; see also \cite{Baxter2024}.
 
-We propose that strict contract assertions should be ill-formed unless the predicate expression consists of only the following kinds of subexpressions:
+However, as a starting point, we can specify strict contracts to only allow predicates for which we are confident that absence of undefined behaviour (excluding data races) can indeed be guaranteed. Initially, this will be a very small set, but it provides an evolutionary path towards further expansion. We have identified the following set of subexpressions:
 
 \begin{itemize}
 \item literals of arithmetic or enumeration type,
@@ -119,7 +117,7 @@ We propose that strict contract assertions should be ill-formed unless the predi
 \item core constant expressions of arithmetic or enumeration type.
 \end{itemize}
 
-If we restrict predicate expressions to just the above, we exclude modifications of \emph{any} variables and thus by extensions exclude any side effects outside of the cone of evaluation of the predicate. Further, we can enumerate all instances of undefined behaviour that can occur when evaluating such a predicate according to the C++ Standard today (see \cite{P1705R1}), excluding data races:
+If we restrict strict predicates to just the above expressions, and make all other expressions in strict predicates ill-formed, we exclude modifications of \emph{any} variables and thus by extensions exclude any side effects outside of the cone of evaluation of the predicate. Further, we can enumerate all instances of undefined behaviour that can occur when evaluating such a predicate according to the C++ Standard today (see \cite{P1705R1}), excluding data races:
 
 \begin{itemize}
 \item Signed integer overflow or underflow,
@@ -129,37 +127,41 @@ If we restrict predicate expressions to just the above, we exclude modifications
 \item Shifting by equal or greater than the bit-width of the type.
 \end{itemize}
 
-The next step is to redefine the above instances undefined behaviour to instead be well-defined behaviour when encountered during the evaluation of a strict contract predicate. There are two options to choose from:
+The next step is to redefine the above instances undefined behaviour to instead be well-defined behaviour when encountered during the evaluation of a strict contract predicate. We see three possible options for this:
 
+\begin{enumerate}
+\item Specify a concrete value that such an operation should produce, for example wraparound or saturation arithmetics for integer overflow;
+\item Specify that the operation should produce an unspecified \emph{erroneous} value;
+\item Specify that the behaviour is a contract violation; if the contract-violation handler is called, the value returned by \tcode{kind()} is \tcode{implicit}, and the value returned by \tcode{detection_mode()} is a newly introduced enumeration value \tcode{arithmetic_error}.
+\end{enumerate}
+
+As discussed in more detail in \cite{P3386R0}, the first approach is actively user-hostile as it leads to masking of bugs and false negatives. The second approach seems viable but suboptimal. We recommend the third approach as it allows for more fine-grained contract-violation handling and is fully consistent with the future direction towards a safer C++ laid out in \cite{P3100R1} and \cite{P3229R0}.
+
+Finally, we need to syntactically distinguish strict and relaxed contract assertions. The options are:
+\begin{enumerate}
+\item Specify the default syntax \tcode{pre(x)} to denote a relaxed contract, and require an additional syntactic qualifier such as \tcode{pre strict(x)} for strict contracts; 
+\item Specify the default syntax \tcode{pre(x)} to denote a strict contract and require an additional syntactic qualifier such as \tcode{pre relaxed(x)} for relaxed contracts;
+\item Make the default syntax ill-formed and require an additional syntactic qualifier for both strict and relaxed contracts.
+\end{enumerate}
+
+Anything other than the first option would be a breaking change to \cite{P2900R13}. On the other hand, \cite{P2680R1} argues for the second option. This design question was discussed by EWG at the November 2024 WG21 meeting in Wroc{\l}aw. The consensus was to go for the first option, although there was non-negligible opposition:
+
+\begin{wgpoll}{{EWG Poll, Wroc{\l}aw, 2024-11-19}}
+As suggested in P3362R0 / P2680 / P3285, the contracts proposal in P2900’s Minimal Viable Product shall be changed to incorporate stricter contracts in addition to regular contracts.
+\wgpollresult{10}{6}{3}{14}{16}
+Result: Consensus against, but P2900 would be in danger of failure in plenary
+\end{wgpoll}
+
+While strict contracts as described above seem specifiable and implementable, it is worth highlighting that they are severely limited. Remember that in such strict predicates:
 \begin{itemize}
-\item Specify that the evaluation should produce an unspecified \emph{erroneous} value,
-\item Specify that the behaviour is a contract violation; if the contract-violation handler is called, the value for \tcode{detection_mode} is a newly introduced enumeration value \tcode{arithmetic_error} (modulo name bikeshedding).
+\item Any operation on values other than of built-in arithmetic or enumeration type is ill-formed;
+\item Dereferencing any pointers is ill-formed;
+\item Using any references to objects is ill-formed;
+\item Calling any existing member function on any object is ill-formed.
 \end{itemize}
+For example, we could not even check the size of a \tcode{std::vector} in a strict predicate, or whether it is empty, not even if that \tcode{std::vector} is passed in by value, because we cannot construct a proof that the \tcode{this} pointer is valid. It seems therefore that strict predicates are of no practical use for the vast majority of contract assertions one might want to add to a real-world C++ codebase.
 
-Further, we should non-normatively encourage an implementation to exhibit the same well-defined behaviour when the same situations are encountered in \emph{relaxed} predicates, thus providing a subset of the functionality proposed in \cite{P3100R1}.
-
-Finally, we need to syntactically distinguish strict and relaxed contract assertions. There are three options to choose from:
-
-\begin{itemize}
-\item The default syntax proposed in \cite{P2900R11} denotes a relaxed contract (status quo); strict contracts require an additional qualifier:
-\begin{codeblock}
-pre (x)         // relaxed contract
-pre strict (x)  // strict contract
-\end{codeblock}
-\item The default syntax proposed in \cite{P2900R11} denotes a strict contract (breaking change to \cite{P2900R11}); relaxed contracts require an additional qualifier (as proposed in \cite{P3285R0}):
-\begin{codeblock}
-pre (x)         // strict contract
-pre relaxed (x) // relaxed contract
-\end{codeblock}
-\item The default syntax is ill-formed; an additional qualifier is needed in all cases:
-\begin{codeblock}
-pre (x)         // syntax error
-pre strict (x)  // strict contract
-pre relaxed (x) // relaxed contract
-\end{codeblock}
-\end{itemize}
-
-We hope that this direction (in whichever variant) helps increase consensus for adding the Contracts facility proposed in \cite{P2900R11} to the C++ Working Draft.
+Overall, while we remain unconvinced that strict contracts are an approach worth pursuing, and instead recommend the direction proposed in \cite{P3100R1}, we hope that the above description of what an actionable specification of such a feature would look like in practice will be helpful towards increasing consensus on shipping the initial Contracts facility proposed in \cite{P2900R13} in C++26.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

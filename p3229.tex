@@ -421,7 +421,7 @@ Modify [dcl.attr.indet], paragraph 3:
 \tcode{void g() \{}\\
 \codetab \tcode{int x [[indeterminate]], y;}\\
 \codetab \tcode{f(y);} \codelongtab \emph{// \removed{erroneous behavior}\added{contract violation} ([basic.indet])}\\
-\codetab \tcode{f(y);} \codelongtab \emph{// undefined behavior}\\
+\codetab \tcode{f(x);} \codelongtab \emph{// undefined behavior}\\
 \tcode{\}} \\
 \\
 \tcode{[...]}
@@ -512,3 +512,8 @@ The enumerators of \tcode{detection_mode} correspond to the manners in which a c
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \end{document}
+
+%TODO: clarify that quick-enforce could also issue a diagnostic
+%TODO: clarify how in-progress erroneous behavior papers would be addressed
+%TODO: make "the behavior is erroneous if" equivalent to "there is an implicit contract assertion <blah>" and keep erroneous behavior definition?
+%TODO: clarify that no SFINAE on erroneous behavior is to follow the prime directive, make that connection to motivate.

@@ -249,8 +249,16 @@ Explicit contract assertions are user-authored and have important use cases for 
 
 On the other hand, implicit contract assertions do not fall into either category. We can therefore remove the possibility to SFINAE on whether an expression results in an erroneous value while preserving the property of the current C++26 WD that during constant evaluation, an erroneous value can never be produced. We achieve this by specifying that during constant evaluation, implicit contract assertions can only be evaluated with the \emph{enforce} semantic. In other words, if any implicit contract assertions fails during constant evaluation, the program will be straight up ill-formed.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\pagebreak
+\subsection{Effect on in-progress erroneous behaviour papers}
+
+There are two in-progress papers on erroneous behaviour that are affected by this proposal.
+
+\cite{P2973R0} ``Erroneous behaviour for missing return from assignment'' proposes that flowing off the end of a copy or move assignment operator results in erroneous behaviour and is erroneously equivalent to a return with operand \tcode{*this}. With this proposal, the equivalent wording that achieves the same effect would be that ... %TD: Josh, I'm struggling to formulate this, can you help? I can't think of any way to formulate this in terms of a boolean predicate.
+
+\cite{P3232R1} ``User-defined erroneous behaviour'' proposes a new Standard Library function \tcode{std::erroneous()} which invokes erroneous behaviour when called and has no effect otherwise. With this proposal, a call to \tcode{std::erroneous()} becomes essentially obsolete as it is exactly equivalent to \mbox{\tcode{contract_assert(false)}}. 
+
+%TD: Josh, are you aware of any other such papers? I checked wg21.link/index.html and there don't seem to be any
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Proposed wording}
@@ -542,6 +550,13 @@ Thanks to Roger Orr for his helpful feedback on the first revision of this paper
 \end{document}
 
 %TODO: clarify that quick-enforce could also issue a diagnostic
+% TD: What? Why? I thought the whole point of quick-enforce is that it terminates but does nothing else? 
+
 %TODO: clarify how in-progress erroneous behavior papers would be addressed
+% TD: I added a section about that above, please check
+
 %TODO: make "the behavior is erroneous if" equivalent to "there is an implicit contract assertion <blah>" and keep erroneous behavior definition?
+% TD: I believe I have done this above!
+
 %TODO: clarify that no SFINAE on erroneous behavior is to follow the prime directive, make that connection to motivate.
+% TD: Isn't that already there (Section 2.6)? Please check if anything there is missing?

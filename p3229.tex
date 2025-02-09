@@ -211,8 +211,8 @@ With erroneous behaviour as specified today, a program effectively enters an ``e
 
 We, as a community, are lucky enough to already have implementations that identify and trap on uses of uninitialised values.
 % TD: Josh, in the following sentence, my brain cannot parse any of the stuff after the first comma. Can you please break up the sentence and simplify it so it's clearer what you're trying to say?
- The implementation of such checks is often done as instrumentation of compiled code, and thus can be a less than direct mapping of reading of C++ expression that does a first uninitialised read to the instructions that can be turned into a diagnostic error of some kind.
-In practice, it is not the read of the uninitialised value that is identified but rather the first case where a branch is taken based on that value --- and this can be much later than the actual read. This implementation strategy is the original motivation for the current specification of erroneous behaviour as introduced by \cite{P2795R5}.
+ The implementation of such checks is often done as instrumentation of compiled code, and the mapping of code in C++ to post-optimization machine instructions can often be unintuitive.  In particular, the exact place where a read of an erroneous value occurs can be rolled into many subsequent operations, and it is those subsequent operations where a diagnostic could potentially be emitted, not the initial read.  The case that can actually be caught is often a branch that occurs whose condition is dependent on an uninitialized value, and that branch might be very far removed from where the first read of the uninitialized value occurs in the abstraction machine. 
+This implementation strategy is the original motivation for the current specification of erroneous behaviour as introduced by \cite{P2795R5}.
 
 On the other hand, no real-world implementation will notice an uninitialised read and then set a timer, wait an arbitrary time, and terminate the program while it is doing something completely unrelated.  The specification of erroneous behaviour today allows this choice unnecessarily. It also prevents consistency in semantics between erroneous values and other types of implicit contract violations.
 
@@ -253,11 +253,12 @@ On the other hand, implicit contract assertions do not fall into either category
 
 There are two in-progress papers on erroneous behaviour that are affected by this proposal.
 
-\cite{P2973R0} ``Erroneous behaviour for missing return from assignment'' proposes that flowing off the end of a copy or move assignment operator results in erroneous behaviour and is erroneously equivalent to a return with operand \tcode{*this}. With this proposal, the equivalent wording that achieves the same effect would be that ... %TD: Josh, I'm struggling to formulate this, can you help? I can't think of any way to formulate this in terms of a boolean predicate.
+\cite{P2973R0} ``Erroneous behaviour for missing return from assignment'' proposes that flowing off the end of a copy or move assignment operator results in erroneous behaviour and is erroneously equivalent to a return with operand \tcode{*this}.  Such an implicitly injected return, being erroneous, would effective be preceded by an implicit contract assertion whose predicate is \tcode{false}.
 
-\cite{P3232R1} ``User-defined erroneous behaviour'' proposes a new Standard Library function \tcode{std::erroneous()} which invokes erroneous behaviour when called and has no effect otherwise. With this proposal, a call to \tcode{std::erroneous()} becomes essentially obsolete as it is exactly equivalent to \mbox{\tcode{contract_assert(false)}}. 
+\cite{P3232R1} ``User-defined erroneous behaviour'' proposes a new Standard Library function \tcode{std::erroneous()} which invokes erroneous behaviour when called and has no effect otherwise. With this proposal, a call to \tcode{std::erroneous()} becomes essentially obsolete as it is exactly equivalent to \mbox{\tcode{contract_assert(false)}}, although it might still be adopted as a mechanism to express a particular intent.
 
 %TD: Josh, are you aware of any other such papers? I checked wg21.link/index.html and there don't seem to be any
+%JMB: Nope, i think that's it.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -283,6 +284,8 @@ Modify [intro.abstract]:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 A conforming implementation executing a well-formed program shall produce the same observable behavior as one of the possible executions of the corresponding instance of the abstract machine with the same program and the same input. However, if any such execution contains an undefined operation, this document places no requirement on the implementation executing that program with that input (not even with regard to operations preceding the first undefined operation). \removed{If the execution contains an operation specified as having erroneous behavior, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution at an unspecified time after that operation.}
+
+%JMB: Here i thikn we want something like this to replace the previous sentence: Any operation specified as having erroneous behavior is immediately preceded by an implicit contract assertion ([basic.contract.implicit]) whose predicate identifies when that behavior will occur.
 
 \removed{\emph{Recommended practice:} An implementation should issue a diagnostic when such an operation is executed.}
 
@@ -475,6 +478,7 @@ For each bit $b$ in the value representation of the result that is indeterminate
 \item Otherwise, if $b$ is indeterminate, the behavior is undefined.
 \item Otherwise, \removed{the behavior is erroneous}\added{an implicit contract violation ([basic.contract]) occurs}, and the result is as specified above.
 % TD: Josh, I don't like this idea of introducing an implicit contract assertion for a library function. That seems wrong. Do you have any other ideas what we can do here without a breaking change to std::bit_cast?
+% JMB: I think we would want to introduce the idea into the library of having preconditions that only lead to erroneous behavior, not undefined behavior, but as the library now stands we don't have that concept.   I also don't think we want to say a violation occurs, but rather that there is an implicit contract assertion that this does not occur.  (This reads now like it says the check is never ignored).   If we keep the idea of saying that saying behavior is erroneous preoduces an implicit contract assertion preceding it then we can leave this wording unchange,d i think, for now.
 \end{itemize}
 The result does not otherwise contain any indeterminate or erroneous values.
 \end{adjustwidth}

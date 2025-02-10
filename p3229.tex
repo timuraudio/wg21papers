@@ -314,43 +314,6 @@ Which evaluation semantic is used for any given evaluation of a contract asserti
 Modify [basic.indet] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-When storage for an object with automatic or dynamic storage duration
-is obtained,
-the bytes comprising the storage for the object
-have the following initial value:
-\begin{itemize}
-\item
-If the object has dynamic storage duration, or
-is the object associated with a variable or function parameter
-whose first declaration is marked with
-the \tcode{[[indeterminate]]} attribute\iref{dcl.attr.indet},
-the bytes have \emph{indeterminate values};
-\item
-otherwise, the bytes have \emph{erroneous values},
-where each value is determined by the implementation
-independently of the state of the program.
-\end{itemize}
-If no initialization is performed for an object (including subobjects),
-such a byte retains its initial value
-until that value is replaced\iref{dcl.init.general,expr.ass}.
-If any bit in the value representation has an indeterminate value,
-the object has an indeterminate value;
-otherwise, if any bit in the value representation has an erroneous value,
-the object has an erroneous value\iref{conv.lval}.
-
-\begin{note}
-Objects with static or thread storage duration are zero-initialized,
-see~\iref{basic.start.static}.
-\end{note}
-
-%JMB: I don't think we want to try to introduce the assume semantic
-%     in this mailing.  If we did, i would change the following slightly
-%     to include indeterminate in the new paragraph and take all mention of behaviour
-%     out of the following paragraph
-%TD: I agree. We don't need the assume semantic here as we wouldn't
-%     allow this particular implicit contract assertion to be evaluated with that
-%     semantic anyway; you're supposed to use [[indeterminate]] instead.
-
 \begin{addedblock}
 The evaluation of any builtin operation includes an implicit postcondition assertion ([basic.contract.general])
 that it does not produce an erroneous value.  Except in the following cases,

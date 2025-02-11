@@ -120,7 +120,7 @@ to produce a value without causing a contract violation, for example, by calling
 ([csetjmp.syn]) or terminating the program.}
 \end{note}
 
-\added{If the evaluation of the predicate of a function contract assertion ([dcl.contract.func]) exits via an exception, the behavior is as if the function body exits via that same exception. [ \emph{Note}: A \emph{function-try-block} ([except.pre]) is the function body when present and thus does not have an opportunity to catch the exception. If the function has a non-throwing exception specification, the function \tcode{std::terminate} is invoked ([except.terminate]). --- \emph{end note} ] If the evaluation of the predicate of an \emph{assertion-statement} ([stmt.contract.assert]) exits via an exception, the search for a handler continues from the execution of that statement.}
+\added{If the evaluation of the predicate of a function contract assertion ([dcl.contract.func]) exits via an exception, the behavior is as if the function body exits via that same exception. [~\emph{Note}: A \emph{function-try-block} ([except.pre]) is the function body when present and thus does not have an opportunity to catch the exception. If the function has a non-throwing exception specification, the function \tcode{std::terminate} is invoked ([except.terminate]). --- \emph{end note}~] If the evaluation of the predicate of an \emph{assertion-statement} ([stmt.contract.assert]) exits via an exception, the search for a handler continues from the execution of that statement.}
 
 % TD: editorial note: this entire paragraph is duplicated below for the case where the contract-violation handler exits via an exception, can we deduplicate it somehow?
 
@@ -142,7 +142,7 @@ for that exception ([except.handle]). If the contract-violation handler returns 
 and the evaluation semantic is observe, that implicit handler is no longer considered
 active.}
 
-\removed{[ \emph{Note:} The exception can be inspected or rethrown within the contract-violation handler. --- \emph{end note} ]}
+\removed{[~\emph{Note:} The exception can be inspected or rethrown within the contract-violation handler. --- \emph{end note}~]}
 
 If the contract-violation handler returns normally and the evaluation semantic is enforce,
 the program is contract-terminated\removed{; if violation occurred as the result of an uncaught
@@ -191,7 +191,7 @@ public: \\
 \phantom{\tcode{xx}} \emph{/* see below */} \tcode{~contract_violation();} \\
 \\
 \phantom{\tcode{xx}} \tcode{const char* comment() const noexcept}; \\
-\phantom{\tcode{xx}} \tcode{detection_mode detection_mode() const noexcept;} \\
+\phantom{\tcode{xx}} \removed{\tcode{detection}_\tcode{mode detection}_\tcode{mode() const noexcept;}} \\
 \phantom{\tcode{xx}} \removed{\tcode{exception}_\tcode{ptr evaluation}_\tcode{exception() const noexcept;}} \\
 \phantom{\tcode{xx}} \tcode{bool is_terminating() const noexcept;} \\
 \phantom{\tcode{xx}} \tcode{assertion_kind kind() const noexcept;} \\

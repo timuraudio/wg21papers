@@ -1,0 +1,240 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+% Proposal color boxes
+\definecolor{proposalBG}{RGB}{147,112,219}
+
+\newcounter{proposalnum}
+\newtcbtheorem[use counter=proposalnum]{proposal}
+              {Proposal}
+              {colback=proposalBG!20!white,colbacktitle={proposalBG!40!white},coltitle={black}}
+              {prop}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Make predicate exceptions propagate by default}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) 
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P3626R0 \\
+Date: &2025-02-11 \\
+Project: & Programming Language C++ \\
+Audience: & EWG
+\end{tabular}
+
+\begin{abstract}
+One of the concerns over the Contracts for C++ proposal \cite{P2900R13} raised in \cite{P3573R0} is that if a checked contract predicate exits via an exception, that exception is caught and forwarded to the contract-violation handler, which leads to overhead. The suggestion was made that such an exception should instead unconditionally propagate up the stack. This paper provides the necessary wording changes for such a modification.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+The proposed wording is relative to D2900R14, the draft version that is in CWG and LWG wording review at the time of writing.
+
+Modify [basic.contract.eval] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A \emph{contract violation} occurs when
+\begin{itemize}
+\item $B$ is \tcode{false},
+\item \removed{the evaluation of the predicate exits via an exception, or}
+\item the evaluation of the predicate is performed in a context that is manifestly constant-evaluated ([expr.const]) and the predicate is not a core constant expression.
+\end{itemize}
+\added{If the evaluation of the predicaet}
+\begin{note}
+If $B$ is true, no contract violation occurs and control flow continues normally after
+the point of evaluation of the contract assertion. \removed{The evaluation of the predicate can fail
+to produce a value without causing a contract violation, for example, by calling \tcode{longjmp}
+([csetjmp.syn]) or terminating the program.}
+\end{note}
+
+\added{If the evaluation of the predicate of a function contract assertion ([dcl.contract.func]) exits via an exception, the behavior is as if the function body exits via that same exception. [ \emph{Note}: A \emph{function-try-block} ([except.pre]) is the function body when present and thus does not have an opportunity to catch the exception. If the function has a non-throwing exception specification, the function \tcode{std::terminate} is invoked ([except.terminate]). --- \emph{end note} ] If the evaluation of the predicate of an \emph{assertion-statement} ([stmt.contract.assert]) exits via an exception, the search for a handler continues from the execution of that statement.}
+
+% TD: editorial note: this entire paragraph is duplicated below for the case where the contract-violation handler exits via an exception, can we deduplicate it somehow?
+
+\begin{note}
+The\added{re are other circumstances in which the} evaluation of the predicate can fail
+to produce a value without causing a contract violation, for example, by calling \tcode{longjmp}
+([csetjmp.syn]) or terminating the program.
+\end{note}
+
+\phantom{x}
+
+[...]
+
+\phantom{x}
+
+\removed{ If the contract violation occurred because the evaluation of the predicate exited via an
+exception, the contract-violation handler is invoked from within an active implicit handler
+for that exception ([except.handle]). If the contract-violation handler returns normally
+and the evaluation semantic is observe, that implicit handler is no longer considered
+active.}
+
+\removed{[ \emph{Note:} The exception can be inspected or rethrown within the contract-violation handler. --- \emph{end note} ]}
+
+If the contract-violation handler returns normally and the evaluation semantic is enforce,
+the program is contract-terminated\removed{; if violation occurred as the result of an uncaught
+exception from the evaluation of the predicate, the implicit handler remains active when
+contract termination occurs}.
+
+\end{adjustwidth}
+
+Modify [except.terminate] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Some errors in a program cannot be recovered from, such as when an exception is not
+handled or a \tcode{std::thread} object is destroyed while its thread function is still executing.
+In such cases, the function \tcode{std::terminate} ([exception.terminate]) is invoked. 
+\begin{note}
+These situations are:
+\begin{itemize}
+\item ...
+\item when \added{evaluating the predicate of a function contract assertion ([dcl.contract.func]) or} a contract-violation handler ([basic.contract.handler]) invoked from evaluating a function contract assertion on a function with a non-throwing exception specification exits via an exception, or
+\item ...
+\end{itemize}
+\end{note}
+\end{adjustwidth}
+
+Modify [contracts.syn] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+% TD: TODO: If I put the underscore inside \tcode it messes everything up :(
+\removed{\tcode{enum class detection}_\tcode{mode : \emph{\tcode{unspecified}} \{}} \\
+\removed{\phantom{\tcode{xx}}\tcode{predicate}_\tcode{false = 1,}} \\
+\removed{\phantom{\tcode{xx}}\tcode{evaluation}_\tcode{exception = 2}} \\
+\removed{\tcode{\};}}
+
+\phantom{x}
+
+[...]
+
+\phantom{x}
+
+\tcode{class contract_violation \{} \\
+\phantom{\tcode{xx}} \emph{// no user-accessible constructor} \\
+public: \\
+\phantom{\tcode{xx}} \tcode{contract_violation(const contract_violation\&) = delete;} \\
+\phantom{\tcode{xx}} \tcode{contract_violation\& operator=(const contract_violation\&) = delete;}  \\
+\\
+\phantom{\tcode{xx}} \emph{/* see below */} \tcode{~contract_violation();} \\
+\\
+\phantom{\tcode{xx}} \tcode{const char* comment() const noexcept}; \\
+\phantom{\tcode{xx}} \tcode{detection_mode detection_mode() const noexcept;} \\
+\phantom{\tcode{xx}} \removed{\tcode{exception}_\tcode{ptr evaluation}_\tcode{exception() const noexcept;}} \\
+\phantom{\tcode{xx}} \tcode{bool is_terminating() const noexcept;} \\
+\phantom{\tcode{xx}} \tcode{assertion_kind kind() const noexcept;} \\
+\phantom{\tcode{xx}} \tcode{source_location location() const noexcept;} \\
+\phantom{\tcode{xx}} \tcode{evaluation_semantic semantic() const noexcept;} \\
+\tcode{\};}
+\end{adjustwidth}
+
+Remove [support.contract.enum.detection] entirely.
+
+Modify [support.contract.violation] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\removed{\tcode{contracts::detection}_\tcode{mode detection}_\tcode{mode() const noexcept;}} 
+
+\removed{\emph{Returns:} The enumerator value corresponding to the manner in which the contract violation was identified.}
+
+\phantom{x}
+
+[...]
+
+\phantom{x}
+
+\removed{\tcode{exception}_\tcode{ptr evaluation}_\tcode{exception() const noexcept;}} 
+
+\removed{\emph{Returns:} If the contract violation occurred because the evaluation of the predicate exited via an exception, an \tcode{exception}_\tcode{ptr} object that refers to that exception or a copy of that exception; otherwise, a null \tcode{exception}_\tcode{ptr} object.}
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Acknowledgements}
+%Thanks to Oliver Rosten for his review of the paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

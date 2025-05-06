@@ -58,9 +58,9 @@
 
 \begin{document}
 \title{Undefined behaviour is a contract violation}
-\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})  \\
-Ga\v sper A\v zman \small(\href{mailto:gasper.azman@gmail.com}{gasper.azman@gmail.com})   \\
-Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net})  
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) 
+\\ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net})  
+% TODO: Is Gasper still in?  \\ Ga\v sper A\v zman \small(\href{mailto:gasper.azman@gmail.com}{gasper.azman@gmail.com})   \\
 }
 \date{}
 \maketitle
@@ -73,9 +73,11 @@ Audience: & EWG
 \end{tabular}
 
 \begin{abstract}
-In this paper, we propose a generic framework for effective runtime mitigation of undefined behaviour in C++. We introduce \emph{implicit contract assertions}, which follow the same semantics as C++26 contract assertions \cite{P2900R14}, but are added implicitly by the compiler, rather than explicitly by the user. We further propose a mechanism for adapting \emph{labels} \cite{P3400R1} to control the evaluations semantics of implicit contract assertions. When a \emph{checked} semantic is chosen by the user, undefined behaviour is replaced by an implicit runtime check, followed by a call to the contract-violation handler and/or program termination.
+In this paper, we propose a generic framework for effective runtime mitigation of undefined behaviour in C++. We introduce \emph{implicit contract assertions}, which follow the same semantics as C++26 contract assertions \cite{P2900R14}, but are added implicitly by the compiler, rather than explicitly by the user. When a \emph{checked} semantic is chosen by the user, either via implementation-defined compile-time options or via in-code \emph{labels}, undefined behaviour is replaced by an implicit runtime check, followed by a call to the contract-violation handler and/or program termination.
 
-We propose to apply this strategy across the entire C++ language, taking a major step towards removing undefined behaviour from C++. This paper is intended as a direct contribution to the core language undefined behaviour white paper \cite{P3656R0} which EWG intends to draft and ship in the C++26 timeframe.
+We then proceed to apply the proposed framework holistically to the \emph{entire} C++ language. To this end, we enumerate all instances of undefined behaviour explicitly specified in the C++ language and systematically categorise them according to a number of important criteria. We then re-specify all such instances in terms of implicit contract assertions as appropriate for every such category.
+
+This proposal represents a major step towards removing undefined behaviour from C++. It is intended as a contribution to the Core Language UB white paper \cite{P3656R0} currently in development.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -97,157 +99,198 @@ We propose to apply this strategy across the entire C++ language, taking a major
 \section{Introduction}
 \label{intro}
 
-\subsection{Motivation and context}
+\subsection{Motivation}
+\label{motivation}
 
-Eliminating or at least meaningfully reducing the amount of unbounded \emph{undefined behaviour} is arguably the most critical objective for the future evolution of the C++ language. The ISO C++ committee has been continuously working in that direction. Common sources of undefined behaviour that have been removed in recent iterations of the C++ Standard include implicitly created objects \cite{P0593R6} for C++20; temporaries in range-based for loops \cite{P2012R2} for C++23; as well as trivial infinite loops \cite{P2809R3} and certain cases\footnote{If the variable is default-initialised, of scalar type, and has automatic storage duration.} of reading uninitialised values \cite{P2795R5} for C++26.
+Eliminating or at least meaningfully reducing the amount of unbounded \emph{undefined behaviour} is arguably the most critical objective for the future evolution of the C++ language. WG21 has been continuously working in that direction. For C++20, we removed an instance of undefined behaviour by introducing implicitly created objects \cite{P0593R6}; for C++23, by changing the semantics of temporaries in range-based for loops \cite{P2012R2}; for C++26, we gave defined behaviour to trivial infinite loops \cite{P2809R3} and certain cases\footnote{If the variable is default-initialised, of scalar type, and has automatic storage duration.} of reading uninitialised values.
 
-While these improvements are certainly laudable, they are case-by-case fixes that do not meaningfully change the perception of C++ as a fundamentally ``unsafe'' language.\footnote{See \cite{NSA2022}, \cite{CR2023}, \cite{CISA2023}, \cite{ONCD2024}. For a good contextualisation of the current discourse, see \cite{Sutter2024}. For recommendations regarding usage of the word ``safe'' in this context, see \cite{P3500R1} and \cite{P3578R0}.} To truly move the needle, we need consensus on a \emph{holistic} and \emph{actionable} strategy for mitigating undefined behaviour in C++.
+While these improvements are certainly laudable, they are case-by-case fixes that do not meaningfully change the overall perception of C++ as an ``unsafe'' language.\footnote{See \cite{NSA2022}, \cite{CR2023}, \cite{CISA2023}, \cite{ONCD2024}; for replies by WG21 members see papers \cite{P2739R0}, \cite{P2759R1}, presentations \cite{Abrahams2023}, \cite{Bastien2023}, \cite{Carruth2023}, \cite{Doumler2023}, \cite{Parent2023}. A good contextualisation of the current discourse can be found in the article \cite{Sutter2024}. For recommendations regarding usage and meaning of the words ``safety'', ``safe'', and ``unsafe'' in this context, see \cite{P3500R1} and \cite{P3578R0}.} To move the needle, we need consensus on a \emph{holistic} and \emph{actionable} strategy for mitigating undefined behaviour systematically.
 
-On the committee level, no such consensus strategy exists yet. However, at the February 2025 meeting in Hagenberg, we agreed on a \emph{ship vehicle} for such a strategy: the \emph{core language UB white paper} \cite{P3656R0}, which we hope to draft and ship within the C++26 timeframe. This paper is intended as a direct contribution to that white paper.
+On the WG21 level, this consensus strategy does not yet exist. However, at the February 2025 meeting in Hagenberg, we at least agreed on a \emph{ship vehicle} for such a strategy: the \emph{Core Language UB white paper} \cite{P3656R0}, which we hope to draft and ship within the C++26 timeframe. This paper is intended as a direct contribution to that white paper.
 
-As a first step, the editors of that white paper are currently working on enumerating all instances of core language undefined behaviour in C++, building on earlier work in \cite{P1705R1}. In this paper, we take a slightly different approach: we \emph{categorise} instances of core undefined behaviour according to several criteria that are relevant for choosing the optimal mitigation strategy (see Section~\ref{categoriesofub}).
+Some constructs that have undefined behaviour in C++ today can in principle be mitigated \emph{statically} by subsetting the language, i.e., making ``unsafe'' constructs ill-formed or conditionally ill-formed; this approach is currently pursued in the Profiles proposal \cite{P3081R2}. Complementing the subsetting approach, new features that provide a ``safer'' alternative can be added; a notable example is Sean Baxter's work on adding borrow checking to C++ \cite{P3390R0}.
 
-The most important such criterion is whether a particular instance of undefined behaviour should be mitigated at \emph{compile time} (by making the offending construct ill-formed, and offering alternative constructs where needed), or at \emph{run time} (by making the behaviour of \emph{executing} the offending construct no longer undefined). From an engineering perspective, the former approach seems preferable (``shift left''); however, in many cases it is not feasible because necessary information is not available until runtime or due to the need to be backwards-compatible with existing C++ code.
+While this ``superset of a subset'' approach is promising for newly written code, it is not backwards-compatible with existing code. This is because undefined behaviour is fundamentally a \emph{run-time} property. For most language constructs in C++, it is unknowable until run time whether they will have defined behaviour, because this depends on run-time values. If we were to reject all ``unsafe'' constructs at compile time, we would inevitably also reject vast swathes of existing code that is well-formed and has well-defined behaviour today.
 
-In this paper, we consider these two approaches to be complementary to each other. We leave the compile-time approach up to other ongoing efforts such as Profiles \cite{P3081R2} and borrow checking \cite{P3390R0}. Instead, we focus entirely on instances of undefined behaviour that --- for whatever reason --- \emph{cannot} be mitigated at compile time and need to be mitigated at run time. We propose a generic and universal framework for such runtime mitigation that can be applied across the entire C++ language.
+Instead, most existing instances of undefined behaviour in C++ need to be mitigated at run time. We need to retroactively \emph{define} the behaviour of existing instances of undefined behaviour in some way that is backwards-compatible with existing source code, run-time behaviour, and performance characteristics. This is the problem our paper addresses.
 
-Our proposed framework builds on top of Contracts, a paradigm for reasoning about incorrect programs and identifying program defects, including those that can lead to undefined behaviour. For C++26, we adopted \cite{P2900R14}, an initial subset of functionality based on this paradigm. This initial subset contains three kinds of \emph{contract assertions}: \tcode{pre}, \tcode{post}, and \tcode{contract_assert}. All three are \emph{explicit} contract assertions: they are specified with explicit syntax and need to be intentionally added by the author of the code.
+\subsection{Outline}
 
-For example, the author of a vector-like class can add a precondition assertion to its subscript operator to guard against out-of-bounds access:
+In this paper, we propose a generic framework for run-time mitigation of undefined behaviour that can be applied across the entire C++ language. Our proposal does not compete with proposals that follow the ``superset of a subset'' strategy, but rather \emph{complements} them by addressing all the undefined behaviour that cannot be addressed by that strategy.
 
-\begin{codeblock}
-T& operator[] (size_t index)
-  pre (index < size());
-\end{codeblock}
+Our proposed framework rests on two key ideas: the systematic introduction of \emph{run-time checks} guarding against run-time undefined behaviour and, where possible, the systematic replacement of undefined behaviour with \emph{fallback behaviour} that is erroneous but well-defined. The design of our framework builds on top of the foundations we laid in C++26: contract assertions \cite{P2900R14} and erroneous behaviour \cite{P2795R5}. 
 
-By choosing a checked \emph{evaluation semantic} for this contract assertion (\emph{observe}, \emph{enforce}, or \emph{quick-enforce}) the user can opt into defined behaviour (program termination and/or a call to a global contract-violation handler which can itself be user-defined) when their vector is accessed out-of-bounds. Importantly, the user can also opt out of the runtime check by choosing an unchecked evaluation semantic (\emph{ignore}) in cases where the use case requires it.
+In Section~\ref{ub}, we begin by enumerating \emph{all} instances of core undefined behaviour that exist in C++ today. We proceed to classify them according to a number of criteria to determine how and to what extent our framework can be applied to each one, and to get a sense of the associated complexity and cost. 
 
-This approach is most appropriate when it is up to the human to determine the conditions under which the program is considered \emph{correct} (i.e., its plain-language contract). On the other hand, explicit contract assertions are less ideal to identify situations where a core language construct exhibits undefined behaviour when evaluated (out-ouf-bounds access into a plain array, arithmetic overflow, etc.) because the defect will not be found unless an appropriate contract assertion is explicitly added. In other words, explicit contract assertions do nothing for \emph{existing} C++ code.
+In Section~\ref{otherdefects}, we consider manifestations of program defects other than run-time undefined behaviour, such as erroneous behaviour, IFNDR, and program termination, and discuss whether and how they relate to our framework.
 
-However, for any core language construct, determining whether undefined behaviour occurs during program execution does not require an explicit contract assertion: the conditions under which it occurs are specified in the C++ Standard. Mitigations that turn undefined into well-defined behaviour can therefore be inserted in an automated fashion by compilers (e.g., GCC's \tcode{-ftrapv} and \tcode{-fwrapv} flags) and sanitisers (e.g., ASan, UBSan).
+In Section~\ref{design}, we describe the design of our framework. We introduce the notion of \emph{implicit contract assertions}, with the same evaluation semantics as the explicit contract assertions introduced by \cite{P2900R14}, but inserted implicitly by the compiler rather than explicitly by the user. We describe a generic method to specify such insertions for any kind of undefined behaviour in C++. To enable well-defined fallback behaviour after a failed implicit contract assertion, we generalise the concept of \emph{erroneous behaviour} and integrate it into our framework. Further, we discuss how the evaluation semantics of implicit contract assertions can be controlled in-code with arbitrary granularity using \emph{labels} (\cite{P3400R1}). We discuss the possible addition of a fifth evaluation semantic to the existing set of four (\emph{ignore}, \emph{observe}, \emph{enforce}, and \emph{quick-enforce}) as a tool for avoiding performance regressions. Finally, we cover the required additions to the standard library API for contract-violation handling to accommodate implicit contract assertions.
 
-Such mitigations are widely used today, but they also have a number of drawbacks: they are not \emph{complete} (they do not cover all undefined behaviour in C++); they are not portable across different compilers and toolchains; they do not share a common paradigm or terminology; and they exist entirely outside of the C++ Standard. The goal of this paper is to address all of these drawbacks by introducing a unified framework to the C++ Standard that both generalises and extends existing approaches.
+In Section~\ref{application}, we put everything together into a concrete, actionable proposal by applying our framework to specific instances of undefined behaviour that exist in C++ today. We identify a set of cases for which this can be done immediately with obvious gain and relatively little effort. We describe the assertions and fallback behaviour that need to be inserted for those cases, possible implementation strategies, and the resulting overhead. We discuss the meaning of the available evaluation semantics for these cases and how they map to existing mitigation strategies in compilers and sanitisers. Draft wording for this proposal is provided in In Section~\ref{wording}.
 
-\subsection{The basic idea}
+We conclude by outlining in Section~\ref{extensions} how future extensions of the present proposal will cover the remaining cases.
 
-The basic building block of our proposed framework is the introduction of \emph{implicit contract assertions}, which work like explicit contract assertions, but are added implicitly by the implemenation, rather than explicitly by the user.
-
-As an example, let us consider indexing into a plain array rather than a user-defined vector-like class. Let us further assume for the purpose of this example that the size \tcode{N} of this array is statically known:
-
-\begin{codeblock}
-int main() {
-int a[10] = { /* ... */ };
-std::size_t i; std::cin >> i;
-return a[i];
-}
-\end{codeblock}
-
-In C++ today, the behaviour of this program is undefined if the value of \tcode{i} is not smaller than 10. At the same time, whether undefined behaviour will actually occur during execution cannot be determined at compile time because the value of \tcode{i} is not known until run time.
-
-Instead of saying that out-of-bounds access into a plain array is undefined behaviour, we now say that access into a plain array has an \emph{implicit precondition assertion} that the index is not out-of-bounds. In other words, the program behaves as-if the compiler had wrapped every raw array subscript operation for which it statically knows the array bound \tcode{N} into an inline function with a precondition assertion:
-
-\begin{codeblock}
-template <typename T, std::size_t N>
-T& __index_into_array(T (&a)[N], std::size_t i)
-pre (i < N) {
-  return a[i];
-}
-\end{codeblock}
-
-Other than being an implicit precondition assertion generated by the compiler, \tcode{pre (i < N)} behaves the same as an explicit precondition assertion. That is, the user has the same choice of four evaluation semantics (\emph{ignore}, \emph{observe}, \emph{enforce}, or \emph{quick-enforce}) to specify the desired behaviour depending on the tradeoffs that are most suitable for their application.
-
-Furthermore, when an out-of-bounds access is detected and the semantic is \emph{observe} or \emph{enforce}, the same contract-violation handler as for explicit contract assertions is called. The \tcode{contract_violation} object passed into the handler provides a way to programmatically distinguish explicit and implicit contract assertions and the kind of error that has occurred (see Section~\ref{libraryapi}).
-
-Going beyond the above example, the key observation is that \emph{every instance} of undefined behaviour in C++ can in principle be mitigated by an appropriately specified implicit contract assertion. The generic algorithm for this transformation is to change every occurrence of “Operation $X$ has undefined behaviour if $A$ is not \tcode{true}'' to ``Operation $X$ has an implicit precondition that $A$ is \tcode{true}'' throughout the entire core language section of the C++ Standard.
-
-In practice, these implicit contract assertions vary widely in terms of how computationally expensive they are, how much additional instrumentation they require; a thorough analysis can be found in Section~\ref{categoriesofub} of this paper. Notably, it is not always possible to express the predicate $X$ as a C++ expression (``\tcode{ptr} points to a valid object'' is an important counterexample). Yet, it is always possible to determine the value of the predicate $X$ somehow, at least in theory. Which checks are actually going to be offered by any given implementation, and which of these will be enabled by default, can be determined on a case-by-case basis. Different options offered by implementations (e.g., a debug build, a release build, or a build with a sanitiser enabled) can be mapped to different choices of evaluation semantic for every kind of implicit contract assertion. %TODO: maybe add reference to relevant section
-
-Note that because implicit contract assertions are contract assertions, they benefit from the same extensions to the Contracts framework as explicit contract assertions. This includes in-source control of the evaluation semantic with arbitrary granularity using \emph{labels} (see Section~\ref{labels}) and the introduction of additional evaluation semantics to cover more use cases (see Section~\ref{assume}).
-
-\subsection{History and related work}
+\subsection{History}
+\label{history}
 
 The first revision (R0) of this paper was published in May 2024. Following informal discussions at the St. Louis meeting, the paper was revised (R1) and presented to SG21 (Contracts study group) at the Wroc{\l}aw meeting. SG21 voted \emph{unanimously} in favour of our direction:
-\vspace{1mm}
+\vspace{2mm}
 \begin{wgpoll}{{SG21 Poll 6, Wroc{\l}aw, 2024-11-22}}
 We support the direction of P3100R1 and encourage the authors to come back with a fully specified proposal.
 \wgpollresult{19}{6}{0}{0}{0}
 Result: Consensus
 \end{wgpoll}
+\vspace{2mm}
 
 The present revision (R2) takes into account the above poll, the adoption of \cite{P2900R14} into the C++26 working paper, the decision to publish the white paper \cite{P3656R0}, and other progress made at the Hagenberg meeting.
 
-In parallel, runtime checks guarding against core language undefined behaviour is also being considered as part of the ongoing work on Profiles. The latest published revision of the Profiles at the time of writing is \cite{P3081R2}; it proposes runtime checks guarding against out-of-bounds array access, null pointer dereference, and arithmetic overflow. \cite{P3436R1} is a related paper outlining the proposed strategy. However, the counter-papers \cite{P3543R0} and \cite{P3558R1} argue that the insertion of implicit runtime checks does not belong into the Profiles proposal, and should instead be realised within a framework based on Contracts. This paper is proposing that framework.
+\subsection{Related work}
 
-The paper \cite{P3599R0} proposed a subset of this paper for C++26, covering just the runtime checks also proposed by \cite{P3081R2} for C++26, as a counter-proposal to that paper. Since Profiles did not make it into C++26, \cite{P3229R0} is obsolete; our approach for these (and all other) runtime checks is now being proposed in this paper and is targeting the core language UB white paper.
+Our paper overlaps with a number of Profiles-related papers. In addition to specifying a subset of the language that statically removes certain ``unsafe'' constructs, \cite{P3081R2} also proposes runtime checks guarding against out-of-bounds array access, null pointer dereference, and arithmetic overflow. \cite{P3436R1} is a strategy paper from the same author sketching a strategy for removing undefined behaviour from C++ which is similar in spirit to our paper.
 
-The paper \cite{P3229R0} proposed another subset of this paper for C++26, covering just the changes to \emph{erroneous behaviour} that are needed to make it compatible with our approach. That paper was reviewed, but not accepted by EWG at the Hagenberg meeting; a revised approach to erroneous behaviour is now being proposed in Section~\ref{eb} of this paper.
+However, the important distinction is that  \cite{P3081R2} and \cite{P3436R1} tie the control of such implicit runtime checks to Profiles. In \cite{P3543R0} and \cite{P3558R1}, we and others recommend to limit Profiles to  subsetting the language. The natural paradigm for \emph{run-time} mitigation of program defects is Contracts; insertion and control of implicit runtime checks should therefore be realised within a framework based on that paradigm. This paper is proposing that framework.
 
-Finally, this paper also relates to --- and proposes a solution for --- another much-discussed issue: the fact that \emph{explicit} contract assertions in C++26, as specified in \cite{P2900R14}, can themselves have undefined behaviour when checked, because explicit contract assertion predicates are boolean expressions and thus follow the usual rules for evaluating expressions in C++. This property has been repeatedly raised as a concern (see \cite{P2680R1}, \cite{P3173R0}, \cite{P3285R0}, and \cite{P3362R0}). However, the approach suggested in those papers --- constrain contract assertion predicates to expressions that can be statically proven to have no undefined behaviour --- does not seem to be specifiable, implementable, or usable in practice (see  \cite{P3376R0}, \cite{P3386R0}, and \cite{P3499R1}). What \emph{does} work to solve this problem is to specify a framework for runtime mitigation of undefined behaviour across the \emph{entire} core language specification. It will then automatically also apply to contract assertion predicates. This paper is that framework.
+Further, our paper has overlap with other papers that build on erroneous behaviour as proposed in \cite{P2795R5} and added to the C++26 working paper, such as \cite{P2973R0} and \cite{P3232R1}. In order to realise the framework proposed here, we need to slightly modify the specification of erroneous behaviour and effectively absorb that notion into the concept of implicit contract assertions (see Section~\ref{eb}). These modifications impact those proposals and potentially renders them obsolete.
 
-\section{Categories of undefined behaviour}
-\label{categoriesofub}
+Finally, our paper also relates to --- and proposes a solution for --- another much-discussed issue: the fact that \emph{explicit} contract assertions in C++26, as specified in \cite{P2900R14}, can themselves have undefined behaviour when checked, because explicit contract assertion predicates are boolean expressions and thus follow the usual rules for evaluating expressions in C++. This property has been repeatedly raised as a concern (see \cite{P2680R1}, \cite{P3173R0}, \cite{P3285R0}, and \cite{P3362R0}).
 
-% TIMUR: START WRITING THIS SECTION FIRST ON TUE 8 APR 2025 - EVERYTHING ELSE WILL FALL INTO PLACE
+The approach suggested in those papers is to constrain contract assertion predicates to expressions that can be statically proven to have no undefined behaviour. However, this approach does not seem to be specifiable, implementable, or usable in practice (see  \cite{P3376R0}, \cite{P3386R0}, and \cite{P3499R1}) and has thus been rejected by WG21. What \emph{does} work to solve this problem is to specify a framework for mitigating undefined behaviour across the \emph{entire} core language specification. It will then automatically also apply to contract assertion predicates. This paper is that framework.
 
+\section{Undefined behaviour}
+\label{ub}
+
+\subsection{Enumeration}
+
+\subsubsection{Methodology}
+
+For this paper, we manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all instances of explicitly specified core language undefined behaviour in C++. The complete list can be found in Appendix~A of this paper. % TODO: add \ref to appendix
+It contains a total of 84 entries. % TODO: The weird library one is the 85th, count it or not?
+
+Note that we deliberately did not add stable identifiers to these entries and instead gave them alphanumeric indices. This is because separately from our work, there is an ongoing effort in WG21 to add an Annex to the C++ Standard that enumerates all instances of undefined behaviour and IFNDR, based on Shafik Yaghmour's work \cite{P3075R0}. This effort assigns stable identifiers, based on the identifier of the affected subclause, to those instances.
+
+We found Shafik's list to be incomplete and contain some inaccuracies at the time of writing, so we are using our own list for now. However, we are currently contributing to their work to merge the two lists; once complete, we expect to rebase this paper onto the merged list and use their stable identifiers.
+
+\subsubsection{Core vs. library undefined behaviour}
+
+Sometimes, an informal distinction is made between \emph{core} undefined behaviour (sometimes also called ``language'' undefined behaviour or ``hard'' undefined behaviour) and \emph{library} undefined behaviour (sometimes also called ``soft'' undefined behaviour). The C++ Standard itself does not distinguish between those terms: according to the Standard, an operation simply either has undefined behaviour when executed or it does not.
+
+Library undefined behaviour is informally understood to mean the violation of a (plain-language) contract of a user-defined function (for example, an out-of-bounds call to the \tcode{operator[]} of a vector-like class). Once that function is called out-of-contract, the author of that function makes no guarantees regarding the behaviour of the program. 
+
+By contrast, core undefined behaviour occurs when the evaluation of a core language construct has undefined behaviour according to the C++ Standard (out-ouf-bounds access into a plain array, arithmetic overflow, etc.). Library undefined behaviour may or may not subsequently lead to core undefined behaviour when execution continues into the function; whether it does depends on the implementation of the function.
+
+A special case is the violation of a precondition of a standard library function (for example, an out-of-bounds call to \mbox{\tcode{std::vector::operator[]}}). The C++ Standard specifies that such a violation is undefined behaviour (in the same way as core undefined behaviour). While some compilers may take advantage of this leeway to enable additional optimisations on standard library function calls, in most cases the violation of a standard library precondition will in practice behave like library undefined behaviour.
+
+The tool of choice for mitigating library undefined behaviour in user code are explicit contract assertions as specified in \cite{P2900R14}. Specifically for standard library preconditions, our mitigation strategy is library hardening \cite{P3471R4}, which builds on top of \cite{P2900R14}. In this paper, we therefore focus exclusively on core undefined behaviour. Therefore, Appendix A takes into account only undefined behaviour listed in Clauses 1 --- 15 of the C++ Standard.
+  
+\subsubsection{Explicit vs. implicit undefined behaviour}
+
+We can further distinguish between \emph{explicit} and \emph{implicit} undefined behaviour. Explicit undefined behaviour is undefined behaviour called out as such in the C++ Standard, while implicit undefined behaviour is undefined behaviour by omission: a situation where an operation is well-formed but the Standard fails to describe what behaviour it has when executed.
+
+Arguably, all instances of implicit undefined behaviour are nothing other than specification bugs. Whenever one such instance is found, it should be treated as a Core issue and fixed, although admittedly we can never be sure we found all of them. While the existence of implicit undefined behaviour is an issue, we do not target it in this paper, and instead focus exclusively on explicit undefined behaviour. 
+
+\subsection{Classification}
+
+\subsubsection{Categories of undefined behaviour}
+
+We found that all instances of undefined behaviour in the core language can be broadly classified into one of the following  categories:
+\begin{itemize}
+\item \textbf{Type and Lifetime (TL)} --- 45 instances. Operations that access storage and/or use pointers or references to storage in a way that is  inappropriate for the type that either does not contain an object within its lifetime or is associated with an object of incompatible type. Examples: 
 TODO
+\item \textbf{Bounds (B)} --- 5 instances. Using a pointer in a way that is incompatible with the range of the pointed-to object or array. Examples: incrementing a pointer beyond the past-the-end position; performing single-object delete on an operand obtained from an array-new expression;  dereferencing a pointer returned from a request for zero size.
+\item \textbf{Initialization (IN)} --- 1 instance. Evaluating an expression that produces an indeterminate value.
+\item \textbf{Arithmetic (AR)} --- 9 instances. Executing an arithmetic operation whose operands fail to meet certain preconditions. Examples: division by zero; conversion of a value to a different arithmetic type that cannot represent that value. 
+\item \textbf{Threading (TH)} --- 1 instance. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from different threads where neither access happens-before the other.
+\item \textbf{Sequencing (SQ)} --- 1 instance. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other.
+\item \textbf{Control flow (CF)} --- 6 instances. Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
+\item \textbf{Coroutines (CR)} --- 2 instances. Misusing coroutine machinery. Destroying a coroutine that is not suspended; invoking a resumption member function for a coroutine that is not suspended.
+%\item \textbf{Standard library (SL)} --- 1 instance. Using a standard library object or function not permitted within signal handlers after destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions. % TODO: this is actually library UB, isn't it? Leaving it off for now, but need to explain that somewhere
+\item \textbf{Replacement functions (RF)} --- 3 instances. Executing a user-defined replacement function (\tcode{operator new}/\tcode{delete}) that fails to meet the specified requirements. Examples: returning \tcode{null} from a user-defined placement \tcode{new}; throwing an exception from a user-defined \tcode{delete}.
+\item \textbf{Compilation failures (CF)} --- 1 instance. Infinite recursion during template instantiation.
+\item \textbf{Preprocessor (PP)} --- 8 instances. Misusing preprocessor directives. Examples: \tcode{\#define}-ing a predefined macro name; passing an out-of-range integer to the \tcode{\#line} directive.
+\end{itemize}
 
-\subsection{Language undefined behaviour vs. library undefined behaviour}
+The first three categories represent undefined behaviour that is commonly referred to under the umbrella term ``memory safety''. This is often broken down into ``type safety'',  ``lifetime safety'', ``bounds safety'', and ``initialisation safety'', which correspond to our categories TL, B, and IN, respectively.
 
-TODO
+Note that we grouped ``type safety'' and ``lifetime safety'' into a single combined category TL. Of course there are instances of undefined behaviour that are primarily caused by type aliasing, and others that are primarily caused by out-of-lifetime accesses. However, it is evident from the list that they form a spectrum rather than a hard boundary. Many common operations in C++ (e.g., using a reference) rely on \emph{both} type and lifetime constraints to be satisfied. Remarkably, our combined TL category contains more instances of undefined behaviour than all the other categories taken together.
+
+The next categories, AR, and TH, correspond to the terms ``arithmetic safety'' and ``thread safety'', respectively. It might seem surprising at first that we grouped threading and sequencing into two separate categories as their specification has a very similar same shape (except that one is inter-thread and the other is intra-thread). However, as we will see in Section~\ref{TODO}, these two categories actually require very different approaches to mitigation.
+
+The final five categories of undefined behaviour (CF, CR, RF, CF, and PP) are much less frequently discussed but they nevertheless need to be mitigated so we cover them in this paper.
+
+\subsubsection{Is runtime mitigation needed?}
+
+Undefined behaviour is inherently a run-time property. However, if the compiler can reason \emph{at compile time} that a given operation will \emph{always} result in undefined behaviour, there is no need to detect the undefined behaviour at runtime, and in fact no benefit in specifying that operation as undefined behaviour at all. This concerns all items in categories CF and PP as well as a few other cases.
+
+Infinite recursion during template instantiation (the only item in category CF) is inherently a compile-time error and we see no reason to specify it to be (run-time) undefined behaviour. We can simply specify that infinite recursion during template instantiation renders the program ill-formed. Arguably, all existing implementations are already conforming with such a specification because infinite recursion during template instantiation causes the compiler to error out in one way or another. This fix will be proposed separately as a Core issue.
+
+Similarly, failures at the preprocessor stage (category PP) can be caught at that stage and there is no reason for them to cause run-time undefined behaviour. This fix is already being proposed in \cite{P2843R0}.
+
+Further, RF3 specifies that if a user-defined \tcode{operator delete} terminates by throwing an exception, the behaviour is undefined. However, ... TODO % TODO isn't a user-defined operator delete always noexcept? How can this happen?
+% TODO: aren't CR and the other RF's also like this?
+
+Finally, TL45 specifies that ``the invocation of a destructor is subject to the usual rules for member functions ([class.mfct]); that is, if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behaviour''. This item does not in fact introduce another instance of undefined behaviour, but merely refers to an existing one in [class.mfct]. Arguably, this whole sentence should therefore be just a non-normative note. This fix will be proposed separately as a Core issue.
+
+Since the instances of undefined behaviour called out in this section can be handled normatively for all cases without the need for run-time mitigation and without any backwards-compatibility concerns, we do not consider them further in this paper.
+
+\subsubsection{How hard to check?}
+% TODO: locally checkable?
+
+All remaining instances of undefined behaviour only occur under certain conditions that are not known until run time. An important way to classify them is to ask the question how \emph{hard} it is for a compiler to insert a run-time check that the condition in question has, in fact, occurred.
+
+As a first approximation, we can distinguish between checks that can be performed within the C++ abstract machine and checks that require additional instrumentation. The former can be further subdivided into whether such a check can be expressed as a simple boolean expression (much like an explicit contract assertion) % TODO: we have not mentioned assertions yet at this point! That's important context though
+or whether it would have to be implemented via ``compiler magic''. The latter can be distinguished by the kind of instrumentation required to construct the check; in particular, which properties (object lifetimes, etc.) would have to be tracked by such instrumentation.
+
+TODO 
+
+\subsubsection{How expensive to check?}
 
 
-- Hardening
-  - We don't talk about library undefined behaviour, only about language ub
-  - refer to impl choice and library hardening for contract assertions in library
+\subsubsection{How hard it is to check?}
 
-\subsection{Impact and potential damage}
 
-TODO
+\section{Other manifestations of program defects}
+\label{otherdefects},
 
-\subsection{Static vs. dynamic mitigation}
-
-TODO
-
-\subsection{Easy to check vs. difficult to check}
-\label{howeasytocheck}
-
-TODO
-
-\subsection{Cheap to check vs. expensive to check}
-
-TODO
-
-\subsection{Does a ``safe'' fallback behaviour exist?}
-
-TODO
-
-\section{Erroneous behaviour}
+\subsection{Erroneous behaviour}
 \label{eb}
 
-Repeat points from P3229
+TODO MERGE P3229 HERE
 
-\section{Proposed design}
+
+\subsection{IFNDR}
+
+IFNDR (``Ill-formed, no diagnostic required'') is very similar in nature to undefined behaviour. In particular, just like for programs that exhibit undefined behaviour, the C++ Standard does not place any requirement on the behaviour of a program that is IFNDR.
+
+However, while undefined behaviour is fundamentally a run-time property, IFNDR is a \emph{static} property. In general, IFNDR cannot be diagnosed at compile time (often, it relates to inconsistencies between translation units), but in some cases it may lead to a linker error instead. In any case, since IFNDR is a static property, and this paper focuses on run-time mitigation, IFNDR is out of scope for this paper.
+
+\subsection{Termination}
+
+Cite Gasper's paper here
+
+\subsection{Other}
+
+TODO FLESH OUT
+
+%TODO OTHER STUFF  IN SUBSECTIONS HERE
+
+\section{Design}
+\label{design}
 
 TODO
+]
 
-\subsection{Proposed implicit contract assertions}
-\label{proposedlist}
+\section{Application}
+\label{application}
 
-\subsection{Semantic selection}
-\label{labels}
-
-TODO
-
-
-\subsection{Library API}
-\label{libraryapi}
-
-TODO
 
 \section{Proposed wording}
+\label{wording}
+
+\section{Future extensions}
+\label{extensions}
+
 
 TODO
-
 
 \section*{Document history}
 \begin{itemize}
@@ -258,7 +301,7 @@ TODO
 
 \section*{Acknowledgements}
 
-We wish to thank Herb Sutter, Oliver Rosten, Andrzej Krzemie\' nski, and Roger Orr for their helpful feedback on this paper.
+We wish to thank Herb Sutter, Oliver Rosten, Andrzej Krzemie\' nski, and Roger Orr for their helpful feedback on a previous revision of this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

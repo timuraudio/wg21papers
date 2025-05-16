@@ -340,9 +340,7 @@ The natural way to introduce such optional run-time checks to C++ is to leverage
 
 In addition to introducing implicit contract assertions, which let us \emph{diagnose} the UB, we can actually \emph{remove} the UB for those 17 cases of run-time UB where meaningful, well-defined fallback behaviour exists (see Section~\ref{fallback}). This can be accomplished by defining that the behaviour of the operation in question is that fallback behaviour; we propose to do this in Section~\ref{specifyfallback}.
 
-However, practically all of this fallback behaviour comes with non-negligible --- and in some cases, even very large --- performance overhead. Therefore, to avoid unacceptable performance regressions in existing, correct C++ code, we \emph{must} offer an escape hatch that reverts to today's ``unsafe'' semantics.
-
-The existing case of EB for uninitialised values offers a specific escape hatch: the \tcode{[[indeterminate]]} attribute. However, in many cases such a specific, syntactic escape hatch is simply not viable. Consider e.g. arbitrary arithmetic expressions where some integer operations may overflow --- where would you put a syntactic escape hatch? Therefore, we need a generic escape hatch that does not rely on syntax. We propose such an escape hatch in Section~\ref{assume}.
+However, practically all of this fallback behaviour comes with non-negligible --- and in some cases, even very large --- performance overhead. Therefore, to avoid unacceptable performance regressions in existing, correct C++ code, we \emph{must} offer an escape hatch that reverts to today's ``unsafe'' semantics. We propose such an escape hatch in Section~\ref{assume}.
 
 For the 56 cases of run-time UB where meaningful, well-defined fallback behaviour does not exist (and therefore, continuation after an error has occurred is not possible), there are in principle only two known ways to give all those cases defined behaviour at runtime:
 \begin{itemize}
@@ -414,9 +412,9 @@ Finally, we do not propose a separate contract-violation handler for implicit co
 \subsection{Applying implicit contract assertions}
 \label{applyicas}
 
-Now that we have a framework in place for specifying what an implicit contract assertion is, and how it behaves, we can apply that specification to  \emph{every} case of UB  that is --- at least in principle --- run-time checkable. As we saw in Section~\ref{mitigation}, this is true for 73 cases of UB --- the vast majority of UB in C++ today.
+Now that we have a framework in place for specifying what an implicit contract assertion is, and how it behaves, we can apply that specification to \emph{every} case of UB  that is --- at least in principle --- run-time checkable. As we saw in Section~\ref{mitigation}, this is true for 73 cases of UB --- the vast majority of UB in C++ today.
 
-The generic algorithm for this transformation is to change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``Operation $X$ has an implicit precondition that $A$ is \tcode{true}; continuing execution past a violation of this precondition is undefined behaviour''.
+The required transformation is to change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``Operation $X$ has an implicit precondition that $A$ is \tcode{true}; continuing execution past a violation of this precondition is undefined behaviour''.
 % TD: JMB, I really think that instead of repeating this "continuing execution... is UB" wording 73 times, it would be better to find a term for it. I again propose "non-continuable precondition". I am happy to use something else if you have a better idea.
 
 Note that we do not specify any restrictions on the evaluation semantics of any of these 73 newly introduced  implicit contract assertions; every implementation can choose for themselves which evaluation semantics to offer for which one, and which should be the default semantic. One possible choice is to simply say that all 73 always have the \emph{ignore} semantic, which makes all existing implementations of C++ already conforming with our proposal. Another possible choice is to say that  \emph{ignore} is the default, but other semantics are available. Yet another possible choice is to enable certain checks by default.
@@ -436,16 +434,50 @@ The approach suggested in those papers is to constrain explicit contract asserti
 \subsection{Specifying the fallback behaviour}
 \label{specifyfallback}
 
-TODO
+The next part of our proposal is to introduce defined fallback behaviour for all 17 cases of language UB for which such fallback behaviour exists (see Section~\ref{fallback}). We accomplish this by modifying the specification of each affected operation such that, if the condition occurs that would have previously made the behaviour of the operation undefined, the behaviour is instead the defined fallback behaviour.
+
+The required transformation is to change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``Operation $X$ has an implicit precondition that $A$ is \tcode{true}; if this precondition is violated, the behaviour is \emph{<fallback behaviour>}''.
+
+As discussed in Section~\ref{fallback}, if we make this change and do nothing further, it would introduce significant --- and in many cases, unacceptable --- performance regressions to existing code. Therefore, we must offer an escape hatch that reverts to today's semantics where a violation of the implicit precondition leads to undefined behaviour.
 
 \subsection{Providing an escape hatch}
 \label{assume}
 
-TODO
-%Note: this will be about the assume semantic.
+For indeterminate values, \cite{P2795R5} introduced a specific escape hatch: the \tcode{[[indeterminate]]} attribute. However, in many cases such a specific, syntactic escape hatch is simply not viable. Consider e.g. arbitrary arithmetic expressions where some integer operations may overflow --- where would we place a syntactic escape hatch? Instead, we need a \emph{generic} escape hatch that works for all cases and does not rely on syntax.
+
+Further, this escape hatch needs to be flexible enough that implementations can choose whether or not it should be engaged by default. Engaging the escape hatch by default seems counter-intuitive, because doing so would fail to provide a ``safe default'', however in some cases the fallback behaviour will simply be infeasible to enable. It is nevertheless useful to notionally define it.
+
+Considering all of the above, it becomes evident that such a generic, non-syntactic escape hatch to revert back to today's semantics --- a violation of the implicit precondition leads to undefined behaviour --- is nothing other than a new, fifth evaluation semantic in addition to the four existing ones (\emph{ignore}, \emph{observe}, \emph{enforce}, \emph{quick-enforce}) that can be applied to the evaluation of the affected implicit contract assertions. This evaluation semantic is called the \emph{assume} semantic.
+
+Just like the \emph{ignore} semantic, the \emph{assume} semantic is a \emph{non-checking} semantic, i.e., its predicate is not evaluated. Further, just like with the \emph{ignore} semantic, if the predicate would  evaluate to \tcode{true} at the point where the contract assertion appears, it simply has no effect (i.e., the program behaves exactly as if it was not there. However, unlike the \emph{ignore} semantic, if the predicate would \emph{not} evaluate to \tcode{true}, the behaviour is undefined.
+
+With this definition, we can map all five evaluation semantics for implicit contract assertions that guard UB to concrete behaviours, for example for signed integer overflow as follows:
+\begin{itemize}
+\item The GCC compiler option \tcode{-ftrapv}, which aborts the program on signed integer overflow, is a conforming implementation of the \emph{quick_enforce} semantic;
+\item A sanitiser which detects signed integer overflow and prints a diagnostic is a conforming
+implementation of the \emph{enforce} or \emph{observe} semantic (depending on whether the
+process is terminated or execution continues after printing the diagnostic);
+\item The GCC compiler option \tcode{-fwrapv}, which implements signed integer addition using wrap around using twos-complement representation, is a conforming implementation of the \emph{ignore} semantic, which silently executes the safe fallback behaviour;
+\item The default behaviour in C++ today, which is to assume that signed integer addition can never overflow, and optimise based on this assumption when the appropriate optimisation flags are selected by the user, is a conforming implementation of the \emph{assume} semantic.
+\end{itemize}
+Just like with all other evaluation semantics, the mechanism by which the \emph{assume} semantic is selected is implementation-defined and will in practice be accomplished by vendor-provided compiler flags. In addition, labels (see Section~\ref{semantic}) will provide the ability to choose and constrain the evaluation semantic in code with arbitrary granularity.
+
+Importantly, in light of the sustained opposition to allowing the \emph{assume} semantic for explicit contract assertions,\footnote{This opposition is the reason why  no such semantic was included in \cite{P2900R14}. The presence of the \emph{assume} semantic in the C++2a Contracts proposal \cite{P0542R5} contributed to that proposal being removed from the C++20 Working Draft.}, we propose that the \emph{assume} semantic is only allowed for \emph{implicit} contract assertions. \emph{Explicit} contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) may \emph{not} be evaluated with the \emph{assume} semantic.
+
+This restriction is important because for explicit contract assertions, the \emph{assume} semantic  has the potential to introduce undefined behaviour to an otherwise correct program if the user wrote a buggy contract predicate. On the other hand, for implicit contract assertions, this risk does not exist as they are generated by the compiler; for error cases that cause UB, the \emph{assume} semantic is merely a name for the behaviour that those error cases already have in C++ today.
+
+Once we get labels, as proposed in \cite{P3400R1}, it will become possible to introduce an explicit label that would allow the \emph{assume} semantic to apply to an explicit contract assertion as well. For example, the limiter example from \cite{P1774R8} could be written as follows:
+\begin{codeblock}
+void limiter(float* data, size_t size)
+  pre<may_be_assumed>(size > 0);
+  pre<may_be_assumed>(size % 32 == 0);
+\end{codeblock}
+For explicit contract assertions, the \emph{assume} semantic would only ever be allowed when the \mbox{\tcode{may_be_assumed}} label is present. Thus, contract assertions would not be any less safe than they are in C++26. Such a label would be a vast improvement over \tcode{[[assume]]} as it would allow for \emph{checkable} assumptions (see \cite{P2064R0} for context). Once we are at that stage, we will have achieved the integration between assertions and assumptions that we failed to achieve in the C++20 cycle, and the \tcode{[[assume]]} attribute --- a temporary solution that was introduced instead --- can safely be deprecated.
 
 \section{Future extensions}
 \label{ext}
+
+We already briefly touched upon labels in the previous section. In this section, we explore other extensions to the present proposal that rely on labels as proposed in \cite{P3400R1} and provide important additional functionality that is not proposed in this paper.
 
 \subsection{Identifying the UB case and category}
 \label{category}

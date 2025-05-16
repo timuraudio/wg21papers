@@ -505,10 +505,111 @@ TODO // JMB please write a few sentences here why this is better than doing it w
 \section{Proposed wording}
 \label{wording}
 
-TODO
+Modify [basic.contract.general] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Contract assertions \removed{allow the programmer to }specify properties of the state of the program
+that are expected to hold at certain points during execution. \added{Explicit c}\removed{C}ontract assertions
+are introduced by \emph{precondition-specifiers}, \emph{postcondition-specifiers} ([dcl.contract.func]),
+and \emph{assertion-statements} ([stmt.contract.assert]). \added{\emph{Implicit} contract assertions are applied to operations by the implementation.}
+
+Each contract assertion has a predicate, which is an expression of type \tcode{bool}. 
+\begin{note}
+\removed{The value of the predicate is used to identify program states that are expected.}
+\added{If it is determined during program execution that the predicate has a value other than \tcode{true},
+a contract violation occurs. A contract violation is always the consequence of incorrect
+program code.}
+\end{note}
+\end{adjustwidth}
+
+Modify [basic.contract.eval] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+An evaluation of a contract assertion uses one of the following \added{five}\removed{four} evaluation semantics: 
+\added{\emph{assume,}}
+\emph{ignore}, 
+\emph{observe}, 
+\emph{enforce}, or 
+\emph{quick-enforce}. 
+Observe, enforce, and quick-enforce are checking semantics; enforce and quick-enforce are terminating semantics.
+
+It is implementation-defined which evaluation semantic is used for any given evaluation of a contract assertion. \added{Explicit contract assertions are never evaluated with the assume semantic.} 
+
+% TODO: write something about what implicit contract assertions do during constant evaluation!
+
+[...]
+
+The evaluation of a contract assertion using the ignore \added{or assume} semantic has no effect. \added{If the semantic is assume, and the predicate would not evaluate to \tcode{true}, evaluation of the contract assertion has runtime-undefined behaviour.}
+
+% TODO: do we need an explanatory note, like we have in [dcl.attr.assume], and/or a cross-reference to there?
+
+\end{adjustwidth}
+
+Add a new section, [basic.contract.implicit] after [basic.contract.eval]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\added{A built-in operation $O$ may have an \emph{implicit precondition assertion} $C$ applied to it. If so,
+the evaluation of $C$ is sequenced before the evaluation of $O$ and after the evaluation of
+all operands of $O$.}
+
+\added{A built-in operation $O$ may have an \emph{implicit postcondition assertion} $C$ applied to it. If so,
+the evaluation of $C$ is sequenced after the evaluation of $O$.}
+\end{adjustwidth}
+
+Modify [contracts.syn] as follows:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+% TD: the part below is a horrible ugly hack because I don't know how to put an \added{} inside a codeblock environment :( and in addition, there is a weird LaTeX glitch here where any underscore inside \tcode and any characters following it are not set in code font if the whole thing is inside an \added{}
+\tcode{enum class assertion}_\tcode{kind : \emph{\tcode{unspecified}} \{} \\
+\phantom{\tcode{xx}}\tcode{pre = 1,} \\
+\phantom{\tcode{xx}}\tcode{post = 2,} \\
+\phantom{\tcode{xx}}\tcode{assert = 3}\added{\tcode{,}} \\
+\phantom{\tcode{xx}}\added{\tcode{implicit = 4}} \\
+\tcode{\};}
+\end{adjustwidth}
+
+Modify [support.contract.enum] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\begin{tabular}{|l|l|}
+\hline
+Name & Meaning \\ \hline \hline
+\tcode{pre} & A precondition assertion \\ \hline
+\tcode{post}  & A postcondition assertion \\ \hline
+\tcode{assert} & An \emph{assertion-statement} \\ \hline
+\added{\tcode{implicit}} & \added{An implicit contract assertion} \\ \hline
+\end{tabular}
+\end{adjustwidth}
+
+Modify all cases of runtime-checkable UB \emph{with} fallback behaviour, as listed in Appendix A, according to the following pattern. Example [expr.expr.eval]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\removed{If during the evaluation of an expression, the result is not mathematically defined or not in the range of representable values for its type, the behavior is undefined.}\added{Evaluation of an expression has an implicit postcondition assertion that the result is mathematically defined and in the range of representable values for its type; if this precondition assertion is violated, the result is an erroneous value.}
+\end{adjustwidth}
+
+Example [conv.rank]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The value computations of the operands of an operator are sequenced before the value computation of the result of the operator. \removed{The behavior is undefined if}\added{There is an implicit contract assertion that} \removed{a}\added{no} side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread])\added{; if this precondition assertion is violated, the value computations are sequenced in an unspecified order}.
+\end{adjustwidth}
+
+Modify all cases of runtime-checkable UB \emph{without} fallback behaviour, as listed in Appendix A, according to the following pattern. Example [basic.stc.dynamic.allocation]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\removed{The effect of i}\added{I}ndirecting through a pointer \added{has an implicit precondition assertion that the pointer was not} returned from a request for zero size\added{; continuing execution past a violation of this precondition assertion} is undefined.
+\end{adjustwidth}
+
+Example [class.cdtor]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+For an object with a non-trivial destructor, referring to any non-static member or base class of the object \added{has an implicit precondition assertion that the destructor has not yet finished}\removed{after the destructor finishes} execution\added{; continuing execution past a violation of this precondition assertion} results in undefined behavior.
+\end{adjustwidth}
+
+Written-out wording for all 73 cases of runtime-checkable UB listed in Appendix A can be provided in a future revision of this paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \addcontentsline{toc}{section}{Appendix: UB list}
-\section*{Appendix: UB list}
+\section*{Appendix A: List of language UB}
 
 TODO
 %Note: this will contain some rendering of the big spreadsheet.

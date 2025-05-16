@@ -334,9 +334,9 @@ Fundamentally, inserting run-time checks is possible for all those 73 cases of U
 
 For example, a compiler may choose to support enabling runtime checks for arithmetic UB (they already do today for some cases, for example GCC offers the \tcode{-ftrapv} flag which enables checks for signed integer overflow) while not supporting any checks that require expensive instrumentation. On the other hand, a different compiler that comes with a suite of a sanitisers may choose to support some subset of those more expensive checks (and again, they already do today).
 
-It is therefore useful to define such optional run-time checks for all those 73 cases of UB. These checks cost \emph{nothing} unless they are turned on, no implementation is actually \emph{required} to implement them, but specifying them in the Standard allows us to assign standard names and categories to them, ... %JMB: please list more benefits of doing this!!
+It is therefore useful to define such optional run-time checks for all those 73 cases of UB. These checks cost \emph{nothing} unless they are turned on, no implementation is actually \emph{required} to implement them, but specifying them in the Standard has a number of advantages. It allows us to assign standard names and categories to them; it allows for implementations of such run-time checks (including existing compiler options and sanitisers) to leverage a shared paradigm and shared terminology; and it brings those tools into the scope of the C++ Standard. % JMB: Are there other benefits we should be talking about here?
 
-The natural way to introduce such optional run-time checks to C++ is to leverage the Contracts framework. All the necessary machinery and terminology for optional run-time checks --- called \emph{contract assertions} --- is already present in C++26, thanks to the foundation laid by \cite{P2900R14}. The only missing part is to introduce compiler-generated checks, i.e., \emph{implicit} contract assertions, in addition to the user-authored, i.e., \emph{explicit} contract assertions added by \cite{P2900R14}, and to hook those contract assertions into the same contract-checking and violation-handling machinery. We propose to do exactly this in Sections \ref{defineicas} and \ref{applyicas}.
+The natural way to introduce such optional run-time checks to C++ is to leverage the Contracts framework. All the necessary machinery and terminology for optional run-time checks --- called \emph{contract assertions} --- is already present in C++26, thanks to the foundation laid by \cite{P2900R14}. The only missing part is to introduce compiler-generated checks, i.e., \emph{implicit} contract assertions, in addition to the user-authored, i.e., \emph{explicit} contract assertions added by \cite{P2900R14}, and to hook those contract assertions into the same contract-checking and violation-handling machinery. We propose to do exactly this in Sections \ref{defineicas} --- \ref{applyicas}.
 
 In addition to introducing implicit contract assertions, which let us \emph{diagnose} the UB, we can actually \emph{remove} the UB for those 17 cases of run-time UB where meaningful, well-defined fallback behaviour exists (see Section~\ref{fallback}). This can be accomplished by defining that the behaviour of the operation in question is that fallback behaviour; we propose to do this in Section~\ref{specifyfallback}.
 
@@ -363,12 +363,75 @@ At most, a profile could reject the program if a certain run-time check required
 \subsection{Defining implicit contract assertions}
 \label{defineicas}
 
-TODO
+In this section, we propose a framework for introducing run-time checks that guard against UB to C++. This framework builds on top of Contracts.
+
+For C++26, we adopted an initial subset of Contracts functionality via \cite{P2900R14}. This initial subset contains three kinds of \emph{contract assertions}: \tcode{pre}, \tcode{post}, and \tcode{contract_assert}. Since these contract assertions are specified by the user with explicit syntax, in this paper we call them \emph{explicit} contract assertions. For example, the author of a vector-like class can add a precondition assertion to its subscript operator to guard against out-of-bounds access:
+
+\begin{codeblock}
+T& operator[] (size_t index)
+  pre (index < size());
+\end{codeblock}
+
+The precondition assertion \tcode{pre (index < size())} can be evaluated with a checked assertion  (\emph{observe}, \emph{enforce}, or \emph{quick-enforce}), which allows the user to opt into defined behaviour --- program termination and/or a call to a contract-violation handler --- when their vector is accessed out-of-bounds. Further, the contract-violation handler can be replaced by the user, allowing them to query information about the error and implement their own mitigation strategy. Alternatively, the user can also opt out of the runtime check by choosing an unchecked evaluation semantic (\emph{ignore}) if their use case requires it. 
+
+To implement run-time checks that guard against language UB, we propose to introduce \emph{implicit contract assertions}, which are added implicitly by the implementation, rather than explicitly by the user. In all other aspects, they work exactly the same as explicit contract assertions.
+
+As an example, let us consider indexing into a plain array rather than a user-defined vector-like class. Let us further assume for the purpose of this example that the size \tcode{N} of this array is statically known:
+
+\begin{codeblock}
+int main() {
+  int a[10] = { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 };
+  std::size_t i; 
+  std::cin >> i;
+  return a[i];
+}
+\end{codeblock}
+
+In C++ today, the behaviour of this program is undefined if the value of \tcode{i} is not smaller than 10 (\{expr.add.out.of.bounds\}). However, instead of saying that out-of-bounds access into a plain array is undefined behaviour, we can say that access into a plain array has an \emph{implicit precondition assertion} that the index is not out-of-bounds. Then, the program behaves as-if the compiler had wrapped every raw array subscript operation for which it statically knows the array bound \tcode{N} into an inline function with a precondition assertion:
+
+\begin{codeblock}
+template <typename T, std::size_t N>
+T& __index_into_array(T (&a)[N], std::size_t i)
+pre (i < N) {
+  return a[i];
+}
+\end{codeblock}
+
+Other than being an implicit precondition assertion automatically generated by the compiler, \tcode{pre (i < N)} behaves the same as an explicit precondition assertion. That is, the user has the same choice of four evaluation semantics (\emph{ignore}, \emph{observe}, \emph{enforce}, or \emph{quick-enforce}) to specify the desired behaviour depending on the tradeoffs that are most suitable for their application, and when an out-of-bounds access is detected and the semantic is \emph{observe} or \emph{enforce}, the same contract-violation handler as for explicit contract assertions is called.
+
+\subsection{Adjusting the library API}
+\label{library}
+
+To give the user a way to programmatically distinguish explicit and implicit contract assertions in the contract-violation handler, we propose to add a new enum value \tcode{implicit} to the enum \mbox{\tcode{assertion_kind}}. We simply append the new enumerator to the existing ones, which gives it the numerical value \tcode{4}, without attaching any particular meaning to that numerical value. Alternatively, we could define its numerical value to be \tcode{0}, as that value is not yet taken; however, we believe it is useful to not use \tcode{0} to retain the ability to detect the case where the enum has not been explicitly initialised with a valid value.\footnote{See also \cite{P3227R0}, which was adopted into \cite{P2900R14} and made the same argument for adding new enumerators to the enumeration \tcode{evaluation_semantic}.}
+
+No other changes to the library API for contract-violation handling are necessary. In particular, unlike in the previous revision of this paper, and unlike in \cite{P3081R1} which adopted its library API from that earlier revision, we no longer propose to add new enumerators to the enumeration \mbox{\tcode{detection_mode}} to encode the category of error (Initialization, Bounds, and so on); instead, this can be accomplished more effectively via labels (see Section~\ref{category}).
+
+Further, we do not propose any changes to the specification of \tcode{comment()} and \tcode{location()}. C++26 non-normatively recommends that these functions return a textual representation of the expression that triggered the contract violation and the source location of the contract violation, respectively. While this is in principle possible for violations of implicit contract assertions, generating a textual representation for every possible expression that could lead to UB is likely to cause an unacceptable amount of code bloat. However, it is equally conforming to generate some other string that may help the user identify the problem, such as the diagnostic message already printed by existing sanitisers. It is also conforming to simply return an empty string and a default-constructed source location if no information is available, or if the information is not programmatically accessible in the contract-violation handler (for example,
+because it located in a separate debug information file). 
+
+Finally, we do not propose a separate contract-violation handler for implicit contract assertions. Having a single program-wide handler for all contract violations is a central aspect of the \cite{P2900R14} design. By standardising on a central reporting mechanism we clearly separate the responsibility for reporting from the responsibility of knowing all of the different mechanisms within a program by which a bug might be detected. For example, the user might want to hard-code a particular form of termination, or use a particular logger. Forcing them to repeat these things in multiple places is not good design. If the user  wishes to use a different handler for implicit contract assertions, they can always branch on the \tcode{assertion_kind} in the global contract-violation handler, and dispatch to a custom handler from there.
 
 \subsection{Applying implicit contract assertions}
 \label{applyicas}
 
-TODO
+Now that we have a framework in place for specifying what an implicit contract assertion is, and how it behaves, we can apply that specification to  \emph{every} case of UB  that is --- at least in principle --- run-time checkable. As we saw in Section~\ref{mitigation}, this is true for 73 cases of UB --- the vast majority of UB in C++ today.
+
+The generic algorithm for this transformation is to change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour ' to ``Operation $X$ has an implicit precondition that $A$ is \tcode{true}; continuing execution past a violation of this precondition is undefined behaviour''.
+% TD: JMB, I really think that instead of repeating this "continuing execution... is UB" wording 73 times, it would be better to find a term for it. I again propose "non-continuable precondition". I am happy to use something else if you have a better idea.
+
+Note that we do not specify any restrictions on the evaluation semantics of any of these 73 newly introduced  implicit contract assertions; every implementation can choose for themselves which evaluation semantics to offer for which one, and which should be the default semantic. One possible choice is to simply say that all 73 always have the \emph{ignore} semantic, which makes all existing implementations of C++ already conforming with our proposal. Another choice is to say that  \emph{ignore} is the default, but other semantics are available.
+
+Since the choice of semantic is implementation-defined, implementations are expected to document which semantics they support for which implicit contract assertions, and which selection mechanism they offer. Once we have standard labels (see Section~\ref{category}) for each case of UB guarded by an implicit contract assertion, implementations and users can refer to each case by name, giving us a shared, portable, universally-agreed standard framework with terminology for reasoning about run-time UB.
+
+Many possible choices for the evaluation semantics of implicit contract assertions map directly to existing compiler and sanitiser options. For example, for signed integer overflow, the GCC flag \tcode{-ftrapw} is a conforming implementation of the \emph{quick-enforce} semantic; sanitisers like ASan and UBSan are conforming implementations of the \emph{enforce} semantic for those cases of UB that they identify. These tools can continue to work in the way they do; however, bringing them into the scope of the C++ Standard as proposed here has the benefit that they can now opt into using the unified standard framework.
+
+Today, the integration between such tools and user code tends to be poor. For example, all clang sanitisers have a callback \tcode{__sanitizer_set_death_callback}, but this callback takes no arguments. It can be used to inform the user that the process is about to terminate, but it does not provide an API to programmatically query what happened or where. ASan has a slightly more sophisticated callback \tcode{__asan_set_error_report_callback} which takes a single argument of type \tcode{const char*}. This argument provides a string that contains the generated error report. With our proposal, all these tools can instead hook into the standard contract-violation handling API. This API provides not only a user callback in the form of a  program-wide replaceable contract-violation handler, but also programmatically accessible information about the defect via the  \mbox{\tcode{contract_violation}} object passed into the contract-violation handler. This more comprehensive API can serve as a uniform standard callback mechanism for sanitisers and other tools.
+
+Further, coding guidelines can place restrictions on which evaluation semantics are permitted for which kinds of implicit contract assertions; our proposal provides the necessary standard terminology for this. For example, in a safety-critical context, a set of coding guidelines may prescribe that unchecked semantics may not be used for certain kinds of implicit contract assertions, and a profile could render non-conforming programs ill-formed, thus preventing the usage of toolchains and compiler options that could lead to the program exhibiting a particular kind of UB. Of course, this requires alternatives which offer checked semantics for those implicit contract assertions to actually exist.
+
+Finally, applying implicit contract assertions throughout the language in the proposed fashion addresses another much-discussed issue: the fact that \emph{explicit} contract assertions in C++26, as specified in \cite{P2900R14}, can themselves have UB when checked, because explicit contract assertion predicates are boolean expressions and thus follow the usual rules for evaluating expressions in C++. This property has been repeatedly raised as a concern (see \cite{P2680R1}, \cite{P3173R0}, \cite{P3285R0}, and \cite{P3362R0}).
+
+The approach suggested in those papers is to constrain explicit contract assertion predicates to expressions that can be statically proven to have no UB. However, this approach does not seem to be specifiable, implementable, or usable in practice (see  \cite{P3376R0}, \cite{P3386R0}, and \cite{P3499R1}) and has thus been rejected by WG21. What \emph{does} work is to specify a framework for mitigating UB across the entire language, as proposed here. Once we have this framework, it will then automatically also apply to the evaluation of explicit contract assertions.
 
 \subsection{Specifying the fallback behaviour}
 \label{specifyfallback}
@@ -381,6 +444,21 @@ TODO
 TODO
 %Note: this will be about the assume semantic.
 
+\section{Future extensions}
+\label{ext}
+
+\subsection{Identifying the UB case and category}
+\label{category}
+
+TODO
+
+\subsection{Granular control of the evaluation semantic}
+\label{semantic}
+
+TODO
+
+
+% TODO: talk here about labels
 
 \section{Proposed wording}
 \label{wording}

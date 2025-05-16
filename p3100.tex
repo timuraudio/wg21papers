@@ -327,7 +327,10 @@ Arguably, the best mitigation strategy is to make the offending construct ill-fo
 
 Similarly, UB in the Preprocessor category should not be specified as UB either. We defer to \cite{P2843R2}, which proposes to specify all these cases as IFNDR instead, placing them outside of the scope of this paper.
 
-There is one more case of UB which should not actually be considered UB: \{class.dtor.not.class.type\}. While the wording for this case says that ``if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behaviour'', this is not a new case of UB but already falls out from the specification of other cases of UB elsewhere. This section should therefore be a non-normative note referring to those sections.
+There are two more cases of UB which should not actually be considered UB. The first is \{class.dtor.not.class.type\}. While the wording for this case says that ``if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behaviour'', this is not a new case of UB but already falls out from the specification of other cases of UB elsewhere. This section should therefore be a non-normative note referring to those sections.
+
+The second is \{basic.stc.alloc.dealloc.throw.\} There is no good reason why throwing an exception from a deallocation function should cause UB. Instead, we should enforce that deallocation functions have a non-throwing exception specification. This is being proposed in \cite{P3424R0} and we refer to this paper for mitigating this case of UB.
+% TD: Is this actually compile-time diagnosable? If yes, we should move this to the top of this section.
 
 This leaves us with 73 cases of UB for which we need to identify candidate mitigation strategies. All of those cases represent \emph{run-time} UB that cannot be diagnosed at compile time. Therefore, one possible mitigation strategy for \emph{all} of those cases of UB is to insert \emph{run-time} checks.
 
@@ -580,25 +583,29 @@ Name & Meaning \\ \hline \hline
 \end{tabular}
 \end{adjustwidth}
 
-Modify all cases of runtime-checkable UB \emph{with} fallback behaviour, as listed in Appendix A, according to the following pattern. Example [expr.expr.eval]:
+Modify all cases of runtime-checkable UB \emph{with} fallback behaviour, as listed in Appendix A, according to the following pattern. 
+
+--- Example [expr.expr.eval]:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \removed{If during the evaluation of an expression, the result is not mathematically defined or not in the range of representable values for its type, the behavior is undefined.}\added{Evaluation of an expression has an implicit postcondition assertion that the result is mathematically defined and in the range of representable values for its type; if this precondition assertion is violated, the result is an erroneous value.}
 \end{adjustwidth}
 
-Example [conv.rank]:
+--- Example [conv.rank]:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 The value computations of the operands of an operator are sequenced before the value computation of the result of the operator. \removed{The behavior is undefined if}\added{There is an implicit contract assertion that} \removed{a}\added{no} side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread])\added{; if this precondition assertion is violated, the value computations are sequenced in an unspecified order}.
 \end{adjustwidth}
 
-Modify all cases of runtime-checkable UB \emph{without} fallback behaviour, as listed in Appendix A, according to the following pattern. Example [basic.stc.dynamic.allocation]:
+Modify all cases of runtime-checkable UB \emph{without} fallback behaviour, as listed in Appendix A, according to the following pattern. 
+
+--- Example [basic.stc.dynamic.allocation]:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \removed{The effect of i}\added{I}ndirecting through a pointer \added{has an implicit precondition assertion that the pointer was not} returned from a request for zero size\added{; continuing execution past a violation of this precondition assertion} is undefined.
 \end{adjustwidth}
 
-Example [class.cdtor]:
+--- Example [class.cdtor]:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 For an object with a non-trivial destructor, referring to any non-static member or base class of the object \added{has an implicit precondition assertion that the destructor has not yet finished}\removed{after the destructor finishes} execution\added{; continuing execution past a violation of this precondition assertion} results in undefined behavior.

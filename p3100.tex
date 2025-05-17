@@ -13,6 +13,9 @@
 \usepackage{tikz,lipsum,lmodern}
 \usepackage[most]{tcolorbox}
 
+% big table in appendix in landscape
+\usepackage{pdflscape}
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %TABLE OF CONTENTS SETTINGS
@@ -72,7 +75,7 @@ Audience: & EWG
 \end{tabular}
 
 \begin{abstract}
-In this paper, we enumerate all cases of core language undefined behaviour explicitly specified in C++,  group them into categories, classify them along a number of relevant criteria, and discuss appropriate mitigation strategies. The conditions under which such undefined behaviour will occur can, in many cases, be identified by a runtime check. We describe how such runtime checks can be systematically introduced via \emph{implicit contract assertions}, giving users complete control over what impact that undefined behaviour has on their programs. In addition, well-defined fallback behaviour can be introduced for many cases. Building on Contracts as adopted for C++26, we provide a generic framework that can be incorporated into the ongoing core language UB white paper \cite{P3656R1}, fundamentally changing the landscape of how undefined behaviour is approached in C++.
+In this paper, we enumerate all cases of core language undefined behaviour explicitly specified in C++,  group them into categories, classify them along a number of relevant criteria, and discuss appropriate mitigation strategies. The conditions under which such undefined behaviour will occur can, in many cases, be identified by a runtime check. We describe how such runtime checks can be systematically introduced via \emph{implicit contract assertions}, giving users complete control over what impact that undefined behaviour has on their programs. In addition to runtime checking, we introduce well-defined fallback behaviour to replace undefined behaviour wherever possible. Building on Contracts as adopted for C++26, we provide a generic framework that can be incorporated into the ongoing core language UB white paper \cite{P3656R1}, fundamentally changing the landscape of how undefined behaviour is approached in C++.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -638,11 +641,27 @@ Written-out wording for all 73 cases of runtime-checkable UB listed in Appendix 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\pagebreak
+%\pagestyle{empty}
+\begin{landscape}
+
 \addcontentsline{toc}{section}{Appendix: UB list}
 \section*{Appendix A: List of language UB}
 
-TODO
-%Note: this will contain some rendering of the big spreadsheet.
+
+\begin{table}[htbp]
+\begin{center}
+\begin{tabular}{llll}
+% This will contain a rendering of the big UB spreadsheet we have been working with
+\end{tabular}
+\end{center}
+\end{table} 
+\end{landscape}
+
+\pagebreak
+%\pagestyle{plain}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section*{Document history}
 \begin{itemize}

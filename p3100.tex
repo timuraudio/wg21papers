@@ -488,7 +488,7 @@ We already briefly touched upon labels in the previous section. In this section,
 \begin{codeblock}
 void handle_contract_violation(const std::contracts::contract_violation& violation)
 {
-  if (auto *bounds_label =
+  if (auto* bounds_label =
       violation.getLabel<std::contracts::labels::bounds_label>()) {
       // handle violation of assertion labelled with the bounds label
   }

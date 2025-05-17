@@ -1,0 +1,489 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+% To make Josh's \iref command work here
+\renewcommand{\iref}[1]{ ([#1])}
+
+% Indent code that needs to be outside of codeblock because we need green underline
+\newcommand{\codetab}[0]{\phantom{\tcode{xx}}}
+\newcommand{\codelongtab}[0]{\phantom{\tcode{xxxxxxxx}}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Making erroneous behaviour compatible with Contracts}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+Ga\v sper A\v zman \small(\href{mailto:gasper.azman@gmail.com}{gasper.azman@gmail.com}) \\
+}
+\date{}
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{tabular}{ll}
+Document \#: & P3229R1 \\
+Date: &2025-02-09 \\
+Project: & Programming Language C++ \\
+Audience: & EWG, LEWG
+\end{tabular}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{abstract}
+This paper proposes the first step towards \cite{P3100R1} --- a unified framework for describing and handling incorrect C++ programs. In this framework, undefined behaviour, erroneous behaviour, and contract violations are all different aspects of a coherent whole. While most of the changes proposed in \cite{P3100R1} can wait until C++29, this paper contains the part that needs to be adopted for C++26 to avoid setting in stone inconsistencies between the concepts of \emph{erroneous behaviour} on the one hand and \emph{contract violation} on the other hand that would greatly hinder future evolution towards \cite{P3100R1}.  Adopting this change paves the way for a brighter future and clarifies the scope of erroneous behaviours already adopted.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\section{Motivation and context}
+\label{motivation}
+
+C++ is at an inflection point. To effectively address the safety and security challenges facing the C++ ecosystem, a \emph{holistic} strategy is needed. A key part of this strategy is to introduce a unified framework to the C++ Standard that describes \emph{incorrect} programs, i.e. programs whose source code has a bug, and mitigating such bugs during program execution, without leaving the behaviour undefined. This approach is complementary to introducing \emph{static} language constraints that make unsafe constructs ill-formed (e.g., \cite{P3390R0}), and targets bugs that cannot be detected statically.
+
+Such a unified framework is being proposed in \cite{P3100R1}. That proposal is large and the proposed specification is not yet fully complete; it is thus not in scope for C++26. However, there is a small subset of \cite{P3100R1} that must be applied \emph{before} we ship C++26, otherwise we would be setting in stone inconsistencies that would greatly hinder future evolution towards \cite{P3100R1}. This paper proposes to apply just this part to the C++26 Working Draft.
+
+The issue is that we currently have \emph{two} separate specification tools for describing incorrect programs, both of which are independently heading towards C++26: \emph{erroneous behaviour} (\cite{P2795R5}; already merged into the C++26 WD) and \emph{contract violations} (\cite{P2900R13}). Both describe the same concept: at some point during execution, a program is found to be defective, yet its behaviour at that point is still well-defined. Furthermore, both provide essentially the same set of four possible evaluation semantics. According to [intro.abstract] in the current C++26 WD:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the execution contains an operation specified as having erroneous behaviour, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution at an unspecified time after that operation.
+\end{adjustwidth} 
+
+\pagebreak % Inserted manually for layout reasons
+
+Note the equivalence between the four possible options for handling erroneous behaviour and the four contract evaluation semantics \emph{enforce}, \emph{quick-enforce}, \emph{observe}, and \emph{ignore} proposed in \cite{P2900R13}:
+
+\begin{center}
+issue a diagnostic and terminate == \emph{enforce}
+
+do not issue a diagnostic and terminate == \emph{quick-enforce}
+
+issue a diagnostic and do not terminate == \emph{observe}
+
+do not issue a diagnostic and do not terminate == \emph{ignore}
+\end{center}
+
+The only instance of erroneous behaviour currently defined in the C++ WD is occurs when an \emph{erroneous value} is produced by certain evaluations ([basic.indet]). With the equivalence established above, an expression \tcode{E} that evaluates to an erroneous value is thus notionally equivalent to the following function:
+
+\begin{codeblock}
+auto eval_E() 
+post (r: !is_erroneous_value(r)) { 
+  return E;
+}
+\end{codeblock}
+
+If we break them down, we can see that the two approaches to handling incorrect programs are very similar in shape and differ primarily in nomenclature:
+\begin{itemize}
+\item{\emph{Erroneous behaviour} identifies behaviour that is incorrect (yet well defined) and implies the condition under which that behaviour is reached;}
+\item{\emph{Contract assertions} explicitly identify the condition under which the behaviour is considered incorrect, and leave it up to the user to implement the --- possibly well-defined but possibly undefined --- behaviour that follows a violation.}
+\end{itemize}
+From that description, it is clear that any case of well-defined behaviour after a contract violation is nothing other than erroneous behaviour.  Similarly, any condition that identifies erroneous behaviour as part of an operation is nothing other a contract assertion on that operation. The only difference is that erroneous behaviour is always \emph{well-defined} behaviour that follows a contract violation, while contract violations can in principle also be followed by undefined behaviour (if \emph{ignored} or \emph{observed}).
+
+Understanding now that erroneous behaviour is a specific category of behaviour that might follow a contract violation, we must then consider the concrete differences in the behaviours specified for erroneous in the draft Standard today and how a contract violation followed by matching well-defined behaviour would behave:
+\begin{itemize}
+\item While printing a diagnostic message is recommended behaviour for both contract violations and erroneous behaviour, \cite{P2900R13} allows the user to override this behaviour and install their own \emph{user-defined contract-violation handler}, while erroneous behaviour does not.
+
+\item When a contract assertion is evaluated with a terminating semantic (\emph{enforce} or \emph{quick-enforce}) and a contract violation has been detected, \cite{P2900R13} specifies a set of conforming modes of termination,\footnote{The conforming modes of termination on contract violation are the three erroneous termination modes available in C++: \tcode{std::terminate}, \tcode{std::abort}, and immediate termination, such as via a trap instruction. All three have important use cases; detailed discussion can be found in \cite{P3520R0}.} while erroneous behaviour does not.
+
+\item If the program is terminated due to a contract violation, termination happens as part of evaluating the contract assertion and immediately after the violation has been handled; on the other hand, if erroneous behaviour is encountered, termination happens ``at an unspecified time after that operation'', thereby introducing some sort of ``Damocles semantic''. 
+
+\item If an expression would evaluate an operation that would have erroneous behaviour, it does not qualify as a core constant expression, which in turn allows the user to SFINAE on whether an expression results in erroneous behaviour. On the other hand, \cite{P2900R13} does not allow the user to SFINAE on the presence or evaluation of a contract assertion: if an \emph{enforced} contract assertion fails during constant evaluation, the program is straight up ill-formed. 
+\end{itemize}
+
+To remove the above inconsistencies and pave the way towards a unified standard framework for reasoning about incorrect programs, we need to change the terminology and specification of erroneous behaviour to align with Contracts --- \emph{before} shipping erroneous behaviour in C++26.
+
+\section{Proposed design}
+
+\subsection{Introducing implicit contract assertions}
+
+The first  and most important step towards the unified framework proposed in \cite{P3100R1} is to extend the notion of \emph{contract assertion} by distinguishing between \emph{explicit} and \emph{implicit} contract assertions.
+
+Explicit contract assertions are those that \cite{P2900R13} proposes. They are added to the program explicitly using function contract specifiers (\tcode{pre}, \tcode{post}) and assertion statements (\mbox{\tcode{contract_assert}}). They specify conditions on a correct program that relate to \emph{user-defined} code and thus only the user knows how to specify those conditions.
+
+By contrast, implicit contract assertions are not directly visible in code. They specify conditions on a correct program that are relied on by \emph{core language} operations and thus the implementation can inject them into the code in an automated fashion.
+
+Otherwise, explicit and implicit contract assertions behave the same. Importantly, they can be evaluated with the same four evaluation semantics --- \emph{ignore}, \emph{observe}, \emph{enforce}, and \emph{quick-enforce} --- and call the same global contract-violation handler which may be replaced by the user.
+
+\subsection{Adjusting the definition of erroneous behaviour}
+
+The second step towards our unified design is to recognise that the occurrence of erroneous behaviour --- such as when a builtin operation results in an erroneous value --- is equivalent to the violation of an implicit contract assertion that the operation does \emph{not} result in an erroneous value.
+
+We propose to make the following adjustments to the current definition of erroneous behaviour to recognise this equivalence:
+
+\begin{itemize}
+\item Replace all instances of ``if condition $X$ holds, the behaviour is erroneous'' with ``the operation has an implicit contract assertion that condition $X$ does not hold'' (note that there is currently only one such instance in the C++26 WD, where $X$ is ``if an erroneous value is produced by an evaluation'');
+\item Change the definition of the term ``erroneous behaviour'' to mean ``well-defined behaviour that follows the violation of an implicit contract assertion (note that this does not imply that that contract assertion was actually \emph{checked}; note further that this does not change the set of behaviours currently defined as erroneous).
+\end{itemize}
+
+This modification instantly removes all inconsistencies described in Section~\ref{motivation}. Following \cite{P2900R13}, the inserted implicit postcondition assertion can now be evaluated with any of the four evaluation semantics, a violation can trigger the contract-violation handler, etc. 
+
+Calling a user-defined contract-violation handler on erroneous behaviour, while not permitted by the current C++26 WD, is already existing practice. UBSan, an implementation that detects erroneous behaviour, offers an API for installing such a custom handler.\footnote{All Clang sanitisers offer the API \tcode{__sanitizer_set_death_callback} for this purpose; ASan additionally offers a slightly more sophisticated API \tcode{__asan_set_error_report_callback}.} As discussed in \cite{P3100R1}, there are many benefits in standardising an API for such callbacks via the replaceable contract-violation handler, and allowing any program defect detected during program execution, including erroneous behaviour, to trigger that same handler.
+
+The same strategy can be applied to all other cases that \cite{P2795R5}, Section ``The Broader Picture'' lists as a ``candidate for conversion to erroneous behaviour'': signed integer overflow, unrepresentable arithmetic conversions, bad bitshifts, and so on. We can remove the undefined behaviour from all these operations by specifying the appropriate implicit precondition or postcondition assertions and the appropriate erroneous behaviour.
+
+\subsection{Extending the contract-violation handling API}
+
+In order to introduce implicit contract assertions on top of \cite{P2900R13}, we need to extend the contract-violation handling API, which currently only covers explicit contract assertions. Specifically, we need to specify the state of the \mbox{\tcode{std::contracts::contract_violation}} object that a user-defined contract-violation handler will see when such an implicit contract assertion is violated. Only two small extensions to that API are needed. 
+
+The first extension concerns the \tcode{kind()} property of \tcode{contract_violation}, which returns an enum value that represents the syntactic form of the violated contract assertion. In addition to the three enumerators \tcode{pre}, \tcode{post}, and \tcode{assert} from \cite{P2900R13}, which represent explicit precondition assertions, postcondition assertions, and assertion statements, respectively, we propose a fourth enumerator \tcode{implicit}, which represents all forms of implicit contract assertions, including the ones resulting from erroneous values that we propose to introduce here. Note that the same enumerator is being proposed in \cite{P3100R1} (of which this paper is a subset) and also in \cite{P3081R1} (Profiles).
+
+The second extension concerns the \tcode{detection_mode()} property of \tcode{contract_violation}, which returns an enum value that represents the particular failure mode. In addition to the three enumerators \tcode{predicate_false} and \tcode{evaluation_exception} from \cite{P2900R13}, we propose a third enumerator \tcode{erroneous_value}, which represents a contract violation due to an erroneous value being produced.
+
+Note that this is distinct from the evaluation of a boolean predicate returning \tcode{false} or exiting via an exception, because the determination that an erroneous value was produced (and therefore a contract violation occurred) takes place in an implementation-defined fashion and not necessarily by evaluating a boolean predicate; therefore, the existing two enumerators do not apply. This is again fully consistent with the direction in \cite{P3100R1} as well as with \cite{P3081R1} and \cite{P3599R0}, which both propose new values for \tcode{detection_mode()} for the new failure modes introduced by those papers.
+
+The numeric values of the enumerators do not carry any special meaning (see \cite{P3327R0}, Section 3.4 for rationale), so it does not matter very much how we choose them. Here, we propose to make \tcode{assertion_kind::implicit} first in the list (value  \tcode{1}), because implicit contract assertions are the only ones that are \emph{not} introduced by a syntactic specifier and thus are distinct from all other kinds of assertions, including kinds we might add in C++29 or later, such as class invariants and procedural interfaces. However, if a breaking change to \cite{P2900R13} is not desired, we might as well  append it to the list by giving it the value \tcode{4}. As for \tcode{detection_mode}, any proposal adding a new detection mode to the Contracts framework, including this one, should simply append them to the list.
+
+\subsection{Replacing the ``Damocles semantic'' by ``sticky'' erroneous values}
+\label{damocles}
+
+With erroneous behaviour as specified today, a program effectively enters an ``erroneous state'' once any erroneous behaviour happens, and the program may be unceremoniously terminated at any point after that.  The expectation is that it will be either reasonably soon or never, but the specification gives significantly more freedom to the implementation, making it much harder to reason about the behaviour of the program.
+
+We, as a community, are lucky enough to already have implementations that identify and trap on uses of uninitialised values.
+ The implementation of such checks is often done as instrumentation of compiled code, and the mapping of code in C++ to post-optimization machine instructions can often be unintuitive.  In particular, the exact place where a read of an erroneous value occurs can be rolled into many subsequent operations, and it is those subsequent operations where a diagnostic could potentially be emitted, not the initial read.  The case that can actually be caught is often a branch that occurs whose condition is dependent on an uninitialized value, and that branch might be very far removed from where the first read of the uninitialized value occurs in the abstraction machine. 
+This implementation strategy is the original motivation for the current specification of erroneous behaviour as introduced by \cite{P2795R5}.
+
+On the other hand, no real-world implementation will notice an uninitialised read and then set a timer, wait an arbitrary time, and terminate the program while it is doing something completely unrelated.  The specification of erroneous behaviour today allows this choice unnecessarily. It also prevents consistency in semantics between erroneous values and other types of implicit contract violations.
+
+To fix this issue while retaining compatibility between the specification and existing implementations, we propose that erroneous values be ``sticky'' in a way that they are not today.  The specification today takes the approach that once you read an erroneous value the value itself is then ``cleaned'' and no longer toxic, but comes with the downside that all following program behaviour is now erroneous and thus at risk of termination.    By having erroneous values propagate with the data, however, we can extend the scope of the problematic data sufficiently to cover all realistic implementations while avoiding the more toxic threat of eventual and surprising termination at a later date.
+
+In practice, we do not expect the erroneous of a value to transport beyond a single function or translation unit, but we should still allow for that possibility if an adventurous platform chooses to do so.   Therefore, we simply make any operation whose result is dependent on an erroneous value produce an erroneous value. Each such operation will fail its implicit postcondition assertion that the value produced is not erroneous, but as per the \cite{P2900R13} model of implementation-defined choice of evaluation semantic, the implementation is free to evaluate any of these implicit postcondition assertions with the \emph{ignore} semantic. A program is therefore free to discard all such data and move on. Such a program is now no longer under threat of unexpected termination, while leaving us maximal flexibility for identifying the bug when it is most convenient to do so.
+
+\subsection{Interaction with \tcode{noexcept}}
+
+Consider:
+\begin{codeblock}
+bool f() {
+  int x;
+  return noexcept(x + 1);
+}
+\end{codeblock}
+In C++ today, calling \tcode{f()} has defined behaviour (the indeterminate value is never accessed; the operand of \tcode{noexcept} is an unevaluated operand) and returns \tcode{true} (adding two integers can never throw an exception unless the behaviour is undefined). If we want to avoid breaking changes to the existing language, the result of the \tcode{noexcept} operator must remain the same with this proposal.
+
+However, since \tcode{x} has an erroneous value, evaluating \tcode{x + 1} may call the contract violation handler, which may throw an exception.\footnote{\cite{P3577R0} proposes that the \emph{default} contract-violation handler should be normatively prohibited from exiting via an exception, however a \emph{user-defined} contract-violation handler is still free to do so. Unwinding the stack in response to a contract violation is not expected to be a very common strategy, but it has important use cases (see \cite{P3318R0}).} With this proposal, it is therefore no longer true that \tcode{x + 1} can never throw an exception unless the behaviour is undefined.
+
+A detailed discussion of this problem can be found in \cite{P3541R1}. The possible solutions broadly fall into three categories: either accept the breaking change to the \tcode{noexcept} operator, or do not allow throwing violation handlers for implicit contract assertions, or redefine the  meaning of the \tcode{noexcept} operator to be ``can never throw an exception \emph{unless there is a contract violation}''. SG21 discussed this problem at great length and achieved consensus that the only acceptable solution is the last one. We follow this decision in this paper.
+
+It is therefore possible for an implicit contract assertion to call a throwing contract-violation handler when violated, and for the evaluation of the expression to exit via that exception, even if the \tcode{noexcept} operator returns \tcode{true} for that expression.
+
+Note that this design is fully consistent with \cite{P3081R1} and \cite{P3599R0} which propose the same behaviour for implicit contract assertions inserted by the implementation to check for out-of-bounds access into an array, null pointer dereference, and signed integer overflow.
+
+\subsection{Constant evaluation}
+
+The change proposed here makes it impossible to SFINAE on whether an expression results in an erroneous value. Such compile-time branching on the presence of a bug should never be allowed; a detailed rationale can be found in \cite{P2900R13} Section 3.1, which enshrines this design principle in the so-called \emph{Contracts Prime Directive}.
+
+In \cite{P2900R13}, when an explicit contract assertion is encountered during constant evaluation, it can be \emph{ignored} (the predicate is not evaluated at all), \emph{observed} (if the predicate does not evaluate to \tcode{true}, a compiler warning is issued), or \emph{enforced} (if the predicate does not evaluate to \tcode{true}, the program is ill-formed).
+
+Explicit contract assertions are user-authored and have important use cases for all three evaluation semantics. The \emph{ignore} semantic is useful in code bases where constant evaluation of all contract predicates would have a prohibitively costly impact on compile time, while the \emph{observe} semantic is useful when the author is not yet confident about the correctness of the check itself and wishes to avoid running the risk of breaking the build.
+
+On the other hand, implicit contract assertions do not fall into either category. We can therefore remove the possibility to SFINAE on whether an expression results in an erroneous value while preserving the property of the current C++26 WD that during constant evaluation, an erroneous value can never be produced. We achieve this by specifying that during constant evaluation, implicit contract assertions can only be evaluated with the \emph{enforce} semantic. In other words, if any implicit contract assertions fails during constant evaluation, the program will be straight up ill-formed.
+
+\subsection{Effect on in-progress erroneous behaviour papers}
+
+There are two in-progress papers on erroneous behaviour that are affected by this proposal.
+
+\cite{P2973R0} ``Erroneous behaviour for missing return from assignment'' proposes that flowing off the end of a copy or move assignment operator results in erroneous behaviour and is erroneously equivalent to a return with operand \tcode{*this}. With this proposal, we can equivalently specify this behaviour by saying that flowing off the end of a copy or move assignment operator is equivalent to a return with operand \tcode{*this} preceded by an implicit contract assertion whose predicate is \tcode{false}.
+
+\cite{P3232R1} ``User-defined erroneous behaviour'' proposes a new Standard Library function \tcode{std::erroneous()} which invokes erroneous behaviour when called and has no effect otherwise. With this proposal, a call to \tcode{std::erroneous()} becomes essentially obsolete as it is exactly equivalent to \mbox{\tcode{contract_assert(false)}}. We might still consider adopting \tcode{std::erroneous()} as a mechanism to express a particular intent, much like \tcode{std::unreachable()} expresses a particular intent while being exactly equivalent to \mbox{\tcode{[[assume(false)]]}}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Proposed wording}
+
+The wording changes proposed in this section are relative to the C++ Working Draft \cite{N5001} with the changes proposed in \cite{P2900R13} (Contracts) already applied. 
+
+% TD: TODO: Josh: any wording related to the change in meaning of the noexcept operator is still missing from the paper because I don't know what to do. It looks like wording for this is being drafted on-the-fly by various parties on the reflector. Can you add something reasonable for now, in the appropriate place? Thanks!
+
+Replace ``contract assertion'' with ``explicit contract assertion'' in all places in the wording that do not apply to implicit contract assertions.  This complete list will be reproduced when a core-approved version of the wording in \cite{P2900R13} is available.
+
+Modify [defns.erroneous]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\textbf{erroneous behavior}
+
+well-defined behavior that \removed{the implementation is recommended to diagnose}\added{follows the violation of an implicit contract assertion ([basic.contract.general])}.
+
+[ \emph{Note to entry:} Erroneous behavior is always the consequence of incorrect program code. \removed{Implementations are allowed, but not required, to diagnose it ([intro.compliance.general]).}\added{The contract violation that precedes the erroneous behavior can aid in diagnosing the defect, depending on the chosen evaluation semantic ([basic.contract.eval]).} Evaluation of a constant expression ([expr.const]) never exhibits \removed{behavior specified as erroneous in Clause 4 through Clause 15}\added{erroneous behaviour}.--- \emph{end note} ]
+\end{adjustwidth}
+
+Modify [intro.abstract]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A conforming implementation executing a well-formed program shall produce the same observable behavior as one of the possible executions of the corresponding instance of the abstract machine with the same program and the same input. However, if any such execution contains an undefined operation, this document places no requirement on the implementation executing that program with that input (not even with regard to operations preceding the first undefined operation). \removed{If the execution contains an operation specified as having erroneous behavior, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution at an unspecified time after that operation.}
+
+%JMB: Here i thikn we want something like this to replace the previous sentence: Any operation specified as having erroneous behavior is immediately preceded by an implicit contract assertion ([basic.contract.implicit]) whose predicate identifies when that behavior will occur.
+%TD: I'm not sure. This is what you would want to do if you actually want to define the individiual behaviours as erroneous throughout the Standard. That's not my understanding of what we want to do - we want to actually define the implicit contract assertion on the operation. Given that, I'm not sure what this sentence would add?
+
+\removed{\emph{Recommended practice:} An implementation should issue a diagnostic when such an operation is executed.}
+
+\removed{[ \emph{Note:} An implementation can issue a diagnostic if it can determine that erroneous behavior is reachable under an implementation-specific set of assumptions about the program behavior, which can result in false positives. --- \emph{end note} ]}
+\end{adjustwidth}
+
+Modify [basic.contract.general] as follows:
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Contract assertions \removed{allow the programmer to }specify properties of the state of the program that are expected to hold at certain points during execution.
+
+\added{\emph{Explicit} c}\removed{C}ontract assertions are introduced by \emph{precondition-specifier}s, \emph{postcondition-specifier}s ([dcl.contract.func]), and \emph{assertion-statement}s ([stmt.contract.assert]). \added{\emph{Implicit} contract assertions are inserted into the program by the implementation as specified in this document.}
+
+Each contract assertion has a \emph{predicate}, which is an expression of type \tcode{bool}. [ \emph{Note:} The value of the predicate is used to identify program states that are expected. --- \emph{end note} ]
+\end{adjustwidth}
+
+Modify [basic.contract.eval]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+An evaluation of a contract assertion uses one of the following four \emph{evaluation semantics}: \emph{ignore}, \emph{observe}, \emph{enforce}, or \emph{quick-enforce}. Observe, enforce, and quick-enforce are checking semantics; enforce and quick-enforce are terminating semantics.
+
+Which evaluation semantic is used for any given evaluation of a contract assertion is implementation-defined. [ \emph{Note:} The evaluation semantics can differ for different evaluations of the same contract assertion, including evaluations during constant evaluation. --- \emph{end note} ]
+
+\added{During constant evaluation, implicit contract assertions are always evaluated with the enforce semantic. [ \emph{Note:} Therefore, evaluation of a constant expression ([expr.const]) never exhibits a violation of an implicit contract assertion. --- \emph{end note} ]}
+% TD: Josh: This note looks a bit weird now with the addition before it. Any idea how to improve it?
+% JMB: Eh, it doesn't look particularly weird to me.  We could put it in between the two sentences instead, and i think that'd address the weirdness you see, but i think i like that ordering less.
+
+\emph{Recommended practice:} An implementation should provide the option to translate a program such that all evaluations of \added{explicit }contract assertions use the ignore semantic as well as the option to translate a program such that all evaluations of \added{explicit }contract assertions use the enforce semantic. By default, evaluations of \added{explicit }contract assertions should use the enforce semantic.
+% TD: Josh: That recommended practice also no longer works because we now recommend that the implementation should provide something that we say shall never happen in the previous paragraph. But carving out an exception for implicit contract assertions during constant evaluation right here also seems really ugly. Do you have any better idea?
+% JMB: I think just make this about explicit contract assertions.  I don't think we need to invite spending even more time discussing recommended practices.
+\end{adjustwidth}
+
+Modify [basic.indet] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\begin{addedblock}
+The evaluation of any builtin operation includes an implicit postcondition assertion ([basic.contract.general])
+that it does not produce an erroneous value.  Except in the following cases,
+if any operand of a built-in operator is erroneous then the value
+produced by that operator is erroneous:
+\begin{itemize}
+\item  If the built-in operation is \tcode{*} or \tcode{\&} and the other operand is a non-erroneous zero value.
+\item  If the built-in operation is \tcode{|} and the other operand is a non-erroneous value whose base-2 representation all of whose coefficients are \tcode{1}.
+% do we also allow a-a to be non-erroneous?  nah.
+\end{itemize}
+\end{addedblock}
+%JMB: We might improve the wording later if we don't add to the list, but at the moment this is the list i've got.
+%     I'm still mulling over whether we want to allow some form of laundering of erroneous values with
+%     byte arrays, but I keep coming down on the side of "no, that's silly, we shouldn't" and so the only thing
+%     left is expressions whose result does not depend on the value. 
+
+Except in the following cases,
+if an indeterminate value is produced by an evaluation,
+the behavior is undefined
+ and if an erroneous value is produced by an evaluation
+\removed{, the behavior is erroneous and}
+the result of the evaluation is the value so produced \removed{but is not erroneous}
+\added{and it is erroneous}:
+
+\begin{itemize}
+\item ...
+\end{itemize}
+Converting an indeterminate or erroneous value of
+unsigned ordinary character type or \tcode{std::byte} type
+produces an indeterminate or erroneous value, respectively.
+In the latter case,
+the result of the conversion is the value of the converted operand.
+
+\end{adjustwidth}
+
+Modify [expr.const], paragraph 10:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+An expression $E$ is a \emph{core constant expression} unless the evaluation of $E$, following the rules of the abstract machine ([intro.abstract]), would evaluate one of the following:
+\begin{itemize}
+\item ...
+\item an operation that would have undefined \removed{or erroneous }behavior as specified in Clause 4 through Clause 15;
+\item ...
+\end{itemize}
+\end{adjustwidth}
+
+Modify [dcl.attr.indet], paragraph 3:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+[ \emph{Note:} Reading from an uninitialized variable that is marked \tcode{[[indeterminate]]} can cause undefined behavior.
+\begin{adjustwidth}{0.3cm}{0.3cm}
+\tcode{void f(int);}\\
+\tcode{void g() \{}\\
+\codetab \tcode{int x [[indeterminate]], y;}\\
+\codetab \tcode{f(y);} \codelongtab \emph{// \removed{erroneous behavior}\added{contract violation} ([basic.indet])}\\
+\codetab \tcode{f(x);} \codelongtab \emph{// undefined behavior}\\
+\tcode{\}} \\
+\\
+\tcode{[...]}
+\end{adjustwidth}
+--- \emph{end note} ]
+\end{adjustwidth}
+
+Modify [nullablepointer.requirements], paragraph 2:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A value-initialized object of type \tcode{P} produces the null value of the type. The null value shall be equivalent only to itself. A default-initialized object of type \tcode{P} may have an indeterminate or erroneous value.
+
+\emph{Note:} Operations involving indeterminate values can cause undefined behavior, and operations involving erroneous values can cause \removed{erroneous behavior}\added{contract violations} ([basic.indet]).--- \emph{end note} ]
+\end{adjustwidth}
+
+%Modify [bit.cast], paragraph 2:
+%
+% \begin{adjustwidth}{0.5cm}{0.5cm}
+% For each bit $b$ in the value representation of the result that is indeterminate or erroneous, let $u$ be the smallest object containing that bit enclosing $b$:
+% \begin{itemize}
+% \item  If $u$ is of unsigned ordinary character type or \tcode{std::byte} type, $u$ has an indeterminate value if any of the bits in its value representation are indeterminate, or otherwise has an erroneous value.
+% \item Otherwise, if $b$ is indeterminate, the behavior is undefined.
+% \item Otherwise, \removed{the behavior is erroneous}\added{an implicit contract violation ([basic.contract]) occurs}, and the result is as specified above.
+%
+% TD: Josh, I don't like this idea of introducing an implicit contract assertion for a library function. That seems wrong. Do you have any other ideas what we can do here without a breaking change to std::bit_cast?
+% JMB: I think we would want to introduce the idea into the library of having preconditions that only lead to erroneous behavior, not undefined behavior, but as the library now stands we don't have that concept.   I also don't think we want to say a violation occurs, but rather that there is an implicit contract assertion that this does not occur.  (This reads now like it says the check is never ignored).   If we keep the idea of saying that saying behavior is erroneous preoduces an implicit contract assertion preceding it then we can leave this wording unchange,d i think, for now.
+% TD: I'm not yet convinced of that idea, we need to discuss this first. But perhaps it's best to just remove these library wording changes anyway and then figure it out in LEWG when the time comes.
+%
+%\end{itemize}
+%The result does not otherwise contain any indeterminate or erroneous values.
+%\end{adjustwidth}
+
+Modify [contracts.syn]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{// all freestanding} \\
+\tcode{namespace std::contracts \{} \\
+\\
+\codetab \tcode{enum class assertion_kind : \emph{unspecified}} \\
+\codetab \codetab \added{\tcode{implicit = 1,}} \\
+\codetab \codetab \tcode{pre = \removed{1}\added{2},} \\
+\codetab \codetab \tcode{post = \removed{2}\added{3},} \\
+\codetab \codetab \tcode{assert = \removed{3}\added{4}} \\
+\codetab \tcode{\};} \\
+\\
+\codetab \tcode{[...]} \\ 
+\\
+\codetab \tcode{enum class detection_mode : \emph{unspecified}} \\
+\codetab \codetab \tcode{predicate_false = 1,} \\
+\codetab \codetab \tcode{evaluation_exception = 2\added{, }} \\
+\codetab \codetab \tcode{\added{erroneous_value = 3}} \\
+\codetab \tcode{\};} 
+\end{adjustwidth}
+
+Modify [support.contracts.enum.kind]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The enumerators of \tcode{assertion_kind} correspond to the possible syntactic forms of a contract assertion ([basic.contract]):
+\begin{itemize}
+\item \tcode{\added{assertion_kind::implicit}}\added{: the evaluated contract assertion was an implicit contract assertion.}
+\item \tcode{assertion_kind::pre}: the evaluated contract assertion was a\added{n explicit} precondition assertion.
+\item \tcode{assertion_kind::post}: the evaluated contract assertion was a\added{n explicit} postcondition assertion.
+\item \tcode{assertion_kind::assert}: the evaluated contract assertion was an\added{ explicit} assertion-statement.
+\end{itemize}
+\end{adjustwidth}
+
+Modify [support.contracts.enum.detection]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The enumerators of \tcode{detection_mode} correspond to the manners in which a contract violation ([basic.contract.eval]) can be identified:
+\begin{itemize}
+\item \tcode{detection_mode::predicate_false}: the contract violation occurred because the predicate evaluated to \tcode{false} or would have evaluated to \tcode{false}.
+\item \tcode{detection_mode::evaluation_exception}: the contract violation occurred because the evaluation of the predicate exited via an exception.
+\item \tcode{\added{detection_mode::erroneous_value}}\added{: the contract violation occurred because an erro\-neous value was encountered.}
+\end{itemize}
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgements}
+Thanks to Roger Orr for his helpful feedback on the first revision of this paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Revision History}
+\textbf{R0 $\rightarrow$ R1}: 
+\begin{itemize}
+\item No longer proposing to remove the term \emph{erroneous behaviour}
+\item Fixed code example
+\item Editorial changes
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\pagebreak
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}
+
+%TODO: clarify that quick-enforce could also issue a diagnostic
+% TD: What? Why? I thought the whole point of quick-enforce is that it terminates but does nothing else? 
+
+%TODO: clarify how in-progress erroneous behavior papers would be addressed
+% TD: I added a section about that above, please check
+
+%TODO: make "the behavior is erroneous if" equivalent to "there is an implicit contract assertion <blah>" and keep erroneous behavior definition?
+% TD: I believe I have done this above!
+
+%TODO: clarify that no SFINAE on erroneous behavior is to follow the prime directive, make that connection to motivate.
+% TD: Isn't that already there (Section 2.6)? Please check if anything there is missing?

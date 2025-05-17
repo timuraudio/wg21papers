@@ -1,0 +1,123 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+ 
+ % Start sections at 0
+ \setcounter{section}{-1}
+
+\begin{document}
+\title{\tcode{noexcept} policy for SD-9 (The Lakos Rule)}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})  \\
+John Lakos \small(\href{mailto:jlakos@bloomberg.net}{jlakos@bloomberg.net})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P3155R0 \\
+Date: &2024-02-15 \\
+Project: & Programming Language C++ \\
+Audience: & LEWG
+\end{tabular}
+
+%\begin{abstract}
+%TODO DO WE NEED ONE?
+%\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Motivation and context}
+\label{sec:intro}
+
+
+A long-standing design principle in the C++ Standard Library has been that a function having a narrow contract --- that is, a function specified to have \emph{preconditions} --- should not be declared \tcode{noexcept}, even if it is known to never throw an exception when called in-contract (without violating the preconditions). When we are convinced that a function having a narrow contract cannot throw when called in-contract, it should instead be specified as \emph{Throws: nothing}. This design principle is also known as the \emph{Lakos Rule}.
+
+The Lakos Rule was first proposed in \cite{N3248} and adopted with \cite{N3279}. An updated version of the rule was codified into policy in \cite{P0884R0}. See \cite{O'Dwyer2018} for a more detailed summary.
+
+More recently, \cite{P1656R2} argued that the Lakos Rule should be abandoned as a design principle. According to this paper, functions that are known to never throw an exception for a valid combination of input values and accessible state should always be declared \tcode{noexcept}, regardless of whether they have a wide or a narrow contract. Further, \cite{P2148R0} proposed adopting a set of design policies for the evolution of the C++ Standard Library that moves away from the Lakos Rule. While such a policy has not been formally adopted, LEWG recently moved away from adhering to the Lakos Rule, and instead considers whether a function having a narrow contract should be \tcode{noexcept} on a case-by-case basis.
+
+We believe that we should consider retaining the Lakos Rule as a design policy for the C++ Standard Library. There are a number of important engineering reasons why the Lakos Rule is still useful and important today; abandoning it would inflict avoidable damage to the C++ language. To argue this case, we published two papers, \cite{P2831R0} and \cite{P2861R0}, in the May 2023 committee mailing, to be presented at the Varna meeting in June 2023. However, neither paper was scheduled for discussion in LEWG at the Varna meeting, nor at the following meeting in Kona in November 2023.
+
+Instead of considering our papers, LEWG has decided that we should first generally agree on a process for adopting design policies for the C++ Standard Library. Most recently, LEWG has agreed on a new framework to adopt such design policies (see \cite{P2267R1}) and to publish them in a new standing document, SD-9. This framework allows us to finally decide on actual design policies, which are meant to be adopted via policy papers. \cite{P2267R1} sets out a number of requirements that such policy papers must satisfy in order to be considered by LEWG. \cite{P2831R0} and \cite{P2861R0} have not been written with those requirements in mind, because they have been published before \cite{P2267R1} was adopted. The purpose of the present paper is to satisfy the requirements in \cite{P2267R1} and serve as an ``envelope paper'' for \cite{P2831R0} and \cite{P2861R0} to make them admissible for discussion in LEWG.
+
+Most recently, another paper \cite{P3005R0}, rather than proposing a concrete \tcode{noexcept} policy, proposed a \emph{process} how to agree on such a policy. \cite{P3005R0} considers seven possible candidate \tcode{noexcept} policies, six design questions that would need to be answered to choose one of those policies, and lists 20 design principles that can help us find the correct answers to those questions by following the Principled-Design methodology. We believe that the process described in \cite{P3005R0} is an excellent way to resolve the current disagreements on a \tcode{noexcept} policy in LEWG. However, since \cite{P3005R0} proposes a process for decision-making rather than a single concrete policy, it also does not fit into the requirements for a policy paper in \cite{P2267R1}. We therefore consider the present paper to be an ``envelope paper'' for  \cite{P3005R0} as well.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Rationale}
+\label{sec:rationale}
+
+The rationale for retaining the Lakos Rule as a design policy has been thoroughly explored in our previous papers, \cite{P2831R0} and \cite{P2861R0}, and is further analysed in detail in \cite{P3005R0}. We therefore refer the reader to those papers and references therein.
+
+In short, the Lakos Rule is essential for implementing non-terminating recovery (an important requirement in some systems) and negative testing (the only known alternative to exception-based negative testing, death tests, is neither scalable nor portable). Independently from that, in API design, adhering to the Lakos Rule is a requirement for being able to widen the contract of a function without breaking backwards-compatibility. Finally, the Lakos Rule is foundational for Contracts, a new language feature targeting C++26 (see \cite{P2900R5}) which is currently in design review. In addition, nearly 15 years of experience with \tcode{noexcept} have shown that applying it superfluously in the Library, beyond its original intended use, can be highly detrimental to writing safe and reliable software, while the claimed benefits of doing so generally do not hold up to scrutiny.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Prior art in the C++ Standard}
+\label{sec:intro}
+
+The C++ Standard Library has been mostly following the Lakos Rule as a design principle since C++11, the standard that added \tcode{noexcept} to the language, but exceptions do exist. A detailed survey of the prior art in the C++ Standard will be provided in a future revision of this paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Status quo in the wider C++ community}
+\label{sec:intro}
+
+Community surveys such as the JetBrains Developer Ecosystem survey, the Meeting C++ Community Survey, and the Standard C++ Foundation's Annual C++ Developer Survey consistently show that about half of C++ developers work on codebases where exceptions are either partially or completely banned from use; for the latter in particular, the \tcode{noexcept} policy is of little relevance.
+
+Codebases that do use exceptions fall into different camps: many C++ libraries generously sprinkle \tcode{noexcept} all over their code, while codebases that portably use techniques like non-terminating recovery and negative testing adhere to the Lakos Rule in their own code (see \cite{P2831R0} for case studies of several companies with such codebases). We expect the use of such techniques to become significantly more widespread with the adoption of Contracts for C++ (\cite{P2900R5}). The three major implementations of the C++ Standard Library (GCC, Clang, and Microsoft) do not use the Lakos Rule and generally tighten \emph{Throws: nothing} to \tcode{noexcept}, making them incompatible with these techniques; other implementations of the Standard Library, or parts of it, such as Bloomberg's BDE, follow the Lakos Rule.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Proposed policy}
+\label{sec:policy}
+
+We propose to retain the policy we already have: the one described in \cite{P0884R0}, refining the previous rules in \cite{N3279}. The policy consists of the following rules, which includes the Lakos Rule:
+\begin{enumerate}[label=\alph*)]
+\item No library destructor should throw. They shall use the implicitly supplied (nonthrowing)
+exception specification.
+\item If a library function has a wide contract (i.e., does not specify undefined behavior due to a precondition), it should be marked as unconditionally \tcode{noexcept} if it cannot throw; if it has a narrow contract, it should be specified as \emph{Throws: Nothing} if it cannot throw when called in-contract.
+\item If a library swap function, move-constructor, or move-assignment operator is
+conditionally-wide (i.e. can be proven to not throw by applying the \tcode{noexcept} operator)
+then it should be marked as conditionally \tcode{noexcept}.
+\item If a library type has wrapping semantics to transparently provide the same behavior as
+the underlying type, then default constructor, copy constructor, and copy-assigment
+operator should be marked as conditionally \tcode{noexcept} matching the underlying exception
+specification.
+\item No other function should use a conditional \tcode{noexcept} specification.
+\item Library functions designed for compatibility with C code (such as the atomics facility)
+may be marked as unconditionally \tcode{noexcept}. 
+\end{enumerate}
+Note that this set of rules corresponds to Policy C in \cite{P3005R0}, which considers seven possible \tcode{noexcept} policies B-H in addition to the null policy A (``no policy''). We believe that all these policies should be considered, via the process proposed in \cite{P3005R0}, in order to be confident that we are adopting the correct one.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Rationale for adopting a policy}
+\label{sec:rationale_adopt}
+
+The placement of \tcode{noexcept} in the C++ Standard Library has been a hotly debated topic in recent years, taking up a considerable amount of Committee time. Adopting a formal policy on this matter would put the debate to rest and help maintain a coherent design for the C++ Standard Library going forward. Adopting the policy sooner rather than later would reduce the amount of newly introduced Standard Library functions incompatible with the Lakos Rule that would have to be retroactively fixed via Defect Reports. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Proposed wording}
+\label{sec:wording}
+
+Append to ``List of Standard Library Policies'' section of SD-9 the items a) --- f) enumerated in Section \ref{sec:policy} above.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\pagebreak % MANUAL
+
+\section*{Acknowledgements}
+We wish to express our gratitude to the late Ed Catmur, co-author of \cite{P2831R0}, for his valuable contributions to this effort until his tragic death during a fell run on 31 December 2023.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

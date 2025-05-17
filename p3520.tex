@@ -1,0 +1,453 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+% Proposal color boxes
+\definecolor{proposalBG}{RGB}{147,112,219}
+
+\newcounter{proposalnum}
+\newtcbtheorem[use counter=proposalnum]{proposal}
+              {Proposal}
+              {colback=proposalBG!20!white,colbacktitle={proposalBG!40!white},coltitle={black}}
+              {prop}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Contracts for C++: Wroc\l aw technical fixes}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+Andrzej Krzemie\' nski \small(\href{mailto:akrzemi@gmail.com}{akrzemi@gmail.com}) \\
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P3520R0 \\
+Date: &2024-11-21 \\
+Project: & Programming Language C++ \\
+Audience: & SG21, EWG
+\end{tabular}
+
+\begin{abstract}
+During CWG wording review of Contracts \cite{P2900R11} at the November 2024 Wroc\l aw meeting a number of minor issues were brought up. This paper discusses them and proposes resolutions.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Specify the mode of termination}
+
+The current wording in \cite{P2900R11} specifies that if a contract violation occurs while evaluating a contract assertion with the enforce or quick-enforce semantic, ``the program is terminated in an implementation-defined fashion''.
+
+According to CWG, this specification is insufficient to determine which modes of termination are conforming. CWG is asking to enumerate the specific modes of termination that a conforming implementation is allowed to choose between.
+
+The following modes of termination exist in C++ today (ordered by severity):
+
+\begin{enumerate}
+\item \tcode{std::exit} --- Normal program termination with full cleanup
+\item \tcode{std::quick_exit} --- Normal program termination, but with less cleanup
+\item \tcode{std::_Exit} --- Normal program termination with minimal cleanup
+\item \tcode{std::terminate} --- Abnormal program termination, the C++ way
+\item \tcode{std::abort} --- Abnormal program termination, the C way
+\item \tcode{__builtin_trap}, \tcode{__builtin_verbose_trap}, \tcode{ __fastfail}, \tcode{__debugbreak}, etc. --- Implementation-defined abnormal termination modes with no cleanup
+\end{enumerate}
+
+These modes of termination perform the following actions (a question mark denotes that it is implementation-defined whether the action happens):
+
+%%%%%%%%%%%%%%%%%%%%
+\pagebreak
+%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\yes}{\includegraphics[width=4mm]{images/yes.png}}
+\newcommand{\no}{\includegraphics[width=4mm]{images/no.png}}
+\newcommand{\maybe}{\includegraphics[width=4mm]{images/maybe.png}}
+%\vspace{4mm}
+\begin{table}[h!]
+\begin{tabular}{|p{8cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|p{0.9cm}|}
+\hline 
+& 1 & 2 & 3 & 4 & 5 & 6 \\
+\hline
+Can be used for normal termination that returns \tcode{0} to the host environment & \yes & \yes  & \yes  & \no & \no & \no\\ \hline
+Calls destructors of static and thread local objects & \yes & \no  & \no  & \no & \no & \no\\ \hline
+Calls callback functions that can be defined by the user & \yes & \yes  & \no  & \yes & \yes & \no\\ \hline
+Flushes and closes streams, removes temporary files & \yes & \maybe  & \maybe  & \maybe & \maybe & \no\\ \hline
+\end{tabular}
+\end{table}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+The callback functions called vary by each termination mode. \tcode{std::exit} calls functions registered with \tcode{std::atexit}. \tcode{std::quick_exit} calls functions registered with \tcode{std::at_quick_exit}. \tcode{std::terminate} calls the currently installed \tcode{std::termination_handler}; the default handler calls \tcode{std::abort}. \tcode{std::abort} raises a \tcode{SIGABRT} signal which may be caught by an appropriate signal handler.
+
+\tcode{std::exit} is called when \tcode{main} returns. \tcode{std::_Exit} is called by \tcode{std::exit} and \tcode{std::quick_exit} after they have performed their respective cleanup actions. \tcode{std::terminate} is usually called when an unrecoverable error occurs during exception handling, but has a few other notable use cases, e.g., destroying a joinable \tcode{std::thread}. \tcode{std::abort} is called by a failing \tcode{cassert}. All termination modes can be directly invoked by the user.
+
+All termination modes except 6 call into a C or C++ standard library function, however an implementation is free to perform the actions equivalent to such a call without actually performing the call and thus without having to link in the standard library.
+
+In all cases, termination after a contract violation results from a \emph{defect} in the program; therefore, only the three abnormal modes of termination are appropriate. In addition, these three modes are exactly the options compiler vendors have requested or are already using for implementing of \cite{P2900R11}. Therefore, we propose to allow exactly these options.
+
+Proposed wording relative to \cite{P2900R11}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\begin{addedblock}
+When the program is \emph{contract-terminated}, depending on context:
+\begin{itemize}
+\item \tcode{std::terminate} is called,
+\item \tcode{std::abort} is called,
+\item execution is terminated.
+\end{itemize}
+\begin{note}
+Performing the actions of \tcode{std::terminate} or \tcode{std::abort} without actually making a library call is a conforming implementation of contract-terminating ([intro.abstract]).
+\end{note}
+\end{addedblock}
+
+If a contract violation occurs in a context that is not manifestly constant-evaluated and the evaluation semantic is quick-enforce, the program is \removed{terminated in an implementation-defined fashion}\added{contract-terminated}. [...] If the contract-violation handler returns normally and the evaluation semantic is enforce, the program is \removed{terminated in an implementation-defined fashion}\added{contract-terminated}.
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%
+\pagebreak
+%%%%%%%%%%%%%%%%%%%%
+
+\section{Disallow lambdas inside contract redeclarations}
+
+The current wording in \cite{P2900R11} specifies that the function contract assertion sequence of a function can be repeated on a redeclaration if all repetitions consist of the same function contract
+specifiers in the same order. A function contract specifier $c1$ on a function declaration $d1$ is  the same as a function contract specifier $c2$ on a function declaration $d2$ if they are of the same assertion kind (\tcode{pre} or \tcode{post)}) and  their predicates $p1$ and $p2$ would
+satisfy the one-definition rule (odr) if placed in an imaginary function body on the declarations $d1$
+and $d2$, respectively, except the names of function parameters, names of template parameters, and the result name may be different.
+
+This rule implies that the two lambda expressions that appear inside the predicates $p1$ and $p2$ are considered to be the same lambda expression if the odr considers the hypothetical function
+definitions containing those predicates to be the same:
+
+\begin{codeblock}
+void f() pre([]{ return true; }());
+void f() pre([]{ return true; }());  // OK
+\end{codeblock}
+
+However, if parameter names are involved, it might result in two lambdas that are not token-identical but would still have to be considered identical under the rule above, for example:
+
+\begin{codeblock}
+int f(int i, int j) pre([&](){ return i + j > 5 ; }());
+int f(int k, int l) pre([&](){ return k + l > 5 ; }());  // OK
+\end{codeblock}
+
+As it turns out, implementing the behaviour above requires unreasonable heroics both on the specification side and on the implementation side. If it is not sufficient to token-compare the lambdas, it becomes necessary to fully parse them, but in at least one compiler this cannot be done without creating a distinct closure type for each lambda. In addition, everywhere in the language specification lexically repeating a lambda declares a new lambda with a distinct closure type. We should not break this property.
+
+Completely banning lambda expressions from being used in contract assertions, or completely banning the repetition of contract assertions on redeclarations seems too harsh because there are important use cases for both (see \cite{P2890R2} and \cite{P3066R0}). The ideal compromise is to allow the repetition of contract assertions on redeclarations, but only if they do not contain a lambda:
+
+\begin{codeblock}
+void f() pre([]{ return true; }());  // OK
+void f() pre([]{ return true; }());  // error
+\end{codeblock}
+
+Proposed wording relative to \cite{P2900R11}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+A \emph{function-contract-specifier-seq} $s1$ is the same as a \emph{function-contract-specifier-seq} $s2$ if $s1$ and $s2$ consist of the same \emph{function-contract-specifier}s in the same order. A  \emph{function-contract-specifier} $c1$ on a function declaration $d1$ is the same as a \emph{function-contract-specifier} $c2$ on a function declaration $d2$ if their predicates ([basic.contract.general]), $p1$ and $p2$, would satisfy the one-definition rule ([basic.def.odr]) if placed in function definitions on the declarations $d1$ and $d2$, respectively, except for renaming of parameters, renaming of template parameters, and renaming of the result name ([dcl.contract.res]), if any. 
+
+\added{[\emph{Note:} If a \emph{lambda-expression} is a subexpression of $p1$, and $p1$ and $p2$ are in the same translation unit, they are not the same ([expr.prim.lambda]). --- \emph{end note}]}
+\end{adjustwidth}
+
+\section{Unify rules for parameters of dependent type}
+
+\cite{P3489R0} added the rule that a parameter odr-used in a postcondition assertion needs to be explicitly declared \tcode{const}, even if it is a dependent type and the type would be \tcode{const} anyway:
+
+\begin{codeblock}
+template <typename T>
+void f(T t) post (t > 0);  // error: parameter must be declared \tcode{const} here
+\end{codeblock}
+
+However, we overlooked that this also excludes parameters declared via a type alias of a \tcode{const} type, which is unfortunate. For example, the following code should be well-formed:
+
+\begin{codeblock}
+using const_int_t = const int;
+void f(const_int_t i) post (i > 0);  // error but should be OK
+\end{codeblock}
+
+There are also examples where the parameter is declared via a type alias that is itself dependent. This case should arguably also be well-formed:
+
+\begin{codeblock}
+template <typename T>
+void f(std::add_const_t<T> t) post(t > 0);  // error but should be OK
+\end{codeblock}
+
+Allowing the second and third example while making the first example ill-formed would require a peculiar carve-out. In light of this information, we recommend to revert the decision to choose Option D1 from \cite{P3489R0} and to choose Option D2 instead:
+\begin{codeblock}
+template <typename T>
+void f(T t) post (t > 0);  
+
+int main() {
+  f(1);              // error: deduced parameter type (\tcode{int}) is not \tcode{const}
+  f<int>(1);         // error: parameter type (\tcode{int}) is not \tcode{const}
+  f<const int>(1);   // OK
+}
+\end{codeblock}
+This option would also make the second and third example well-formed.
+
+Proposed wording relative to \cite{P2900R11}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a non-reference parameter of that function, \removed{all declarations of that parameter shall have a \tcode{const} qualifier}\added{the type of that parameter shall be \tcode{const}} and shall not have array or function type.
+
+\begin{note}
+This requirement applies even to declarations that do not specify the \emph{postcondition-specifier}. \added{The \tcode{const} qualifier of the parameter may be part of a dependent type. }Arrays and functions are still usable when declared with the equivalent pointer types ([dcl.fct]).
+\end{note}
+\end{adjustwidth}
+
+\section{Sequences of Evaluations and Repeated Evaluations}
+
+Previously, when we adopted multiple evaluations and elision,
+repeated evaluations of a contract assertion could happen
+after any number of following contract assertions
+and vacuous operations --- where vacuous operations included
+trivial initialisations and the passing of control
+across a function invocation boundary.
+
+As we have been wording this requirement, the specificity
+of defining such vacuous operations has come under further
+scrutiny and it is not obvious that we can produce a very
+clear definition that is both correct and useful.
+
+On the other hand, we have recently done a huge amount of
+work refining the mechanisms around evaluating precondition
+and postcondition assertions before and after parameters
+are passed to a function and control is transferred (\cite{P3487R0}).
+Due to that work, we now have a robust specification of how
+function contract assertions are evaluated that freely
+allows that sequence of evaluations to straddle the boundary
+between callers and callees.
+
+When considering the cases where we do want to allow repetition
+of contract assertion evaluations as an entire block,
+we have three primary use cases:
+\begin{itemize}
+\item{When a function is invoked, all of its caller-facing preconditions
+  are evaluated followed by all of its callee-facing preconditions.}
+\item{When a function returns, all of its callee-facing postconditions
+  are evaluated followed by all of its caller-facing postconditions.}
+\item{Within a function's body, multiple assertion statements might be
+  consecutive statements with no other statements between them.}
+\end{itemize}          
+In addition, there are more categories where we currently
+allow repetition that are not strictly needed:
+\begin{itemize}
+\item{When assertion statements are at the start of a function body,
+we currently consider them to be part of the same sequence of assertions
+as the preconditions of that function.}
+\item{Assertion statements that precede a function invocation (when
+that function's parameters have vacuous initialisation) are considered
+part of the same sequence as the preconditions of that function.}
+\item{When the first action in a function body is to invoke another
+function, the preconditions of both the enclosing and invoked function
+form a contract assertion sequence.}
+\item{Assertion statements may have trivially copyable or trivially initialised
+variables declared between and still remain part of a single sequence.}
+\item{The postconditions of one function may be part of a sequence
+with the preconditions of the next invoked function, although this is limited
+by not being able to happen if any function parameters or temporaries are
+destroyed when the first function finishes its invocation.}
+\end{itemize}
+
+The current proposal in \cite{P2900R11} makes all of the above situations
+contract assertion sequences, and thus any contract assertion at the start
+of such sequences may be repeated again at the end.
+
+We propose to instead limit contract assertion sequences to be only
+those cases where we clearly identify batches of contract assertions
+and then specify that they be evaluated at once.
+
+Consider the following invocations:
+\begin{codeblock}
+void f()
+  pre(pre1())
+  pre(pre2())
+  post(post1())
+  post(post2())
+{
+  contract_assert(ca1());
+  contract_assert(ca2());
+  int i = 0;
+  contract_assert(ca3(i));
+}
+void g()
+{
+  f(); // checks pre1(), pre2(), ca1(), ca2(), ca3(i), post1(), post2()
+  f(); // checks pre1(), pre2(), ca1(), ca2(), ca3(i), post1(), post2()
+}
+\end{codeblock}
+In the above, the current rules will produce one single contract
+assertion sequences for the two consecutive invocations
+of \tcode{f}:
+\begin{itemize}
+\item{
+ \tcode{pre1()}, \tcode{pre2()}, \tcode{ca1()}, \tcode{ca2()}, \tcode{ca3(i)}, \tcode{post1()}, \tcode{post2()},
+ \tcode{pre1()}, \tcode{pre2()}, \tcode{ca1()}, \tcode{ca2()}, \tcode{ca3(i)}, \tcode{post1()}, \tcode{post2()}
+}
+\end{itemize}
+
+Removing destructors for the allowed vacuous
+operations between contract sasertions changes this to be
+three contract assertion sequences due to the destruction of
+the automatic variable \tcode{i} that occurs when the
+function \tcode{f} returns:
+\begin{itemize}
+\item{
+ \tcode{pre1()}, \tcode{pre2()}, \tcode{ca1()}, \tcode{ca2()}, \tcode{ca3(i)}
+}
+\item{
+ \tcode{post1()}, \tcode{post2()}
+ \tcode{pre1()}, \tcode{pre2()}, \tcode{ca1()}, \tcode{ca2()}, \tcode{ca3(i)}
+}
+\item{
+  \tcode{post1()}, \tcode{post2()}
+}
+\end{itemize}
+
+Limitting contract assertion sequences to contract assertions
+that we explicitly evaluate in sequence, along with assertion
+statements that are consecutive further breaks this
+into the following $8$ sequences:
+\begin{itemize}
+\item{
+ \tcode{pre1()}, \tcode{pre2()}
+}
+\item{
+ \tcode{ca1()}, \tcode{ca2()}
+}
+\item{
+ \tcode{ca3(i)}
+}
+\item{
+ \tcode{post1()}, \tcode{post2()}
+}
+\item{
+ \tcode{pre1()}, \tcode{pre2()}
+}
+\item{
+ \tcode{ca1()}, \tcode{ca2()}
+}
+\item{
+ \tcode{ca3(i)}
+}
+\item{
+  \tcode{post1()}, \tcode{post2()}
+}
+\end{itemize}
+
+The specification of the above sequences as sequences
+and allowing repetition within them is very simple and based
+largely on wording we have already built elsewhere for how
+these contract assertions are evaluated.
+
+The particular thing we lose is the ability to take
+the check of \tcode{pre1()} at the start of the longer
+sequences and move them past, for examples, checks of
+\tcode{ca1()} in the first or even the second invocation of f().
+This does not seem particularly compelling to retain.
+
+Proposed wording relative to \cite{P2900R11}:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\removed{A \emph{contract assertion sequence} is a sequence of contract assertions that are consecutive.}\added{The following sets of contract assertions constitute a \emph{contract assertion sequence}:}
+\begin{addedblock}
+\begin{itemize}
+\item The caller-facing precondition assertions followed by the callee-facing precondition assertions that apply to a function call;
+\item The callee-facing postcondition assertions followed by the caller-facing postconidtion assertions that apply to a function call;
+\item Assertion statements that are consecutive statements.
+\end{itemize}
+\end{addedblock}
+
+At any point within a contract-assertion sequence, any previously evaluated contract assertion
+may be evaluated again with the same or a different evaluation semantic. Such repeated
+evaluations of a contract assertion may happen up to an implementation-defined number
+of times. [ Note: For example, all function contract assertions might be evaluated twice for
+a single function invocation, once in the caller’s translation unit as part of the invoking
+expression and once in the callee’s translation unit as part of the function definition. This
+allowance also extends to evaluations of contract assertions during constant evaluation.
+— end note ]
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Acknowledgements}
+%Thanks to Oliver Rosten for his review of the paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

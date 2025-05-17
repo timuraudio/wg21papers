@@ -1,0 +1,102 @@
+\input{wg21common}
+
+\begin{document}
+\title{Contracts, ODR-use, and constant evaluation}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D2885R0 \\
+Date: &2023-06-09 \\
+Project: & Programming Language C++ \\
+Audience: & SG21
+\end{tabular}
+
+\begin{abstract}
+This paper proposes a set of rules for ODR-use of entities inside contract-checking annotations, and for the behaviour of contract-checking annotations during constant evaluation. We believe that the specification proposed here for these cases is the most straightforward, the most consistent with the rest of the language, and least surprising to the user.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+For the Contracts MVP, we need to specify the compile-time and runtime behaviour of contract-checking annotations (CCAs) for all cases. This paper deals with two concrete aspects of this specification: under what circumstances entities that appear in a CCA should be ODR-used, and how CCAs should behave during constant evaluation.
+
+Both questions are also discussed in the appendices of \cite{P2834R1}. That paper introduces the design principles of ``build-mode independence'' and ``zero overhead for ignored predicates'', and then derives a set of rules for CCAs from those principles. While we agree with those principles, we believe that the set of rules for ODR-use and constant evaluation derived in the appendices of \cite{P2834R1} is somewhat overcomplicating the matter. In this paper, we propose a slightly different set of rules that we consider the most straightforward, most consistent with the rest of the language and least surprising to the user, while also being reasonably consistent with the design principles of \cite{P2834R1}.
+
+Note that SG21 has not yet settled on a syntax for CCAs. In the remainder of this paper, we use attribute-like syntax, however the proposal is independent of the choice of syntax and would work in the same way with lambda-like syntax or condition-centric syntax.
+
+Further, in the remainder of this paper, we follow \cite{P2877R0} and assume that for the Contracts MVP, the Standard will not define any ``build modes'', but instead that each CCA can have one of the following three contract semantics: \tcode{ignore}, \tcode{enforce}, or \tcode{observe}; which semantic applies is implementation-defined. We therefore use the term ``contract semantic'' instead of the term ''build mode'' throughout this paper. In the interests of considering the whole design space, we also consider a possible fourth semantic, \tcode{assume}, with the understanding that this semantic will \emph{not} be part of the Contracts MVP.
+
+In the remainder of this paper, we collectively refer to CCAs with \tcode{ignore} or \tcode{assume} semantics as \emph{unchecked} CCAs, and CCAs with \tcode{enforce} or \tcode{observe} semantics as \emph{checked} CCAs. Whenever we discuss an idea and do not specify to which contract semantics it applies, the implication is that it applies to all four possible semantics.
+
+\section{ODR-use}
+
+The first question is whether and under what circumstances entities that appear in a CCA should be ODR-used. ODR-use can trigger template instantiations and lambda captures. Through either of these two mechanisms, ODR-use of an entity can change both the compile-time behaviour and the run-time behaviour of a program, and is therefore directly observable by the user. Since we propose to allow CCAs on lambdas --- discussed in a companion proposal, \cite{P2890R0} --- both of these mechanisms can be triggered from a CCA. Consider the following pathological cases:
+
+\begin{codeblock}
+template <typename T>
+struct X {
+  static_assert(sizeof(T) > 1);
+  operator bool() { return true; }
+}
+
+void f()
+  [[pre: X<char>()]] // Should this always be ill-formed, or can it be ignored?
+{}
+
+auto g(int i) {
+  return sizeof( [=] [[pre: i > 0]] {});  // Should this return \tcode{1} or \tcode{sizeof(int)}?
+}
+\end{codeblock}
+
+Following the ``contract semantics independence'' principle from \cite{P2834R1}, the answer to both of those questions should be the same for all possible contract semantics, otherwise the program could potentially follow entirely different code paths depending on the contract semantic. We therefore propose that all entities inside CCAs are ODR-used, irrespective of contract semantic (checked or unchecked). In the example above, the declaration of \tcode{f} is always ill-formed, and \tcode{g} must always return \tcode{sizeof(int)}.
+
+Note that this is consistent with \tcode{[[assume(expr)]]} (see discussion of constant evaluation of assumptions in \cite{P1774R8}), where we have a similar situation: \tcode{expr} is always ODR-used, even if \tcode{expr} is never evaluated and the assumption may be otherwise ignored by the compiler.
+
+This implies that, just like standard attributes, CCAs are never \emph{syntactically ignorable} (using the terminology from \cite{P2552R2}): just like with the \emph{attribute-argument-clause} of \tcode{assume} and other standard attributes, the compiler is always required to fully parse a contract predicate, and diagnose any errors. Even with unchecked semantics, the compiler is not allowed to simply treat the predicate as token soup.
+
+\subsection{CCAs triggering lambda captures}
+
+The function \tcode{g} from the previous code example warrants a closer look. It is a truly strange case: a CCA that captures an entity (in this case, \tcode{int i}) not otherwise captured and therefore triggers a lambda capture on its own.
+
+\cite{P2834R1} argues that allowing this violates the ``zero overhead for ignored predicates'' principle. It gives an example where such a capture can cause an object to no longer fit into the small object optimisation of \tcode{std::function}. It is therefore possible to construct a program where the mere presence of a CCA, even in an unchecked build mode, can cause runtime performance degradation. \cite{P2834R1} goes on to say that therefore, a CCA that captures an entity not otherwise captured should be ill-formed.
+
+We do not agree that introducing such a restriction is reasonable. This case is highly unlikely to appear in real code, and if it does, the user gets what they asked for. If they wrote such strange code, and indeed hit such an unlikely case where the CCA causes a possible performance degradation, that is probably going to be the least of their problems. It is also easily avoidable (don't write the capture). Simply allowing the capture to happen is consistent with how captures work everywhere else (for example in lambda trailing return types --- see \cite{P2036R3}), and consistent with the rules for \tcode{[[assume(expr)]]}. We should let these language features combine naturally, rather than artificially complicating the language rules to micromanage each special case where the user might have gotten it wrong (we do not do it elsewhere in the Standard, either). If it turns out that this case is truly relevant, a more appropriate solution is to implement a compiler warning for it as a matter of QoI, as is usually done in such cases.
+
+\section{Constant evaluation}
+
+TODO
+
+\section{Proposal summary}
+
+In this paper, we propose to specify the following rules for CCAs:
+
+\begin{itemize}
+\item Just like standard attributes, CCAs are not syntactically ignorable. The predicate is always fully parsed and all entities in it are ODR-used, irrespective of the contract semantic (checked or unchecked).
+\item The rules for lambda captures are the same as anywhere else in the language. This implies that if a lambda has a CCA ODR-using a capturable entity not otherwise ODR-used in that lambda, this ODR-use will trigger a capture of that entity.
+\item If a CCA with \emph{checked} contract semantics is encountered during constant evaluation, and the predicate is not a constant expression, the program is ill-formed.
+\item If a CCA with \emph{checked} contract semantics is encountered during constant evaluation, and the predicate is a constant expression that does \emph{not} evaluate to \tcode{true}, the program is ill-formed.
+\item If a CCA with \emph{unchecked} contract semantics is encountered during constant evaluation, and the predicate is not a constant expression, the CCA is ignored.
+\item If a CCA with \emph{unchecked} contract semantics is encountered during constant evaluation, and the predicate is a constant expression that does \emph{not} evaluate to \tcode{true}, it is implementation-defined whether the program is ill-formed.
+\item If a CCA is encountered during constant evaluation, and the predicate is a constant expression that evaluates to \tcode{true}, the CCA has no semantic effect.
+\end{itemize}
+
+Wording for this specification will be provided at a later time if needed.
+
+%\section*{Document history}
+
+%\begin{itemize}
+%\item \textbf{R0}, 2023-03-08: Initial version.
+%\item \textbf{R1}, 20XX-XX-XX: ??
+%\end{itemize}
+
+%\section*{Acknowledgements}
+
+%nothing yet
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

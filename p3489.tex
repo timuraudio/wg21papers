@@ -1,0 +1,268 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Postconditions odr-using a parameter \\ of dependent type}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P3489R0 \\
+Date: &2024-11-07 \\
+Project: & Programming Language C++ \\
+Audience: & SG21, EWG
+\end{tabular}
+
+\begin{abstract}
+This paper considers the case where a non-reference parameter of dependent type is odr-used in a postcondition assertion. The Contracts MVP \cite{P2900R10} specifies that the program is ill-formed unless the parameter is declared \tcode{const} on all declarations of the function. However, the parameter may be of dependent type, and we might not know whether its type is \tcode{const} until the template is instantiated. \cite{P2900R10} is currently ambiguous about what should happen in this case; we propose two alternatives for how to resolve the ambiguity.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+This paper is the third part of a trilogy of papers dealing with known issues in the Contracts MVP \cite{P2900R10} regarding postconditions odr-using non-reference function parameters:
+\begin{itemize}
+\item \cite{D3484R1} Postconditions odr-using a parameter modified in an overriding function;
+\item \cite{D3487R0} Postconditions odr-using a parameter that may be passed in registers;
+\item \cite{D3489R0} Postconditions odr-using a parameter of dependent type.
+\end{itemize}
+These issues should be considered together, and ideally resolved in a consistent way.
+
+\section{The problem}
+
+The Contracts MVP \cite{P2900R10} specifies that if a non-reference function parameter is odr-used in the postcondition of a function, it must be declared \tcode{const} on all declarations of that function, otherwise the program is ill-formed.
+
+However, whether or not a function parameter is indeed \tcode{const} is not immediately visible if the function in question is a template (a function template, a member function of a class template, etc.) and the type of the parameter is a dependent type. Consider:
+\begin{codeblock}
+template <typename T> 
+void f(T t) post(t > 0); 
+\end{codeblock}
+This function template may be instantiated with a type that is \tcode{const}-qualified, or a type that is not; this may or may not involve type deduction. However, this is not known when parsing this function template, as the variable \tcode{t} does not have a visible \tcode{const} specifier on it. It is therefore not immediately obvious whether the above template declaration is ill-formed or not. \cite{P2900R10} does not explicitly specify this case, i.e., we have a design hole that needs to be fixed.
+
+It is clear that the program should be ill-formed if the template above is instantiated with a type \tcode{T} that is not \tcode{const}:
+\begin{codeblock}
+int main() {
+  int i = 1;
+  f<int>(i);  // error
+}
+\end{codeblock}
+However, it is less clear what should happen if the template above is instantiated with a type \tcode{T} that \emph{is} \tcode{const}:
+\begin{codeblock}
+int main() {
+  int i = 1;
+  f<const int>(i);  // OK?
+}
+\end{codeblock}
+
+\section{Possible solutions}
+
+We are aware of two possible options for resolving the ambiguity:
+
+
+% custom enumerators with D prefix:
+\renewcommand\labelenumi{D\arabic{enumi}.}
+\renewcommand\theenumi\labelenumi
+
+\begin{enumerate}
+\item Require the parameter declaration to have an explicit \tcode{const} qualifier, i.e., make the above template declaration ill-formed regardless of whether and how the template is instantiated;
+\item Allow the \tcode{const} qualifier to be part of the dependent type, i.e., do not make the above template declaration ill-formed, but make it ill-formed to instantiate the template with a type that is not \tcode{const}.
+\end{enumerate}
+
+We enumerated the options with a ``D'' prefix (for ``dependent''), to distinguish them from the options from \cite{D3484R1} that have a ``V'' prefix (for ``virtual'') and the options from \cite{D3487R0} that have a ``R'' prefix (for ``registers'').
+
+Below we discuss the tradeoffs of each option.
+
+\subsection*{Option D1}
+
+Option~D1 is the more conservative option. It forces the user to express their intent directly by  declaring the parameter \tcode{const} explicitly. It also catches a defect due to a missing \tcode{const} sooner, as the error will be triggered already when the template is declared, and not when it is instantiated, which may happen much later and in a different component of the program. Finally, it also prevents the user from writing brittle templates with postcondition assertions that might or might not compile depending on the template parameter. When deducing a template argument from a by-value parameter, \tcode{const} is not deduced as part of that type. So the parameter will only be \tcode{const} when specified explicitly in the template argument list. It does not seem to be useful to have templates that either do or do not compile depending on whether that \tcode{const} on the template argument list is there.
+
+The tradeoff is that Option~D1 makes programs ill-formed that do not contain a defect, such as the last example above. The parameter type of \tcode{f<const int>} is actually \tcode{const}, and \cite{P2900R10} normally allows a parameter of such a type to be odr-used in a postcondition assertion; nevertheless, this program would be rejected.
+
+\subsection*{Option D2}
+
+Option~D2 is the more permissive option. It only rejects programs where, after the template is instantiated, the parameter type is actually found to not be \tcode{const} and therefore may be modified in the function body; the \tcode{const} does not need to be explicit at the point of declaration. 
+
+The tradeoffs are the inverse of Option~D1: if the user got it wrong, the defect will be caught later rather than earlier, and this approach can lead to brittle templates with postcondition assertions that might or might not compile depending on the template parameter. It is not clear whether being more permissive here actually gains anything significant or useful.
+\section{Proposal}
+
+We believe that both options are worth considering and the tradeoffs of each option are sufficiently clear. We therefore propose both options, to determine which option has more consensus in SG21. 
+
+Note that Choosing Option~D1 would leave the door open to adopting Option~D2 at some point in the future, whereas the opposite is not true.
+
+Note further that \cite{D3487R0} --- which deals with a different problem regarding parameters in postconditions --- proposes the more extreme options R1 (removing postcondition assertions from \cite{P2900R10} altogether), R2 (disallowing odr-use of \emph{any} parameters in postcondition assertions), and R3 (disallowing odr-use of \emph{non-reference} parameters in postcondition assertions). Options R1 --- R3 from \cite{D3487R0} would remove the issue discussed in this paper and should therefore be considered alongside Options D1 and D2 as possible solutions.
+
+\section{Wording}
+
+The proposed wording changes are relative to the wording proposed in \cite{P2900R10}.
+
+\subsection{Option D1}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+non-reference parameter of that function, \removed{that parameter shall be declared \tcode{const} }\added{all declarations of that parameter shall have a \tcode{const} qualifier }and
+shall not have array or function type.
+\begin{note}
+This requirement applies even to declarations that do not specify the \grammarterm{postcondition-specifier}. Arrays and functions are still usable when
+declared with the equivalent pointer types ([dcl.fct]). 
+\end{note}
+\begin{example}
+\begin{codeblock}
+int f(const int i)
+post (r: r == i);
+int g(int i)
+post (r: r == i); // error: i is not declared const.
+int f(int i) // error: i is not declared const.
+{
+  return i;
+}
+
+int g(int i) // error: i is not declared const.
+{
+  return i;
+}
+\end{codeblock}
+\begin{addedblock}
+\begin{codeblock}
+template <typename T>
+void f(T t) post(t > 0);  // error: parameter not declared \tcode{const} but odr-used in postcondition 
+\end{codeblock}
+\end{addedblock}
+\end{example}
+\end{adjustwidth}
+
+\subsection{Option D2}
+
+Modify [dcl.contract.func] as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+If the predicate of a postcondition assertion of a function odr-uses ([basic.def.odr]) a
+non-reference parameter of that function, \removed{that parameter shall be declared \tcode{const} and
+shall not have }\added{the type of that parameter shall be \tcode{const} and shall not be an }array or function type. 
+\begin{note}
+This requirement applies even to declarations that do not specify the \grammarterm{postcondition-specifier}. \added{The \tcode{const} qualifier of the parameter may be part of a dependent type. }Arrays and functions are still usable when
+declared with the equivalent pointer types ([dcl.fct]). 
+\end{note}
+\begin{example}
+\begin{codeblock}
+int f(const int i)
+post (r: r == i);
+int g(int i)
+post (r: r == i); // error: i is not declared const.
+int f(int i) // error: i is not declared const.
+{
+  return i;
+}
+
+int g(int i) // error: i is not declared const.
+{
+  return i;
+}
+\end{codeblock}
+\begin{addedblock}
+\begin{codeblock}
+template <typename T>
+void f(T t) post(t > 0);
+  
+int main() {
+  int i = 1;
+  f<int>(i);        // error: non-\tcode{const} parameter odr-used in postcondition 
+  f<const int>(i);  // OK
+}
+\end{codeblock}
+\end{addedblock}
+\end{example}
+\end{adjustwidth}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgements}
+
+Thanks to Oliver Rosten for his review of the paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

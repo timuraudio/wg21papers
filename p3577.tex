@@ -1,0 +1,138 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Require a non-throwing default contract-violation handler}
+\author{
+John Lakos \small(\href{mailto:jlakos@bloomberg.net}{jlakos@bloomberg.net}) 
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P3577R0 \\
+Date: &2025-01-13 \\
+Project: & Programming Language C++ \\
+Audience: & SG21, EWG
+\end{tabular}
+
+\begin{abstract}
+This paper proposes a one-line addition to require that the system-supplied default violation handler not throw.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\section{Introduction}
+
+Some people are concerned that a new codepath might result if an \emph{implicit} precondition --- a precondition attached by the implementation to a core language expression, as proposed in \cite{P3081R1}, \cite{P3100R1}, and \cite{P3329R0} --- is violated and the contract-violation handler exits via an exception.
+
+This paper addresses that problem by requiring that the \emph{default} contract-violation handler does not exit via an exception. Thus, the new code path will not happen without an explicit replacement of the contract-violation handler by the user, which means it cannot happen inadvertently by accident or as the result of a port to a conforming implementation.
+
+Note that this restriction can always be relaxed in a later iteration of C++ as a non-breaking change, but it cannot be so added.
+
+\section{Proposed wording}
+
+The proposed wording is relative to \cite{P2900R13}.
+
+Modify [basic.contract.handler], paragraph 1 as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+The \emph{contract-violation handler} of a program is a function named \mbox{\tcode{::handle_contract_violation}}. The contract-violation handler shall take a single argument of type ``lvalue reference to \tcode{const} \mbox{\tcode{std::contracts::contract_violation}}” and shall return \tcode{void}. The contract-violation handler may have a non-throwing exception specification. The implementation shall provide a definition of the contract-violation handler, called the \emph{default contract-violation handler.}\added{ The default contract-violation handler shall not exit via an exception.}
+\begin{note}
+No declaration for the default contract-violation handler is provided by any standard library header.
+\end{note}
+\end{adjustwidth}
+
+\section{Summary}
+
+By adding this one line of wording, we eliminate a stated concern, and leave open all options moving forward. It is anticipated that this proposal will increase consensus, as it has no obvious or likely negative consequences.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgements}
+
+Thanks to Timur Doumler for providing the wording.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

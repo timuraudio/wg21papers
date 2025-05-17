@@ -1,0 +1,254 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+\begin{document}
+\title{Attributes for contract assertions}
+\author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio})  \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net})
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & P3088R1 \\
+Date: &2024-02-13 \\
+Project: & Programming Language C++ \\
+Audience: & SG21
+\end{tabular}
+
+\begin{abstract}
+In this paper, we discuss several ways in which attributes could appertain to a contract assertion. The grammar in the Contracts MVP does not currently allow this, but it would be useful to allow it. We propose an infix location for contracts-specific attributes appertaining to any form of contract assertion, which could be useful for vendor-specific mechanisms to add local control to the various implementation-defined aspects of the Contracts MVP.  Further, we propose that assertion statements, like all other statements evaluated at runtime, support a prefix location for non-contracts-specific attributes.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+There is a long-standing practice in the C++ grammar to permit attributes to appertain to any entity where this might be useful. Where such a permission is missing, it has often been added later via a Core Issue. For example, \cite{CWG1657} added attributes for namespaces and enumerators.
+
+This is common even in cases where there is no attribute in the C++ standard itself that could appertain to the given entity, and no plans to add such an attribute to the C++ standard; rather, the allowance in the grammar to place attributes on the entity in question is motivated by a desire to enable vendor-specific extensions via non-standard attributes where fine-grained control beyond the semantics of the C++ language might be useful. For example, \cite{CWG2262} added attributes for \emph{asm-definition}s with the explicit motivation that, first, there does not seem to be a good reason to not allow it, and second, it might be handy for vendor-specific extensions.
+
+The same motivation applies to contract assertions, which the Contracts MVP paper \cite{P2900R5} proposes to add to C++26. We can distinguish two distinct categories of attributes that might appertain to contract assertions:
+
+\begin{enumerate}
+\item Contracts-specific attributes that can appertain to any contract assertion (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}), for example, vendor-specific labels that influence the implementation-defined choice of semantic with which a contract assertion will be evaluated --- something the contracts MVP does not currently allow for.
+
+\item Attributes such as \tcode{[[likely]]} and \tcode{[[unlikely]]} that can appertain to any statement that involves some runtime evaluation. The grammar in \cite{P2900R5} does not allow such attributes to appertain to an \emph{assertion-statement}, making it the odd duck among C++ statements that have runtime behaviour.
+\end{enumerate}
+
+This paper contains a proposal for each category of attributes, described in Section \ref{sec:labels} and Section \ref{sec:stmt}, respectively. These two proposals can be adopted into the Contracts MVP either together or separately.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Attributes appertaining to contract assertions}
+\label{sec:labels}
+ 
+ \subsection{Motivation}
+ 
+There are many well-known use cases for annotations or \emph{labels} on contract assertions. They were featured in many previous proposals to add contracts to C++, reaching as far back as 2005 (the ``importance ordering'' annotation in \cite{N1866}). A particularly important use case for such labels is to annotate a contract assertion with a property that will affect which contract semantic is chosen for its evaluation at runtime, for example:
+\begin{itemize}
+\item a contract level such as \tcode{audit}, indicating that checking the contract assertion would violate the complexity and/or performance guarantees of the function (included in C++20 Contracts, see \cite{P0542R5});
+\item a contract property such as \tcode{new}, indicating that the contract assertion was newly added to a legacy codebase;
+\item an explicit contract semantic such as \tcode{enforce}, \tcode{assume}, etc, indicating that the contract assertion should be evaluated with this semantic (proposed for C++20 Contracts in \cite{P1429R3} and other papers).
+\end{itemize}
+The MVP offers no tools whatsoever for such control and leaves the selection mechanism for the contract semantic entirely up to the implementation. For an MVP, this is fine. We do not propose adding labels to contract assertions for C++26; instead, they should be considered as a post-MVP extension for C++29 (see discussion in \cite{P2755R0} and \cite{P2885R3}). However, it would be very helpful if compiler vendors could already start experimenting with adding labels to contract assertions as vendor extensions to gain the necessary implementation and usage experience. Importantly, tools to influence the selected semantic might vary from vendor to vendor, but all would apply equally to the same contract assertions.
+
+The natural approach is to implement such extensions of the Contracts facility as vendor-specific attributes, e.g. \tcode{[[vendor::audit]]}. The attribute-based approach provides a great deal of portability compared to other possible approaches such as using vendor-specific keyword specifiers like \tcode{__vendor_audit}, or using a vendor-specific syntax for the entire contract annotation.
+
+To enable this approach, we need to add a syntactic location for an \emph{attribute-specifier-seq} appertaining to the contract assertion to the proposed Contracts MVP grammar. In the following subsection, we consider different syntactic locations in order to find the ideal one.
+
+\subsection{Possible syntactic locations}
+
+The syntactic location for an \emph{attribute-specifier-seq} appertaining to the contract assertion should be consistent across all three syntactic constructs that can introduce a contract assertion: \emph{precondition-specifier}s, \emph{postcondition-specifier}s, and \emph{assertion-statement}s. Inconsistent locations for contracts-specific attributes would be user-hostile given that all three syntactic constructs are part of the same facility and have a consistent syntax otherwise.
+
+\subsubsection{Prefix location}
+
+We could consider placing the \emph{attribute-specifier-seq} before the contract assertion:
+
+\pagebreak % MANUAL %%%%%%
+
+\begin{codeblock}
+bool binary_search(Range r, const T& value)
+  [[vendor::audit]] pre (is_sorted(r));  
+  
+void f() {
+  int i = get_i();
+  [[vendor::assume]] contract_assert (i > 0);
+  // ...
+}
+\end{codeblock}
+
+For \tcode{pre} and \tcode{post}, the prefix location has at least three problems. First, it would involve identifying something as part of a
+contract assertion before seeing the contextual keyword \tcode{pre} or \tcode{post}, which would be naturally challenging for implementations and
+readability. Second, it would collide with the existing grammar for an attribute appertaining to a \emph{lambda-expression}:
+
+\begin{codeblock}
+auto f = [](int i) [[vendor::xxx]]  // this attribute appertains to the lambda-expression
+  pre (i > 0) {
+  // ...
+}
+\end{codeblock}
+
+Finally, when there are multiple function-contract assertions on a single function it becomes highly visually unclear whether such attributes appertain to the contract assertion before or after the attribute:
+\begin{codeblock}
+void f() pre(p1()) [[ vendor::audit ]] post(p2()); 
+\end{codeblock}
+
+This option is therefore not viable for \tcode{pre} or \tcode{post}. It follows that it is also not viable for \tcode{contract_assert}, since we want all three syntactic forms to be consistent with each other. On the other hand, for \tcode{contract_assert}, attributes in the prefix location would be consistent with all other statements.
+
+To resolve this seeming contradiction, we propose that for \tcode{contract_assert}, attributes that are specific to assertion statements, such as labels controlling the contract semantic, should be in a non-prefix location consistent with \tcode{pre} and \tcode{post}, as discussed in this section, while attributes that can appertain to any statement, such as \tcode{[[likely]]} and \tcode{[[unlikely]]}, should be in the prefix location. This solution makes \tcode{contract_assert} consistent with \tcode{pre} and \tcode{post} and simultaneously consistent with all other statements (see Section \ref{sec:stmt} for a more detailed discussion of attributes that can appertain to any statement).
+
+\subsubsection{Suffix location}
+We could consider placing the \emph{attribute-specifier-seq} after the contract assertion:
+\begin{codeblock}
+bool binary_search(Range r, const T& value)
+  pre (is_sorted(r)) [[vendor::audit]];
+  
+void f() {
+  int i = get_i();
+  contract_assert (i > 0) [[vendor::assume]];
+  // ...
+}
+\end{codeblock}
+While the suffix location seems \emph{technically} possible --- as far as we can tell, it does not create any outright collisions with existing grammar --- it is far from ideal, in particularly because, just like the prefix location, it is not obvious to the reader what the attribute appertains to:
+\begin{codeblock}
+// which \tcode{pre} does the attribute appertain to?
+void f(int* i)
+  pre(i != nullptr) [[vendor::xxx]] pre (*i > 0);  
+
+// does the attribute appertain to the \tcode{pre} or to the function \tcode{g} as a whole?
+void g(int j) pre(j > 0) [[vendor::yyy]]; 
+\end{codeblock}
+
+We therefore do not propose the suffix location.
+
+\subsubsection{Inside the predicate}
+
+We could consider placing the  \emph{attribute-specifier-seq} somewhere inside the contract predicate, for example
+\begin{codeblock}
+void f(int i) 
+  pre ([[vendor::xxx]] i > 0);
+\end{codeblock}
+or
+\begin{codeblock}
+void f(int i) 
+  pre (i > 0 [[vendor::xxx]]);
+\end{codeblock}
+However, this option is confusing as it suggests that the attribute would appertain to the expression rather than to the contract assertion as a whole. The latter is not actually possible (under the current grammar rules, an \emph{attribute-specifier-seq} cannot appertain directly to a \emph{conditional-expression}; in every case where an \emph{attribute-specifier-seq} might be part of an expression is nested within another grammar construct and not adjacent to other constructs that can have attributes) and therefore technically there is no ambiguity, but this choice does not seem friendly to the human reader. The  first variant also has the problem that for \tcode{post}, it is unclear whether the attribute would instead appertain to the \emph{result-name-introducer}. We therefore propose that the location should be outside of the predicate.
+
+\subsubsection{Infix location (between keyword and predicate)}
+
+The remaining possible syntactic location is between the \tcode{pre}, \tcode{post}, or \tcode{contract_assert} keyword and the predicate:
+
+\begin{codeblock}
+bool binary_search(Range r, const T& value)
+  pre [[vendor::audit]] (is_sorted(r));
+  
+void f() {
+  int i = get_i();
+  contract_assert [[vendor::assume]] (i > 0);
+  // ...
+}
+\end{codeblock}
+
+Being between the two other elements that are part of the contract assertion itself --- the keyword and the predicate --- this location is always unambiguous, both for the C++ parser and the human reader. It also has the advantage that attributes applying to varied precondition or postcondition specifiers can be formatted and indented in a consistent manner, not hanging off far from the \tcode{pre} or \tcode{post} separated by an arbitrarily complex expression.
+
+Since this infix location is the only one not suffering from any obvious problems, it is the location we propose in this paper for contracts-specific attributes appertaining to a contract assertion.
+
+At some point in the future additional features might be proposed (such as captures for postconditions or \tcode{requires}-clauses on function contract assertions) that might also be placed in this same syntactic location.   As each such post-MVP feature is considered, its location relative to attributes that appertain to the contract assertion should be considered as well. We recommend, though, that such features follow similar orderings to the full function declaration where possible, while keeping those things which are runtime-evaluated like the predicate as close to the predicate as possible.  Therefore, \tcode{requires}-clauses should precede the \emph{attribute-specifier-seq} and captures should come immediately prior to the predicate.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\section{Attributes appertaining to an \emph{assertion-statement}}
+\label{sec:stmt}
+
+In \cite{P2900R5}, \tcode{contract_assert} is syntactically a statement: the \emph{assertion-statement}. Initially, when the ``natural'' syntax was adopted, \tcode{contract_assert} was an expression (see \cite{P2961R2}). However, SG21 recently downgraded \tcode{contract_assert} to a statement, because having it as an expression would require answering the question whether this expression is potentially-throwing or non-throwing for the purposes of the \tcode{noexcept} operator and deduced exception specifications, and SG21 failed to reach a consensus on this question (see \cite{P2932R3}, \cite{P2969R0}, \cite{P3113R0}, and \cite{P3114R0}).
+
+The infix location for attributes appertaining to contract assertions makes \tcode{contract_assert} seemingly inconsistent with other statements: an attribute that appertains to a statement, such as \tcode{[[likely]]} and \tcode{[[unlikely]]}, always goes into the prefix location. Note that the C++ grammar does not give blanket permission to prefix any statement with an  \emph{attribute-specifier-seq}; instead, this permission is given explicitly for each kind of statement. The proposed grammar in \cite{P2900R5} lacks this explicit permission for \emph{assertion-statement}, making it the odd duck among C++ statements.
+
+To resolve this seeming contradiction, we propose that for \tcode{contract_assert}, attributes that are specific to assertion statements, such as vendor-specific labels controlling the contract semantic, should be in a non-prefix location consistent with \tcode{pre} and \tcode{post}, as discussed in Section {\ref{sec:labels}, while attributes that can appertain to any statement, such as \tcode{[[likely]]} and \tcode{[[unlikely]]}, should be in the prefix location. This solution makes \tcode{contract_assert} consistent with \tcode{pre} and \tcode{post} and simultaneously consistent with all other statements. To make the distinction between the different kinds of attributes clear, we propose wording specifying that for \tcode{contract_assert}, attributes in the prefix location appertain to the \emph{assertion-statement}, while attributes in the infix location appertain to the contract assertion introduced by the \emph{assertion-statement}.
+
+Note that having two syntactic locations for attributes in the same entity is not novel: declarations can be prefixed with an attribute, but declarations can also have attributes on the \emph{declarator-id}, i.e. deep inside the declaration.
+
+Note further that this solution with two different locations with two different meanings is perfectly forward-compatible with upgrading \tcode{contract_assert} to an expression later. In case we decide to do so, code like
+\begin{codeblock}
+[[likely]] contract_assert(x);
+\end{codeblock}
+will automatically become legal anyway, with the \tcode{[[likely]]} attribute now appertaining to the \emph{expression-statement} that contains the \tcode{contract_assert} expression. At the same time, attributes in the infix position can continue to appertain to the contract assertion introduced by the expression. Just like before, the former location is for attributes that can appertain to any statement, while the latter is for contracts-specific ones; the meaning of the code does not change.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Proposed wording}
+
+The proposed changes are relative to the draft wording in \cite{P2900R5}. 
+
+\subsection{Attributes appertaining to contract assertions}
+
+Modify [stmt.contract.assert]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{assertion-statement:} \\
+\phantom{~~~}\tcode{contract_assert} \added{\emph{attribute-specifier-seq}$_{opt}$} \tcode{(} \emph{conditional-expression} \tcode{) ;}
+ 
+An \emph{assertion-statement} introduces a contract assertion ([basic.contract]). \added{The optional \emph{attribute-specifier-seq} appertains to the introduced contract assertion.} \note{An \emph{assertion-statement} allows the programmer to specify a state of the program that is considered incorrect when control flow reaches the assertion-statement.}
+\end{adjustwidth}
+
+Modify [dcl.contract.func]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{precondition-specifier:} \\
+\phantom{~~~}\tcode{pre} \added{\emph{attribute-specifier-seq}$_{opt}$} \tcode{(} \emph{conditional-expression} \tcode{)}
+
+\emph{postcondition-specifier:} \\
+\phantom{~~~}\tcode{post} \added{\emph{attribute-specifier-seq}$_{opt}$} \tcode{(} \emph{result-name-introducer$_{opt}$ conditional-expression} \tcode{)}
+
+\emph{result-name-introducer:} \\
+\phantom{~~~}\emph{identifier} \tcode{:}
+
+A \emph{function contract assertion} is a contract assertion ([basic.contract]) associated with a function. Each \emph{function-contract-specifier} of a \emph{function-contract-specifier-seq} (if any) of an unspecified first declaration of a function introduces a corresponding function contract assertion for that function. \added{The optional \emph{attribute-specifier-seq} appertains to the introduced contract assertion.} \note{The \emph{function-contract-specifier-seq} of a \emph{lambda-declarator} applies to the call operator or operator template of the corresponding closure type ([expr.prim.lambda.closure]).}
+\end{adjustwidth}
+
+Modify [dcl.attr.grammar], paragraph 1:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+Attributes specify additional information for various source constructs such as types, variables, names, \added{contract assertions, }blocks, or translation units.
+\end{adjustwidth}
+
+\subsection{Attributes appertaining to an \emph{assertion-statement}}
+
+The changes below can be adopted together with or separately from the changes above for attributes appertaining to contract assertions.
+
+Modify [stmt.pre], paragraph 1:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\emph{statement:} \\
+\phantom{~~~}\emph{attribute-specifier-seq}$_{opt}$ \emph{expression-statement} \\
+\phantom{~~~}\emph{attribute-specifier-seq}$_{opt}$ \emph{compound-statement} \\
+\phantom{~~~}\emph{attribute-specifier-seq}$_{opt}$ \emph{selection-statement} \\
+\phantom{~~~}\emph{attribute-specifier-seq}$_{opt}$ \emph{iteration-statement} \\
+\phantom{~~~}\emph{attribute-specifier-seq}$_{opt}$ \emph{jump-statement} \\
+\phantom{~~~}\added{\emph{attribute-specifier-seq}$_{opt}$ }\emph{assertion-statement} \\
+\phantom{~~~}\emph{declaration-statement} \\
+\phantom{~~~}\emph{attribute-specifier-seq}$_{opt}$ \emph{try-block}
+\end{adjustwidth}
+
+Should SG21 decide to not adopt these changes, we should add a section to the front matter of \cite{P2900R5} clarifying explicitly that unlike other kinds of statements, an \emph{assertion-statement} may not have attributes appertaining to it.
+
+\section*{Document history}
+
+\begin{itemize}
+\item \textbf{R0}, 2024-02-06: Initial version.
+\item \textbf{R1}, 2024-02-13: Added discussion and proposal for non-contracts-specific attributes appertaining to an \emph{assertion-satement}; updated proposed wording
+\end{itemize}
+
+\section*{Acknowledgements}
+
+The authors wish to thank Tom Honermann, Andrzej Krzemie\' nski, Ville Voutilainen, and Jens Maurer for their feedback on the initial version of this paper.
+
+\renewcommand{\bibname}{References}
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+\end{document}

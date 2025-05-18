@@ -3,8 +3,9 @@
 % Footnotes at bottom of page:
  \usepackage[bottom]{footmisc} 
 
-% Table going across a page: 
- \usepackage{longtable}
+% Tables:
+\usepackage{longtable}   % table going across multiple pages
+\usepackage{tabularx}    % flexible column widths
 
  % Start sections at 0
 % \setcounter{section}{-1}
@@ -35,6 +36,26 @@
 }
 
 \setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Define a commend for UB stable identifiers that allows linebreaks in the middle (after each dot)
+
+\usepackage{xparse}   % For defining robust commands
+\usepackage{expl3}    % For string processing
+
+\ExplSyntaxOn
+\NewDocumentCommand{\ubxref}{m}
+ {
+  \{\stableid_format:n { #1 }\}
+ }
+
+\cs_new:Npn \stableid_format:n #1
+ {
+  \seq_set_split:Nnn \l_tmpa_seq {.} {#1}
+  \seq_use:Nn \l_tmpa_seq {. \allowbreak }
+ }
+\ExplSyntaxOff
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -143,7 +164,7 @@ that case is therefore also excluded from our list.
 \label{categories}
 
 We found that all identified cases of core language UB can be broadly classified into 12 basic categories:
-\begin{itemize}
+ \renewcommand{\labelenumi}{\Roman{enumi}.} \begin{enumerate}
 \item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value.
 \item \textbf{Bounds} --- 5 cases. Using a pointer in a way that fails to respect the range of the pointed-to object or array. Examples: incrementing a pointer beyond the past-the-end position; performing single-object delete on an operand obtained from an array-new expression;  dereferencing a pointer returned from a request for zero size.
 \item \textbf{Type and Lifetime} --- 45 cases. Operations that access storage and/or use pointers or references to storage in an inappropriate way that is not already covered by Initialisation and Bounds. Examples: attempting to access a value of one type through  a pointer of a different, incompatible type; attempting to access the value of an object after its lifetime has ended. 
@@ -156,7 +177,7 @@ We found that all identified cases of core language UB can be broadly classified
 \item \textbf{Coroutines} --- 2 cases. Misusing coroutine machinery. Destroying a coroutine that is not suspended; invoking a resumption member function for a coroutine that is not suspended.
 \item \textbf{Templates} --- 1 case. Infinite recursion during template instantiation.
 \item \textbf{Preprocessor} --- 8 cases. Misusing preprocessor directives. Examples: \tcode{\#define}-ing a predefined macro name; passing an out-of-range integer to the \tcode{\#line} directive.
-\end{itemize}
+\end{enumerate}
 
 The categories Initialisation, Bounds, Type and Lifetime correspond to the common terms  ``initialisation safety'',  ``bounds safety'', ``type safety'',  and ``lifetime safety'', respectively, and collectively represent undefined behaviour that is commonly referred to with the umbrella term ``memory safety''. 
 
@@ -648,14 +669,33 @@ Written-out wording for all 73 cases of runtime-checkable UB listed in Appendix 
 \addcontentsline{toc}{section}{Appendix: UB list}
 \section*{Appendix A: List of language UB}
 
+\renewcommand\arraystretch{1.5}%
+\begin{longtable}{|p{2cm}|p{6.5cm}|p{1.7cm}|p{1.7cm}|p{5cm}|p{5cm}|}
+\multicolumn{6}{c}{\textbf{I. Initialization}}
+\\ \hline
+Identifier & Wording & Runtime-checkable & Locally checkable & Checking strategy & Fallback behaviour 
+\\ \hline
+\ubxref{basic.indet.value} & [basic.indet]/2: Except in the following cases, if an indeterminate value is produced by an evaluation, the behavior is undefined, [...] & Yes & \parbox[t]{2cm}{No} &Track whether storage has been initialized & Only for built-in types: initialise default-initialised variables with erroneous value 
+\\ \hline
+\multicolumn{6}{c}{\textbf{II. Bounds}} 
+\\ \hline
+Identifier & Wording & Runtime-checkable & Locally checkable & Checking strategy & Fallback behaviour 
+\\ \hline
+\ubxref{basic.stc.alloc.zero.dereference} & [basic.stc.dynamic.allocation]/2: The effect of indirecting through a pointer returned from a request for zero size is undefined. & Yes & No & Track pointer provenance, insert bounds check & None
+\\ \hline
+\ubxref{expr.delete.mismatch} & [expr.delete]/2: In a single-object delete expression, the value of the operand of delete may be a null pointer value, a pointer value that resulted from a previous non-array new-expression, or a pointer to a base class subobject of an object created by such a new-expression. If not, the behavior is undefined.  & Yes & No & Track pointer provenance, insert bounds check & None
+\\ \hline
+\ubxref{expr.delete.array.mismatch} & [expr.delete]/2: In an array delete expression, the value of the operand of delete may be a null pointer value or a pointer value that resulted from a previous array new-expression whose allocation function was not a non-allocating form ([new.delete.placement]). If not, the behavior is undefined.  & Yes & No & Track pointer provenance, insert bounds check & None
+\\ \hline
+\ubxref{expr.add.out.of.bounds} & [expr.add]/4: When an expression \tcode{J} that has integral type is added to or subtracted from an expression \tcode{P} of pointer type, the result has the type of \tcode{P}. If \tcode{P} evaluates to a null pointer value and \tcode{J} evaluates to 0, the result is a null pointer value. Otherwise, if \tcode{P} points to a (possibly-hypothetical) array element $i$ of an array object \tcode{x} with $n$ elements ([dcl.array]), the expressions \tcode{P + J} and \tcode{J + P} (where \tcode{J} has the value $j$) point to the (possibly-hypothetical) array element 
+$i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} points to the (possibly-hypothetical) array element $i - j$ of \tcode{x} if $0 \leq i - j \leq n$. Otherwise, the behavior is undefined. & Yes & Only if the array bound is statically known & Track pointer provenance, insert bounds check & None
+\\ \hline
+\ubxref{expr.add.sub.diff.pointers} & [expr.add]/4: When an expression \tcode{J} that has integral type is added to or subtracted from an expression \tcode{P} of pointer type, the result has the type of \tcode{P}. If \tcode{P} evaluates to a null pointer value and \tcode{J} evaluates to 0, the result is a null pointer value. Otherwise, if \tcode{P} points to a (possibly-hypothetical) array element $i$ of an array object \tcode{x} with $n$ elements ([dcl.array]), the expressions \tcode{P + J} and \tcode{J + P} (where \tcode{J} has the value $j$) point to the (possibly-hypothetical) array element 
+$i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} points to the (possibly-hypothetical) array element $i - j$ of \tcode{x} if $0 \leq i - j \leq n$. Otherwise, the behavior is undefined. & Yes & Only if the array bound is statically known & Track pointer provenance, insert bounds check & None
+\\ \hline
+\end{longtable}
 
-\begin{table}[htbp]
-\begin{center}
-\begin{tabular}{llll}
-% This will contain a rendering of the big UB spreadsheet we have been working with
-\end{tabular}
-\end{center}
-\end{table} 
+
 \end{landscape}
 
 \pagebreak

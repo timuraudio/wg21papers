@@ -151,7 +151,7 @@ Result: Consensus
 
 The present revision (R2) is a complete rewrite of the paper that considers the above poll, the adoption of \cite{P2900R14} into the C++26 working paper, EWG's decision to publish the core language UB white paper, the current state of that white paper \cite{P3656R1}, discussions at the Hagenberg meeting, and the feedback we received on the previous revision of this paper.
 
-\section{Undefined behaviour analysis}
+\section{Analysis}
 \label{ub}
 
 % lah: This section has some structuring issues. 
@@ -184,7 +184,7 @@ Note further that we exclude \emph{library undefined behaviour} since the natura
 \footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
 that case is, therefore, also excluded from our list.
 
-\subsection{Categories of UB}
+\subsection{Basic categories of UB}
 \label{categories}
 
 We found that all identified cases of core language UB can be broadly classified into twelve categories:
@@ -217,7 +217,7 @@ The next category, Assumptions, also contains just one case of UB: reaching an \
 
 The final five categories (Control Flow, Replacement Functions, Coroutines, Templates, and Preprocessor) are less frequently discussed in the current discourse around UB. Nevertheless, they represent UB that needs to be mitigated.
 
-\subsection{Relevant for security}
+\subsection{Relevance for security}
 
 \cite{P3656R1} asks which cases of UB are security-related. The paper suggests having security experts indicate which cases of UB have security impact and use ``always'', ``never'', and ``sometimes'' tags. We are not security experts, so we do not attempt to do this here. However, we note that cases of UB commonly associated with security vulnerabilities (see, for example, the CWE list at \url{https://cwe.mitre.org/}) fall into the Initialisation, Bounds, and Type and Lifetime categories. 
 
@@ -225,7 +225,7 @@ Other cases of UB, such as those in categories Arithmetic and Threading, are a c
 
 Eventually, mitigating all UB currently considered to be a critical security concern will simply remove the easiest routes of attack from the table, and any UB not yet addressed may become the new major candidate for attackers to leverage for nefarious purposes.  Therefore, while prioritising implementation based on current trends amongst malicious actors, though helpful, should not be used to limit the scope of our work on improving the C++ Standard (see \cite{Sutter2024}, \cite{P3500R1}, and \cite{P3578R0}).
 
-\subsection{Locally checkable}
+\subsection{Local checkability}
 \label{locally}
 
 The second question \cite{P3656R1} asks is which cases of UB are ``efficiently locally diagnosable''. Here, we split this question into two separate questions: which cases of UB are locally diagnosable in principle (this subsection), and the estimated cost of that diagnosis (next subsection).

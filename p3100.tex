@@ -710,13 +710,13 @@ Written-out wording for all 73 cases of runtime-checkable UB listed in Appendix 
 \begin{longtable}{|p{2cm}|p{6.5cm}|p{1.7cm}|p{1.7cm}|p{5cm}|p{5cm}|}
 \multicolumn{6}{c}{\textbf{I. Initialization}}
 \\ \hline
-Identifier & Wording & Runtime-checkable & Locally checkable & Checking strategy & Fallback behaviour 
+Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
 \ubxref{basic.indet.value} & [basic.indet]/2: Except in the following cases, if an indeterminate value is produced by an evaluation, the behavior is undefined, [...] & Yes & \parbox[t]{2cm}{No} &Track whether storage has been initialized & Only for built-in types: initialise default-initialised variables with erroneous value 
 \\ \hline
 \multicolumn{6}{c}{\textbf{II. Bounds}} 
 \\ \hline
-Identifier & Wording & Runtime-checkable & Locally checkable & Checking strategy & Fallback behaviour 
+Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
 \ubxref{basic.stc.alloc.zero.dereference} & [basic.stc.dynamic.allocation]/2: The effect of indirecting through a pointer returned from a request for zero size is undefined. & Yes & No & Track pointer provenance, insert bounds check & None
 \\ \hline

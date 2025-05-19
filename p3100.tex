@@ -740,109 +740,109 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{intro.object.implicit.create} & [intro.object]/11: For each operation that is specified as implicitly creating objects, that operation implicitly creates and starts the lifetime of zero or more objects of implicit-lifetime types ([basic.types.general]) in its specified region of storage if doing so would result in the program having defined behavior. If no such set of objects would give the program defined behavior, the behavior of the program is undefined. & & & &
+\ubxref{intro.object.implicit.create} & [intro.object]/11: For each operation that is specified as implicitly creating objects, that operation implicitly creates and starts the lifetime of zero or more objects of implicit-lifetime types ([basic.types.general]) in its specified region of storage if doing so would result in the program having defined behavior. If no such set of objects would give the program defined behavior, the behavior of the program is undefined. & Yes & No & Track whether storage can hold implicit lifetime objects & None
 \\ \hline
-\ubxref{intro.object.implicit.pointer} & [intro.object]/11: Further, after implicitly creating objects within a specified region of storage, some operations are described as producing a pointer to a suitable created object. These operations select one of the implicitly-created objects whose address is the address of the start of the region of storage, and produce a pointer value that points to that object, if that value would result in the program having defined behavior. If no such pointer value would give the program defined behavior, the behavior of the program is undefined. & & & &
+\ubxref{intro.object.implicit.pointer} & [intro.object]/11: Further, after implicitly creating objects within a specified region of storage, some operations are described as producing a pointer to a suitable created object. These operations select one of the implicitly-created objects whose address is the address of the start of the region of storage, and produce a pointer value that points to that object, if that value would result in the program having defined behavior. If no such pointer value would give the program defined behavior, the behavior of the program is undefined. & Yes & No & Track whether storage can hold implicit lifetime objects & None
 \\ \hline
-\ubxref{basic.align.object.alignment} & [basic.align]/1: Attempting to create an object ([intro.object]) in storage that does not meet the alignment requirements of the object's type is undefined behavior. & & & &
+\ubxref{basic.align.object.alignment} & [basic.align]/1: Attempting to create an object ([intro.object]) in storage that does not meet the alignment requirements of the object's type is undefined behavior. & Yes & Yes & Insert alignment check & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.delete} & [basic.life]/7: Before the lifetime of an object has started but after the storage which the object will occupy has been allocate1 or, after the lifetime of an object has ended and before the storage which the object occupied is reused or released, any pointer that represents the address of the storage location where the object will be or was located may be used but only in limited ways. [...] The program has undefined behavior if the pointer is used as the operand of a \emph{delete-expression} [...] & & & &
+\ubxref{lifetime.outside.pointer.delete} & [basic.life]/7: Before the lifetime of an object has started but after the storage which the object will occupy has been allocate1 or, after the lifetime of an object has ended and before the storage which the object occupied is reused or released, any pointer that represents the address of the storage location where the object will be or was located may be used but only in limited ways. [...] The program has undefined behavior if the pointer is used as the operand of a \emph{delete-expression} [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.member} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used to access a non-static data member or call a non-static member function of the object, [...]  & & & &
+\ubxref{lifetime.outside.pointer.member} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used to access a non-static data member or call a non-static member function of the object, [...]  & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.convert} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is implicitly converted ([conv.ptr]) to a pointer to a virtual base class [...] & & & &
+\ubxref{lifetime.outside.pointer.convert} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is implicitly converted ([conv.ptr]) to a pointer to a virtual base class [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.static.cast} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{static_cast} ([expr.static.cast]), except when the conversion is to pointer to $cv$ \tcode{void}, or to pointer to $cv$ \tcode{void} and subsequently to pointer to $cv$ \tcode{char}, $cv$ \tcode{unsigned char}, or $cv$ \tcode{std::byte} ([cstddef.syn]) [...] & & & &
+\ubxref{lifetime.outside.pointer.static.cast} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{static_cast} ([expr.static.cast]), except when the conversion is to pointer to $cv$ \tcode{void}, or to pointer to $cv$ \tcode{void} and subsequently to pointer to $cv$ \tcode{char}, $cv$ \tcode{unsigned char}, or $cv$ \tcode{std::byte} ([cstddef.syn]) [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.dynamic.cast} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]). & & & &
+\ubxref{lifetime.outside.pointer.dynamic.cast} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]). & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.access} & [basic.life]/8: Similarly, before the lifetime of an object has started but after the storage which the object will occupy has been allocated or, after the lifetime of an object has ended and before the storage which the object occupied is reused or released, any glvalue that refers to the original object may be used but only in limited ways. [...] The program has undefined behavior if the glvalue is used to access the object [...] & & & &
+\ubxref{lifetime.outside.glvalue.access} & [basic.life]/8: Similarly, before the lifetime of an object has started but after the storage which the object will occupy has been allocated or, after the lifetime of an object has ended and before the storage which the object occupied is reused or released, any glvalue that refers to the original object may be used but only in limited ways. [...] The program has undefined behavior if the glvalue is used to access the object [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.member} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used to call a non-static member function of the object [...] & & & &
+\ubxref{lifetime.outside.glvalue.member} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used to call a non-static member function of the object [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.ref.virtual} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is bound to a reference to a virtual base class ([dcl.init.ref]) [...] & & & &
+\ubxref{lifetime.outside.glvalue.ref.virtual} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is bound to a reference to a virtual base class ([dcl.init.ref]) [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.dynamic.cast} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]) or as the operand of \tcode{typeid}. & & & &
+\ubxref{lifetime.outside.glvalue.dynamic.cast} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]) or as the operand of \tcode{typeid}. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{original.type.implicit.destructor} & [basic.life]/11: If a program ends the lifetime of an object of type \tcode{T} with static ([basic.stc.static]), thread ([basic.stc.thread]), or automatic ([basic.stc.auto]) storage duration and if \tcode{T} has a non-trivial destructor, and another object of the original type does not occupy that same storage location when the implicit destructor call takes place, the behavior of the program is undefined. & & & &
+\ubxref{original.type.implicit.destructor} & [basic.life]/11: If a program ends the lifetime of an object of type \tcode{T} with static ([basic.stc.static]), thread ([basic.stc.thread]), or automatic ([basic.stc.auto]) storage duration and if \tcode{T} has a non-trivial destructor, and another object of the original type does not occupy that same storage location when the implicit destructor call takes place, the behavior of the program is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{creating.within.const.complete.obj} & [basic.life]/12: Creating a new object within the storage that a const, complete object with static, thread, or automatic storage duration occupies, or within the storage that such a const object used to occupy before its lifetime ended, results in undefined behavior. & & & &
+\ubxref{creating.within.const.complete.obj} & [basic.life]/12: Creating a new object within the storage that a const, complete object with static, thread, or automatic storage duration occupies, or within the storage that such a const object used to occupy before its lifetime ended, results in undefined behavior. & Yes & No & Track whether storage is associated with \tcode{const} object & None
 \\ \hline
-\ubxref{basic.compound.invalid.pointer} & [basic.compound]/4: If a pointer value $P$ is used in an evaluation $E$ and $P$ is not valid in the context of $E$, then the behavior is undefined if $E$ is an indirection ([expr.unary.op]) or an invocation of a deallocation function ([basic.stc.dynamic.deallocation]) [...]  & & & &
+\ubxref{basic.compound.invalid.pointer} & [basic.compound]/4: If a pointer value $P$ is used in an evaluation $E$ and $P$ is not valid in the context of $E$, then the behavior is undefined if $E$ is an indirection ([expr.unary.op]) or an invocation of a deallocation function ([basic.stc.dynamic.deallocation]) [...]  & Yes & No & Track whether storage has been allocated / freed  & None
 \\ \hline
-\ubxref{expr.basic.lvalue.strict.aliasing.violation} & [basic.lval]/11.3: If a program attempts to access ([defns.access]) the stored value of an object through a glvalue through which it is not type-accessible, the behavior is undefined.  & & & &
+\ubxref{expr.basic.lvalue.strict.aliasing.violation} & [basic.lval]/11.3: If a program attempts to access ([defns.access]) the stored value of an object through a glvalue through which it is not type-accessible, the behavior is undefined.  & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.basic.lvalue.union.initialization} & [basic.lval]/11.3: If a program invokes a defaulted copy/move constructor or copy/move assignment operator for a union of type \tcode{U} with a glvalue argument that does not denote an object of type $cv$ \tcode{U} within its lifetime, the behavior is undefined.  & & & &
+\ubxref{expr.basic.lvalue.union.initialization} & [basic.lval]/11.3: If a program invokes a defaulted copy/move constructor or copy/move assignment operator for a union of type \tcode{U} with a glvalue argument that does not denote an object of type $cv$ \tcode{U} within its lifetime, the behavior is undefined.  & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.type.reference.lifetime} & [expr.type]/1: If a pointer to $X$ would be valid in the context of the evaluation of the expression ([basic.fundamental]), the result designates $X$; otherwise, the behavior is undefined. & & & &
+\ubxref{expr.type.reference.lifetime} & [expr.type]/1: If a pointer to $X$ would be valid in the context of the evaluation of the expression ([basic.fundamental]), the result designates $X$; otherwise, the behavior is undefined. & Yes & No & Track whether storage has been allocated / freed & None
 \\ \hline
-\ubxref{conv.lval.valid.representation} & [conv.lval]/3.4: Otherwise, if the bits in the value representation of the object to which the glvalue refers are not valid for the object's type, the behavior is undefined. & & & &
+\ubxref{conv.lval.valid.representation} & [conv.lval]/3.4: Otherwise, if the bits in the value representation of the object to which the glvalue refers are not valid for the object's type, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & Coerce invalid value representations into erroneous values
 \\ \hline
-\ubxref{conv.ptr.virtual.base} & [conv.ptr]/3: Otherwise, if \tcode{B} is a virtual base class of \tcode{D} and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{D} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & & & &
+\ubxref{conv.ptr.virtual.base} & [conv.ptr]/3: Otherwise, if \tcode{B} is a virtual base class of \tcode{D} and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{D} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & Only for the null pointer case & Track whether storage is associated with object of correct type within its lifetime or object currently being constructed/destroyed; insert null pointer check & None
 \\ \hline
-\ubxref{conv.member.missing.member} & [conv.mem]/2: If class \tcode{D} does not contain the original member and is not a base class of the class containing the original member, the behavior is undefined. & & & &
+\ubxref{conv.member.missing.member} & [conv.mem]/2: If class \tcode{D} does not contain the original member and is not a base class of the class containing the original member, the behavior is undefined. & Yes & No & Track which type the pointer to member originated from & None
 \\ \hline
-\ubxref{expr.call.different.type} & [expr.call]/5: Calling a function through an expression whose function type is not call-compatible with the type of the called function's definition results in undefined behavior. & & & &
+\ubxref{expr.call.different.type} & [expr.call]/5: Calling a function through an expression whose function type is not call-compatible with the type of the called function's definition results in undefined behavior. & Yes & No & Track type information of function based on address & None
 \\ \hline
-\ubxref{expr.ref.member.not.similar} & [expr.ref]/9: If \tcode{E2} is a non-static member and the result of \tcode{E1} is an object whose type is not similar ([conv.qual]) to the type of \tcode{E1}, the behavior is undefined. & & & &
+\ubxref{expr.ref.member.not.similar} & [expr.ref]/9: If \tcode{E2} is a non-static member and the result of \tcode{E1} is an object whose type is not similar ([conv.qual]) to the type of \tcode{E1}, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.dynamic.cast.pointer.lifetime} & [expr.dynamic.cast]/7: If \tcode{v} has type ``pointer to $cv$ \tcode{U}'' and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{U} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & & & &
+\ubxref{expr.dynamic.cast.pointer.lifetime} & [expr.dynamic.cast]/7: If \tcode{v} has type ``pointer to $cv$ \tcode{U}'' and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{U} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & Only for the null pointer case & Track whether storage is associated with object of correct type within its lifetime or object currently being constructed/destroyed; insert null pointer check & None
 \\ \hline
-\ubxref{expr.dynamic.cast.glvalue.lifetime } & [expr.dynamic.cast]/7: If \tcode{v} is a glvalue of type \tcode{U} and \tcode{v} does not refer to an object whose type is similar to \tcode{U} and that is within its lifetime or within its period of construction or destruction, the behavior is undefined. & & & &
+\ubxref{expr.dynamic.cast.glvalue.lifetime } & [expr.dynamic.cast]/7: If \tcode{v} is a glvalue of type \tcode{U} and \tcode{v} does not refer to an object whose type is similar to \tcode{U} and that is within its lifetime or within its period of construction or destruction, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime or object currently being constructed/destroyed & None
 \\ \hline
-\ubxref{expr.static.cast.base.class} & [expr.static.cast]/2: An xvalue of type ``$cv1$ \tcode{B}'' can be cast to type ``rvalue reference to $cv2$ \tcode{D}'' with the same constraints as for an lvalue of type ``$cv1$ \tcode{B}''. If the object of type ``$cv1$ \tcode{B}'' is actually a base class subobject of an object of type \tcode{D}, the result refers to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & & & &
+\ubxref{expr.static.cast.base.class} & [expr.static.cast]/2: An xvalue of type ``$cv1$ \tcode{B}'' can be cast to type ``rvalue reference to $cv2$ \tcode{D}'' with the same constraints as for an lvalue of type ``$cv1$ \tcode{B}''. If the object of type ``$cv1$ \tcode{B}'' is actually a base class subobject of an object of type \tcode{D}, the result refers to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.static.cast.downcast.wrong.derived.type} & [expr.static.cast]/11: If the prvalue of type ``pointer to $cv1$ \tcode{B}'' points to a \tcode{B} that is actually a base class subobject of an object of type \tcode{D}, the resulting pointer points to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & & & &
+\ubxref{expr.static.cast.downcast.wrong.derived.type} & [expr.static.cast]/11: If the prvalue of type ``pointer to $cv1$ \tcode{B}'' points to a \tcode{B} that is actually a base class subobject of an object of type \tcode{D}, the resulting pointer points to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & Only for the null pointer case  & Track whether storage is associated with object of correct type within its lifetime or object currently being constructed/destroyed; insert null pointer check & None
 \\ \hline
-\ubxref{expr.static.cast.does.not.contain.orignal.member} & [expr.static.cast]/12: If class \tcode{B} contains the original member, or is a base class of the class containing the original member, the resulting pointer to member points to the original member. Otherwise, the behavior is undefined. & & & &
+\ubxref{expr.static.cast.does.not.contain.orignal.member} & [expr.static.cast]/12: If class \tcode{B} contains the original member, or is a base class of the class containing the original member, the resulting pointer to member points to the original member. Otherwise, the behavior is undefined. & Yes & No & Track which type the pointer to member originated from & None
 \\ \hline
-\ubxref{expr.unary.dereference} & [expr.unary.op]/1: If the operand points to an object or function, the result denotes that object or function; otherwise, the behavior is undefined except as specified in [expr.typeid]. & & & &
+\ubxref{expr.unary.dereference} & [expr.unary.op]/1: If the operand points to an object or function, the result denotes that object or function; otherwise, the behavior is undefined except as specified in [expr.typeid]. & Yes & Only for the null pointer case & Track whether storage is associated with object of correct type within its lifetime; track whether address is associated with a function; insert null pointer check & None
 \\ \hline
-\ubxref{expr.delete.dynamic.type.differ} & [expr.delete]/3: In a single-object delete expression, if the static type of the object to be deleted is not similar ([conv.qual]) to its dynamic type and the selected deallocation function (see below) is not a destroying operator delete, the static type shall be a base class of the dynamic type of the object to be deleted and the static type shall have a virtual destructor or the behavior is undefined.  & & & &
+\ubxref{expr.delete.dynamic.type.differ} & [expr.delete]/3: In a single-object delete expression, if the static type of the object to be deleted is not similar ([conv.qual]) to its dynamic type and the selected deallocation function (see below) is not a destroying operator delete, the static type shall be a base class of the dynamic type of the object to be deleted and the static type shall have a virtual destructor or the behavior is undefined.  & Yes & No & Track dynamic type of non-polymorphic objects & None
 \\ \hline
-\ubxref{expr.delete.dynamic.array.dynamic.type.differ} & [expr.delete]/3: In an array delete expression, if the dynamic type of the object to be deleted is not similar to its static type, the behavior is undefined. & & & &
+\ubxref{expr.delete.dynamic.array.dynamic.type.differ} & [expr.delete]/3: In an array delete expression, if the dynamic type of the object to be deleted is not similar to its static type, the behavior is undefined. & Yes & No & Track dynamic type of non-polymorphic objects & None
 \\ \hline
-\ubxref{expr.mptr.oper.not.contain.member} & [expr.mptr.oper]/4: Abbreviating \emph{pm-expression}\tcode{.*}\emph{cast-expression} as \tcode{E1.*E2}, \tcode{E1} is called the object expression. If the result of \tcode{E1} is an object whose type is not similar to the type of \tcode{E1}, or whose most derived object does not contain the member to which \tcode{E2} refers, the behavior is undefined. & & & &
+\ubxref{expr.mptr.oper.not.contain.member} & [expr.mptr.oper]/4: Abbreviating \emph{pm-expression}\tcode{.*}\emph{cast-expression} as \tcode{E1.*E2}, \tcode{E1} is called the object expression. If the result of \tcode{E1} is an object whose type is not similar to the type of \tcode{E1}, or whose most derived object does not contain the member to which \tcode{E2} refers, the behavior is undefined. & Yes & No & Track which type the pointer to member originated from and dynamic type of non-polymorphic objects & None
 \\ \hline
-\ubxref{expr.mptr.oper.member.func.null} & [expr.mptr.oper]/6: The result of a .* expression whose second operand is a pointer to a member function is a prvalue. If the second operand is the null member pointer value, the behavior is undefined. & & & &
+\ubxref{expr.mptr.oper.member.func.null} & [expr.mptr.oper]/6: The result of a .* expression whose second operand is a pointer to a member function is a prvalue. If the second operand is the null member pointer value, the behavior is undefined. & Yes & Yes & Insert null pointer check & None
 \\ \hline
-\ubxref{expr.add.not.similar} & [expr.add]/6: For addition or subtraction, if the expressions \tcode{P} or \tcode{Q} have type ``pointer to $cv$ \tcode{T}'', where \tcode{T} and the array element type are not similar, the behavior is undefined. & & & &
+\ubxref{expr.add.not.similar} & [expr.add]/6: For addition or subtraction, if the expressions \tcode{P} or \tcode{Q} have type ``pointer to $cv$ \tcode{T}'', where \tcode{T} and the array element type are not similar, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type & None
 \\ \hline
-\ubxref{expr.assign.overlap} & [expr.assign]/7: If the value being stored in an object is read via another object that overlaps in any way the storage of the first object, then the overlap shall be exact and the two objects shall have the same type, otherwise the behavior is undefined. & & & &
+\ubxref{expr.assign.overlap} & [expr.assign]/7: If the value being stored in an object is read via another object that overlaps in any way the storage of the first object, then the overlap shall be exact and the two objects shall have the same type, otherwise the behavior is undefined. & Yes & Yes & Check overlap of the two address ranges & None
 \\ \hline
-\ubxref{dcl.type.cv.modify.const.obj} & [dcl.type.cv]/4: Any attempt to modify ([expr.assign], [expr.post.incr], [expr.pre.incr]) a const object ([basic.type.qualifier]) during its lifetime ([basic.life]) results in undefined behavior. & & & &
+\ubxref{dcl.type.cv.modify.const.obj} & [dcl.type.cv]/4: Any attempt to modify ([expr.assign], [expr.post.incr], [expr.pre.incr]) a const object ([basic.type.qualifier]) during its lifetime ([basic.life]) results in undefined behavior. & Yes & No & Track whether storage is associated with a \tcode{const} object & None
 \\ \hline
-\ubxref{dcl.type.cv.access.volatile} & [dcl.type.cv]/5: If an attempt is made to access an object defined with a volatile-qualified type through the use of a non-volatile glvalue, the behavior is undefined. & & & &
+\ubxref{dcl.type.cv.access.volatile} & [dcl.type.cv]/5: If an attempt is made to access an object defined with a volatile-qualified type through the use of a non-volatile glvalue, the behavior is undefined. & Yes & No & Track whether storage is associated with a \tcode{volatile} object & None
 \\ \hline
-\ubxref{dcl.ref.incompatible.function} & [dcl.ref]/6: Attempting to bind a reference to a function where the converted initializer is a glvalue whose type is not call-compatible ([expr.call]) with the type of the function's definition results in undefined behavior.  & & & &
+\ubxref{dcl.ref.incompatible.function} & [dcl.ref]/6: Attempting to bind a reference to a function where the converted initializer is a glvalue whose type is not call-compatible ([expr.call]) with the type of the function's definition results in undefined behavior.  & Yes & No & Track types of all functions based on address & None
 \\ \hline
-\ubxref{dcl.ref.incompatible.type} & [dcl.ref]/6: Attempting to bind a reference to an object where the converted initializer is a glvalue through which the object is not type-accessible ([basic.lval]) results in undefined behavior. & & & &
+\ubxref{dcl.ref.incompatible.type} & [dcl.ref]/6: Attempting to bind a reference to an object where the converted initializer is a glvalue through which the object is not type-accessible ([basic.lval]) results in undefined behavior. & Yes & No  & Track whether storage is associated with object of correct type & None
 \\ \hline
-\ubxref{dcl.ref.uninitialized.reference} & [dcl.ref]/6: The behavior of an evaluation of a reference ([expr.prim.id], [expr.ref]) that does not happen after ([intro.races]) the initialization of the reference is undefined. & & & &
+\ubxref{dcl.ref.uninitialized.reference} & [dcl.ref]/6: The behavior of an evaluation of a reference ([expr.prim.id], [expr.ref]) that does not happen after ([intro.races]) the initialization of the reference is undefined. & Yes & No & Track whether references have been initialised & None
 \\ \hline
-\ubxref{class.dtor.not.class.type} & [class.dtor]/16: The invocation of a destructor is subject to the usual rules for member functions ([class.mfct]); that is, if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior. & & & &
+\ubxref{class.dtor.not.class.type} & [class.dtor]/16: The invocation of a destructor is subject to the usual rules for member functions ([class.mfct]); that is, if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior. & This should be a non-normative note & --- & --- & ---
 \\ \hline
-\ubxref{class.dtor.no.longer.exists} & [class.dtor]/18: Once a destructor is invoked for an object, the object's lifetime ends; the behavior is undefined if the destructor is invoked for an object whose lifetime has ended ([basic.life]). & & & &
+\ubxref{class.dtor.no.longer.exists} & [class.dtor]/18: Once a destructor is invoked for an object, the object's lifetime ends; the behavior is undefined if the destructor is invoked for an object whose lifetime has ended ([basic.life]). & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{class.abstract.pure.virtual} & [class.abstract]/6: Member functions can be called from a constructor (or destructor) of an abstract class; the effect of making a virtual call ([class.virtual]) to a pure virtual function directly or indirectly for the object being created (or destroyed) from such a constructor (or destructor) is undefined. & & & &
+\ubxref{class.abstract.pure.virtual} & [class.abstract]/6: Member functions can be called from a constructor (or destructor) of an abstract class; the effect of making a virtual call ([class.virtual]) to a pure virtual function directly or indirectly for the object being created (or destroyed) from such a constructor (or destructor) is undefined. & Yes & Yes &  Insert a \tcode{pre(false)} into the pure virtual stub pointed to from the base class vtable & None
 \\ \hline
-\ubxref{class.base.init.mem.fun} & [class.base.init]/16: Member functions (including virtual member functions, [class.virtual]) can be called for an object under construction or destruction. Similarly, an object under construction or destruction can be the operand of the \tcode{typeid} operator ([expr.typeid]) or of a \tcode{dynamic_cast} ([expr.dynamic.cast]). However, if these operations are performed during evaluation of a \emph{ctor-initializer} (or in a function called directly or indirectly from a \emph{ctor-initializer}) before all the \emph{mem-initializer}s for base classes have completed, a precondition assertion of a constructor, or a postcondition assertion of a destructor ([dcl.contract.func]), the program has undefined behavior. & & & &
+\ubxref{class.base.init.mem.fun} & [class.base.init]/16: Member functions (including virtual member functions, [class.virtual]) can be called for an object under construction or destruction. Similarly, an object under construction or destruction can be the operand of the \tcode{typeid} operator ([expr.typeid]) or of a \tcode{dynamic_cast} ([expr.dynamic.cast]). However, if these operations are performed during evaluation of a \emph{ctor-initializer} (or in a function called directly or indirectly from a \emph{ctor-initializer}) before all the \emph{mem-initializer}s for base classes have completed, a precondition assertion of a constructor, or a postcondition assertion of a destructor ([dcl.contract.func]), the program has undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
-\ubxref{class.cdtor.before.ctor.after.dtor} & [class.cdtor]/1: For an object with a non-trivial constructor, referring to any non-static member or base class of the object before the constructor begins execution results in undefined behavior. & & & &
+\ubxref{class.cdtor.before.ctor.after.dtor} & [class.cdtor]/1: For an object with a non-trivial constructor, referring to any non-static member or base class of the object before the constructor begins execution results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
-\ubxref{class.cdtor.before.ctor.after.dtor} & [class.cdtor]/1:  For an object with a non-trivial destructor, referring to any non-static member or base class of the object after the destructor finishes execution results in undefined behavior. & & & &
+\ubxref{class.cdtor.before.ctor.after.dtor} & [class.cdtor]/1:  For an object with a non-trivial destructor, referring to any non-static member or base class of the object after the destructor finishes execution results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
-\ubxref{class.cdtor.convert.or.form.pointer} & [class.cdtor]/3: To explicitly or implicitly convert a pointer (a glvalue) referring to an object of class \tcode{X} to a pointer (reference) to a direct or indirect base class \tcode{B} of \tcode{X}, the construction of \tcode{X} and the construction of all of its direct or indirect bases that directly or indirectly derive from \tcode{B} shall have started and the destruction of these classes shall not have completed, otherwise the conversion results in undefined behavior. & & & &
+\ubxref{class.cdtor.convert.or.form.pointer} & [class.cdtor]/3: To explicitly or implicitly convert a pointer (a glvalue) referring to an object of class \tcode{X} to a pointer (reference) to a direct or indirect base class \tcode{B} of \tcode{X}, the construction of \tcode{X} and the construction of all of its direct or indirect bases that directly or indirectly derive from \tcode{B} shall have started and the destruction of these classes shall not have completed, otherwise the conversion results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
-\ubxref{class.cdtor.convert.or.form.pointer} & [class.cdtor]/3: To form a pointer to (or access the value of) a direct non-static member of an object \tcode{obj}, the construction of \tcode{obj} shall have started and its destruction shall not have completed, otherwise the computation of the pointer value (or accessing the member value) results in undefined behavior. & & & &
+\ubxref{class.cdtor.convert.or.form.pointer} & [class.cdtor]/3: To form a pointer to (or access the value of) a direct non-static member of an object \tcode{obj}, the construction of \tcode{obj} shall have started and its destruction shall not have completed, otherwise the computation of the pointer value (or accessing the member value) results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
-\ubxref{class.cdtor.virtual.not.x} & [class.cdtor]/4: If the virtual function call uses an explicit class member access ([expr.ref]) and the object expression refers to the complete object of \tcode{x} or one of that object's base class subobjects but not \tcode{x} or one of its base class subobjects, the behavior is undefined. & & & &
+\ubxref{class.cdtor.virtual.not.x} & [class.cdtor]/4: If the virtual function call uses an explicit class member access ([expr.ref]) and the object expression refers to the complete object of \tcode{x} or one of that object's base class subobjects but not \tcode{x} or one of its base class subobjects, the behavior is undefined. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
-\ubxref{class.cdtor.typeid} & [class.cdtor]/5: If the operand of \tcode{typeid} refers to the object under construction or destruction and the static type of the operand is neither the constructor or destructor's class nor one of its bases, the behavior is undefined. & & & &
+\ubxref{class.cdtor.typeid} & [class.cdtor]/5: If the operand of \tcode{typeid} refers to the object under construction or destruction and the static type of the operand is neither the constructor or destructor's class nor one of its bases, the behavior is undefined. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
-\ubxref{class.cdtor.dynamic.cast} & [class.cdtor]/6: If the operand of the \tcode{dynamic_cast} refers to the object under construction or destruction and the static type of the operand is not a pointer to or object of the constructor or destructor's own class or one of its bases, the \tcode{dynamic_cast} results in undefined behavior. & & & &
+\ubxref{class.cdtor.dynamic.cast} & [class.cdtor]/6: If the operand of the \tcode{dynamic_cast} refers to the object under construction or destruction and the static type of the operand is not a pointer to or object of the constructor or destructor's own class or one of its bases, the \tcode{dynamic_cast} results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
-\ubxref{except.handle.handler.ctor.dtor} & [except.handle]/11: Referring to any non-static member or base class of an object in the handler for a \emph{function-try-block} of a constructor or destructor for that object results in undefined behavior. & & & &
+\ubxref{except.handle.handler.ctor.dtor} & [except.handle]/11: Referring to any non-static member or base class of an object in the handler for a \emph{function-try-block} of a constructor or destructor for that object results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{IV. Arithmetic}} 
@@ -850,24 +850,23 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{expr.expr.eval} & [expr.pre]/4: If during the evaluation of an expression, the result is not mathematically defined or not in the range of representable values for its type, the behavior is undefined. & & & &
+\ubxref{expr.expr.eval} & [expr.pre]/4: If during the evaluation of an expression, the result is not mathematically defined or not in the range of representable values for its type, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
 \\ \hline
-\ubxref{conv.double.out.of.range} & [conv.double]/2: A prvalue of floating-point type can be converted to a prvalue of another floating-point type with a greater or equal conversion rank ([conv.rank]). [...] If the source value can be exactly represented in the destination type, the result of the conversion is that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & & & &
+\ubxref{conv.double.out.of.range} & [conv.double]/2: A prvalue of floating-point type can be converted to a prvalue of another floating-point type with a greater or equal conversion rank ([conv.rank]). [...] If the source value can be exactly represented in the destination type, the result of the conversion is that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
 \\ \hline
-\ubxref{conv.fpint.float.not.represented} & [conv.fpint]/1: A prvalue of a floating-point type can be converted to a prvalue of an integer type. The conversion truncates; that is, the fractional part is discarded. The behavior is undefined if the truncated value cannot be represented in the destination type. & & & &
+\ubxref{conv.fpint.float.not.represented} & [conv.fpint]/1: A prvalue of a floating-point type can be converted to a prvalue of an integer type. The conversion truncates; that is, the fractional part is discarded. The behavior is undefined if the truncated value cannot be represented in the destination type. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
 \\ \hline
-\ubxref{conv.fpint.int.not.represented} & [conv.fpint]/2: A prvalue of an integer type or of an unscoped enumeration type can be converted to a prvalue of a floating-point type. [...] If the value being converted is outside the range of values that can be represented, the behavior is undefined. & & & &
+\ubxref{conv.fpint.int.not.represented} & [conv.fpint]/2: A prvalue of an integer type or of an unscoped enumeration type can be converted to a prvalue of a floating-point type. [...] If the value being converted is outside the range of values that can be represented, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
 \\ \hline
-\ubxref{expr.static.cast.enum.outside.range} & [expr.static.cast]/9: If the enumeration type does not have a fixed underlying type, the value is unchanged if the original value is within the range of the enumeration values ([dcl.enum]), and otherwise, the behavior is undefined. & & & &
+\ubxref{expr.static.cast.enum.outside.range} & [expr.static.cast]/9: If the enumeration type does not have a fixed underlying type, the value is unchanged if the original value is within the range of the enumeration values ([dcl.enum]), and otherwise, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
 \\ \hline
-\ubxref{expr.static.cast.fp.outside.range} & [expr.static.cast]/10: A prvalue of floating-point type can be explicitly converted to any other floating-point type. If the source value can be exactly represented in the destination type, the result of the conversion has that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & & & &
+\ubxref{expr.static.cast.fp.outside.range} & [expr.static.cast]/10: A prvalue of floating-point type can be explicitly converted to any other floating-point type. If the source value can be exactly represented in the destination type, the result of the conversion has that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
 \\ \hline
-\ubxref{expr.mul.div.by.zero} & [expr.mul]/4: The binary \tcode{/} operator yields the quotient, and the binary \tcode{\%} operator yields the remainder from the division of the first expression by the second. If the second operand of \tcode{/} or \tcode{\%} is zero, the behavior is undefined. & & & &
+\ubxref{expr.mul.div.by.zero} & [expr.mul]/4: The binary \tcode{/} operator yields the quotient, and the binary \tcode{\%} operator yields the remainder from the division of the first expression by the second. If the second operand of \tcode{/} or \tcode{\%} is zero, the behavior is undefined. & Yes & Yes & Insert check whether second operand is zero & Coerce into erroneous value
 \\ \hline
-\ubxref{expr.mul.representable.type.result} & [expr.mul]/4: For integral operands, the \tcode{/} operator yields the algebraic quotient with any fractional part discarded; if the quotient \tcode{a/b} is representable in the type of the result, \tcode{(a/b)*b + a\%b} is equal to \tcode{a}; otherwise, the behavior of both \tcode{a/b} and \tcode{a\%b} is undefined. & & & &
-% TD: double-check that the backslash inside tcode is not being typeset!
+\ubxref{expr.mul.representable.type.result} & [expr.mul]/4: For integral operands, the \tcode{/} operator yields the algebraic quotient with any fractional part discarded; if the quotient \tcode{a/b} is representable in the type of the result, \tcode{(a/b)*b + a\%b} is equal to \tcode{a}; otherwise, the behavior of both \tcode{a/b} and \tcode{a\%b} is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
 \\ \hline
-\ubxref{expr.shift.neg.and.width} & [expr.shift]/1: The behavior is undefined if the right operand is negative, or greater than or equal to the width of the promoted left operand. & & & &
+\ubxref{expr.shift.neg.and.width} & [expr.shift]/1: The behavior is undefined if the right operand is negative, or greater than or equal to the width of the promoted left operand. & Yes  & Yes & Insert check whether right operand is valid & Coerce into erroneous value
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{V. Threading}} 
@@ -875,7 +874,7 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{intro.races.data} & [intro.races]/17: Any such data race results in undefined behavior. & & & &
+\ubxref{intro.races.data} & [intro.races]/17: Any such data race results in undefined behavior. & Yes & No & Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & Make all primitive memory accesses implicitly atomic
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{VI. Sequencing}} 
@@ -883,7 +882,7 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{intro.execution.unsequenced.modification} & [conv.rank]/10:  The behavior is undefined if a side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread]). & & & &
+\ubxref{intro.execution.unsequenced.modification} & [conv.rank]/10:  The behavior is undefined if a side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread]). & Yes & Yes & identify all potential read operations that are not sequenced with respect to each given write operation; insert checks to identify if those operations are referencing the same address & Sequence operations in some unspecified order
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{VII. Assumptions}} 
@@ -891,7 +890,7 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{dcl.attr.assume.false} & [dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime-undefined behavior. & & & &
+\ubxref{dcl.attr.assume.false} & [dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime-undefined behavior. & No, except if predicate can be proven to be side-effect free & --- & No automatic checking strategy possible; user has to change \tcode{[[assume(x)]]} to \tcode{contract_assert<may_be_assumed>(x)} and select appropriate semantic & Ignore the assumption
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{VIII. Control Flow}} 
@@ -899,17 +898,17 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{basic.start.main.exit.during.destruction} & [basic.start.main]/4: If \tcode{std::exit} is invoked during the destruction of an object with static or thread storage duration, the program has undefined behavior. & & & &
+\ubxref{basic.start.main.exit.during.destruction} & [basic.start.main]/4: If \tcode{std::exit} is invoked during the destruction of an object with static or thread storage duration, the program has undefined behavior. & Yes & No & Track whether static or thread-local objects are currently being destroyed & None
 \\ \hline
-\ubxref{basic.start.term.use.after.destruction} & [basic.start.term]/4: If a function contains a block variable of static or thread storage duration that has been destroyed and the function is called during the destruction of an object with static or thread storage duration, the program has undefined behavior if the flow of control passes through the definition of the previously destroyed block variable. & & & &
+\ubxref{basic.start.term.use.after.destruction} & [basic.start.term]/4: If a function contains a block variable of static or thread storage duration that has been destroyed and the function is called during the destruction of an object with static or thread storage duration, the program has undefined behavior if the flow of control passes through the definition of the previously destroyed block variable. & Yes & No & Track lifetime of static objects &
 \\ \hline
-\ubxref{stmt.return.flow.off} & [stmt.return]/4: Otherwise, flowing off the end of a function that is neither \tcode{main} ([basic.start.main]) nor a coroutine ([dcl.fct.def.coroutine]) results in undefined behavior. & & & &
+\ubxref{stmt.return.flow.off} & [stmt.return]/4: Otherwise, flowing off the end of a function that is neither \tcode{main} ([basic.start.main]) nor a coroutine ([dcl.fct.def.coroutine]) results in undefined behavior. & Yes & Yes & Insert \tcode{contract_assert(false} at end of \emph{function-body} & Only for built-in return types: return erroneous value
 \\ \hline
-\ubxref{stmt.return.coroutine.flow.off} & [stmt.return.coroutine]/3: If a search for the name \tcode{return_void} in the scope of the promise type finds any declarations, flowing off the end of a coroutine's \emph{function-body} is equivalent to a \mbox{\tcode{co_return}} with no operand; otherwise flowing off the end of a coroutine's \emph{function-body} results in undefined behavior. & & & &
+\ubxref{stmt.return.coroutine.flow.off} & [stmt.return.coroutine]/3: If a search for the name \tcode{return_void} in the scope of the promise type finds any declarations, flowing off the end of a coroutine's \emph{function-body} is equivalent to a \mbox{\tcode{co_return}} with no operand; otherwise flowing off the end of a coroutine's \emph{function-body} results in undefined behavior. & Yes & Yes & Insert \tcode{contract_assert(false} at end of  \emph{function-body} & Only for built-in return types: return erroneous value
 \\ \hline
-\ubxref{stmt.dcl.local.static.init.recursive} & [stmt.dcl]/3: If control re-enters the declaration recursively while the variable is being initialized, the behavior is undefined. & & & &
+\ubxref{stmt.dcl.local.static.init.recursive} & [stmt.dcl]/3: If control re-enters the declaration recursively while the variable is being initialized, the behavior is undefined. & Yes & No & Insert recursion counter into guard for static and thread-local object construction & None
 \\ \hline
-\ubxref{dcl.attr.noreturn.eventually.returns} & [dcl.attr.noreturn]/2: If a function \tcode{f} is invoked where \tcode{f} was previously declared with the \tcode{noreturn} attribute and that invocation eventually returns, the behavior is runtime-undefined. & & & &
+\ubxref{dcl.attr.noreturn.eventually.returns} & [dcl.attr.noreturn]/2: If a function \tcode{f} is invoked where \tcode{f} was previously declared with the \tcode{noreturn} attribute and that invocation eventually returns, the behavior is runtime-undefined. & Yes & Yes & Insert \tcode{post(false)} & None
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{IX. Replacement Functions}} 
@@ -917,11 +916,11 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{basic.stc.alloc.dealloc.constraint} & [basic.stc.dynamic.general]/3: If the behavior of an allocation or deallocation function does not satisfy the semantic constraints specified in [basic.stc.dynamic.allocation] and [basic.stc.dynamic.deallocation], the behavior is undefined. & & & &
+\ubxref{basic.stc.alloc.dealloc.constraint} & [basic.stc.dynamic.general]/3: If the behavior of an allocation or deallocation function does not satisfy the semantic constraints specified in [basic.stc.dynamic.allocation] and [basic.stc.dynamic.deallocation], the behavior is undefined. & Partially: some constraints can be checked locally (e.g., allocation function does not return null); others cannot be checked at all. & Partially & Insert checks where possible & None
 \\ \hline
-\ubxref{basic.stc.alloc.dealloc.throw} & [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. & & & &
+\ubxref{basic.stc.alloc.dealloc.throw} & [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. & Address this via \cite{P3424R0} instead & --- & --- & ---
 \\ \hline
-\ubxref{expr.new.non.allocating.null} & [expr.new]/22: If the allocation function is a non-allocating form ([new.delete.placement]) that returns null, the behavior is undefined. & & & &
+\ubxref{expr.new.non.allocating.null} & [expr.new]/22: If the allocation function is a non-allocating form ([new.delete.placement]) that returns null, the behavior is undefined. & Yes & Yes & Insert \tcode{post(r: r)} & None
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{X. Coroutines}} 
@@ -929,9 +928,9 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{dcl.fct.def.coroutine.resume.not.suspended} & [dcl.fct.def.coroutine]/9: Invoking a resumption member function for a coroutine that is not suspended results in undefined behavior. & & & &
+\ubxref{dcl.fct.def.coroutine.resume.not.suspended} & [dcl.fct.def.coroutine]/9: Invoking a resumption member function for a coroutine that is not suspended results in undefined behavior. & Yes & No & Track suspension state associated with every coroutine handle & None
 \\ \hline
-\ubxref{dcl.fct.def.coroutine.destroy.not.suspended} & [dcl.fct.def.coroutine/12: If \tcode{destroy} is called for a coroutine that is not suspended, the program has undefined behavior. & & & &
+\ubxref{dcl.fct.def.coroutine.destroy.not.suspended} & [dcl.fct.def.coroutine/12: If \tcode{destroy} is called for a coroutine that is not suspended, the program has undefined behavior. & Yes & No & Track suspension state associated with every coroutine handle & None
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{XI. Templates}} 
@@ -939,7 +938,7 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{temp.inst.inf.recursion} & [temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined. & & & &
+\ubxref{temp.inst.inf.recursion} & [temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined. & No, make ill-formed instead & --- & --- & ---
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{XII. Preprocessor}} 
@@ -947,21 +946,21 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
 \\ \hline
-\ubxref{cpp.cond.defined} & [cpp.cond]/11: If the preprocessing token \tcode{defined} is generated as a result of this replacement process or use of the \tcode{defined} unary operator does not match one of the two specified forms prior to macro replacement, the behavior is undefined. & & & &
+\ubxref{cpp.cond.defined} & [cpp.cond]/11: If the preprocessing token \tcode{defined} is generated as a result of this replacement process or use of the \tcode{defined} unary operator does not match one of the two specified forms prior to macro replacement, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.include.one.of.two.forms} & [cpp.include]/4:  The preprocessing tokens after \tcode{include} in the directive are processed just as in normal text ([...]). If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined. & & & &
+\ubxref{cpp.include.one.of.two.forms} & [cpp.include]/4:  The preprocessing tokens after \tcode{include} in the directive are processed just as in normal text ([...]). If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.replace.macro.pptoken} & [cpp.replace.general]/13: If there are sequences of preprocessing tokens within the list of arguments that would otherwise act as preprocessing directives, the behavior is undefined. & & & &
+\ubxref{cpp.replace.macro.pptoken} & [cpp.replace.general]/13: If there are sequences of preprocessing tokens within the list of arguments that would otherwise act as preprocessing directives, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.stringize.invalid.char} & [cpp.stringize]/2: If the replacement that results is not a valid character string literal, the behavior is undefined. & & & &
+\ubxref{cpp.stringize.invalid.char} & [cpp.stringize]/2: If the replacement that results is not a valid character string literal, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.concat.invalid.preprocessing.token} & [cpp.concat]/3: If the result is not a valid preprocessing token, the behavior is undefined.  & & & &
+\ubxref{cpp.concat.invalid.preprocessing.token} & [cpp.concat]/3: If the result is not a valid preprocessing token, the behavior is undefined.  & No, make IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.line.zero.or.overflow} & [cpp.line]/3: If the digit sequence specifies zero or a number greater than $2147483647$, the behavior is undefined. & & & &
+\ubxref{cpp.line.zero.or.overflow} & [cpp.line]/3: If the digit sequence specifies zero or a number greater than $2147483647$, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.line.pptoken.not.match} & [cpp.line]/5: If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined; otherwise, the result is processed as appropriate. & & & &
+\ubxref{cpp.line.pptoken.not.match} & [cpp.line]/5: If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined; otherwise, the result is processed as appropriate. & No, make IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.predefined.define.undef} & [cpp.predefined]/4: If any of the pre-defined macro names in this subclause, or the identifier \tcode{defined}, is the subject of a \tcode{\#define} or a \tcode{\#undef} preprocessing directive, the behavior is undefined. & & & &
+\ubxref{cpp.predefined.define.undef} & [cpp.predefined]/4: If any of the pre-defined macro names in this subclause, or the identifier \tcode{defined}, is the subject of a \tcode{\#define} or a \tcode{\#undef} preprocessing directive, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
 \\ \hline
 
 \end{longtable}

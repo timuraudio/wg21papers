@@ -172,7 +172,7 @@ The present revision (R2) is a complete rewrite of the paper that considers the 
 
 \subsection{Methodology and scope}
 
-For this paper, we manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all cases of explicitly specified core language UB. Our complete list, containing 83 cases of UB, can be found in Appendix~A of this paper. % TODO: add \ref to appendix
+For this paper, we manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all cases of explicitly specified core language UB. Our complete list, containing 83 cases of UB, can be found in \hyperref[appendix]{Appendix~A} of this paper. 
 
 Another group of WG21 members is currently engaged in an effort, based on work by Shafik Yaghmour (\cite{P1705R1}, \cite{P3075R0}) and following the process outlined in \cite{P3656R1}, to enumerate cases of core language UB directly in the C++ Standard document  \LaTeX{} source. Our list has been created independently from that effort.
 
@@ -291,7 +291,7 @@ At the expensive end of the locally diagnosable UB spectrum are runtime checks f
 In addition to the cost of the check itself, we need to consider the frequency with which these checks would need to be done. Checks that would need to happen once when a function is called or when a function returns are likely to be acceptable in most scenarios. Extensive checks for arithmetic UB will probably be acceptable in fewer scenarios because they have the potential to significantly slow arithmetic operations, which are performance sensitive in many contexts. On the extreme end, if we wanted to diagnose \{intro.execution.unsequenced.modification\} via a runtime check, the check itself would be fairly inexpensive, but the compiler would have to identify all potential read operations that are not sequenced with respect to each given write operation and then insert checks to identify if those operations are actually going to reference the same address.
 
 For UB that is not locally diagnosable (which is most of the UB in C++), we need to consider the cost of the required additional instrumentation. To get an idea of that cost, we must nail down exactly which additional properties that are not normally known from within the C++ abstract machine would need to be tracked by such instrumentation. This tracking would need to happen at run time throughout the \emph{entire} program; checks relying on the tracked information would have to be inserted for \emph{every} runtime operation that may be affected by such UB.
-The full list is available in Appendix A, and we provide an overview below.
+The full list is available in \hyperref[appendix]{Appendix~A}, and we provide an overview below.
 
 To diagnose \emph{all} cases of UB in the memory safety categories of Initialization, Bounds, and Type and Lifetime, instrumentation would have to track all the following properties:
 
@@ -327,7 +327,7 @@ We could also use the term \emph{erroneous behaviour} (EB), which is conceptuall
 
 For fallback behaviour to happen, the compiler must supply the necessary instructions. However, in the vast majority of cases, core language UB is fundamentally \emph{not} diagnosable at compile time (see Section~\ref{locally}); i.e., whether or not the UB will occur depends on runtime parameters. Fallback behaviour \emph{cannot}, therefore, depend on knowing that an error occurred. For non-locally-diagnosable UB, fallback behaviour also cannot depend on any additional instrumentation being present.
 
-For this paper, we systematically identified all cases of core language UB for which such fallback behaviour exists. This section gives an overview; the full list can be found in Appendix A. As we will see, for most cases of UB, fallback behaviour does not exist, and if it does, it is often not cheap.
+For this paper, we systematically identified all cases of core language UB for which such fallback behaviour exists. This section gives an overview; the full list can be found in \hyperref[appendix]{Appendix~A}. As we will see, for most cases of UB, fallback behaviour does not exist, and if it does, it is often not cheap.
 
 For UB in the Initialization category (\{basic.indet.value\}), fallback behaviour is sometimes possible for built-in types: return an erroneous value instead. For variables with automatic storage duration, this fallback behaviour is already part of C++26 as EB via \cite{P2795R5}, because for this case, the fallback behaviour is particularly cheap. The same fallback behaviour could also be employed for dynamically allocated variables but at greater cost (see \cite{P2723R1} Section 6 for discussion).
 
@@ -667,7 +667,7 @@ Name & Meaning \\ \hline \hline
 \end{tabular}
 \end{adjustwidth}
 
-Modify all cases of runtime-checkable UB \emph{with} fallback behaviour, as listed in Appendix A, according to the following pattern. 
+Modify all cases of runtime-checkable UB \emph{with} fallback behaviour, as listed in \hyperref[appendix]{Appendix~A}, according to the following pattern. 
 
 --- Example [expr.expr.eval]:
 
@@ -681,7 +681,7 @@ Modify all cases of runtime-checkable UB \emph{with} fallback behaviour, as list
 The value computations of the operands of an operator are sequenced before the value computation of the result of the operator. \removed{The behavior is undefined if}\added{There is an implicit contract assertion that} \removed{a}\added{no} side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread])\added{; if this precondition assertion is violated, the value computations are sequenced in an unspecified order}.
 \end{adjustwidth}
 
-Modify all cases of runtime-checkable UB \emph{without} fallback behaviour, as listed in Appendix A, according to the following pattern. 
+Modify all cases of runtime-checkable UB \emph{without} fallback behaviour, as listed in \hyperref[appendix]{Appendix~A}, according to the following pattern. 
 
 --- Example [basic.stc.dynamic.allocation]:
 
@@ -695,16 +695,16 @@ Modify all cases of runtime-checkable UB \emph{without} fallback behaviour, as l
 For an object with a non-trivial destructor, referring to any non-static member or base class of the object \added{has an implicit precondition assertion that the destructor has not yet finished}\removed{after the destructor finishes} execution\added{; continuing execution past a violation of this precondition assertion} results in undefined behavior.
 \end{adjustwidth}
 
-Written-out wording for all 73 cases of runtime-checkable UB listed in Appendix A can be provided in a future revision of this paper.
+Written-out wording for all 73 cases of runtime-checkable UB listed in \hyperref[appendix]{Appendix~A} can be provided in a future revision of this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \pagebreak
-%\pagestyle{empty}
 \begin{landscape}
 
 \addcontentsline{toc}{section}{Appendix: UB list}
 \section*{Appendix A: List of language UB}
+\label{appendix}
 
 All wording taken from the current C++ working paper \cite{N5008}. Each row corresponds to one case of explicit core language UB. Rows are arranged by category, as defined in Section~\ref{categories}; within each category, rows are ordered in the same order in which the corresponding wording appears in \cite{N5008}.
 

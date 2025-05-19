@@ -172,7 +172,7 @@ The present revision (R2) is a complete rewrite of the paper that considers the 
 
 \subsection{Methodology and scope}
 
-For this paper, we manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all cases of explicitly specified core language UB. Our complete list, containing 83 cases of UB, can be found in \hyperref[appendix]{Appendix~A} of this paper. 
+For this paper, we manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all cases of explicitly specified core language UB. Our complete list, containing 90 cases of UB, can be found in \hyperref[appendix]{Appendix~A} of this paper. 
 
 Another group of WG21 members is currently engaged in an effort, based on work by Shafik Yaghmour (\cite{P1705R1}, \cite{P3075R0}) and following the process outlined in \cite{P3656R1}, to enumerate cases of core language UB directly in the C++ Standard document  \LaTeX{} source. Our list has been created independently from that effort.
 
@@ -378,14 +378,16 @@ this situation is not a new case of UB and is already omitted from the specifica
 The second is \{basic.stc.alloc.dealloc.throw\}. There is no good reason why throwing an exception from a deallocation function should cause UB. Instead, we should enforce that deallocation functions have a nonthrowing exception specification. This solution is proposed in \cite{P3424R0}, and we refer to that paper for mitigating this case of UB.
 % TD: Is this actually compile-time diagnosable? If yes, we should move this to the top of this section.
 
-We are left with 73 %TD: double-check this number when the appendix is complete
+We are left with 79
 cases of UB for which we need to identify candidate mitigation strategies. All of those cases represent \emph{runtime} UB that cannot be diagnosed at compile time. Therefore, one possible mitigation strategy for \emph{all} those cases of UB is to insert \emph{runtime} checks.
 
-Fundamentally, inserting runtime checks is possible for all those 73 cases of UB. However, as we saw in Section~\ref{locally}, the majority of those cases require expensive sanitiser-like instrumentation to perform the checks, and even for locally diagnosable cases of UB where additional instrumentation is not required, the checks themselves have a significant runtime overhead in almost all cases. Therefore, the checks need to be \emph{optional}: we need a mechanism to enable and disable each kind of check, and we cannot require an implementation to support all checks.
+Fundamentally, inserting runtime checks is possible for all those 79 cases of UB.
+% TD: not quite true, not for [[assume]]
+However, as we saw in Section~\ref{locally}, the majority of those cases require expensive sanitiser-like instrumentation to perform the checks, and even for locally diagnosable cases of UB where additional instrumentation is not required, the checks themselves have a significant runtime overhead in almost all cases. Therefore, the checks need to be \emph{optional}: we need a mechanism to enable and disable each kind of check, and we cannot require an implementation to support all checks.
 
 For example, a compiler may choose to support enabling runtime checks for arithmetic UB (they already do today for some cases; for example, GCC offers the \tcode{-ftrapv} flag, which enables checks for signed integer overflow) while not supporting any checks that require expensive instrumentation. On the other hand, a different compiler that comes with a suite of a sanitisers may choose to support some subset of those more expensive checks (and again, they already do today, just not in a standardised fashion).
 
-Defining such optional runtime checks for all those 73 cases of UB is, therefore, useful in itself. These checks cost \emph{nothing} unless they are turned on, and no implementation is actually \emph{required} to implement them, yet specifying them in the Standard has a number of advantages: it allows us to assign standard names and categories to them (see also Section~\ref{ext}); it allows for implementations of such runtime checks (including existing compiler options and sanitisers) to leverage a shared paradigm and shared terminology; and it brings those tools into the scope of the C++ Standard.
+Defining such optional runtime checks for all those 79 cases of UB is, therefore, useful in itself. These checks cost \emph{nothing} unless they are turned on, and no implementation is actually \emph{required} to implement them, yet specifying them in the Standard has a number of advantages: it allows us to assign standard names and categories to them (see also Section~\ref{ext}); it allows for implementations of such runtime checks (including existing compiler options and sanitisers) to leverage a shared paradigm and shared terminology; and it brings those tools into the scope of the C++ Standard.
 
 The natural way to introduce such optional runtime checks to C++ is to leverage the Contracts framework. All the necessary machinery and terminology for optional runtime checks --- called \emph{contract assertions} --- are already present in C++26, thanks to the foundation laid by \cite{P2900R14}. The only missing part is to introduce compiler-generated checks, i.e., \emph{implicit} contract assertions, in addition to the user-authored checks, i.e., \emph{explicit} contract assertions,  added via \cite{P2900R14} and to hook those new implicit contract assertions into the same contract-checking and violation-handling machinery used by the explicit ones. We propose to do exactly this in Sections \ref{defineicas}--\ref{applyicas}. By integrating with the same contract-violation handling facility, we vastly increase the ability to deploy, to production systems, software that is hardened against entire categories of potential bugs.
 
@@ -467,14 +469,14 @@ Finally, we do not propose a separate contract-violation handler for implicit co
 \subsection{Applying implicit contract assertions}
 \label{applyicas}
 
-Now that we have a framework in place for specifying what an implicit contract assertion is and how it behaves, we can apply that specification to \emph{every} case of UB  that is --- at least in principle --- runtime checkable, i.e., per Section~\ref{mitigation}, 73 cases of UB, which is the vast majority of core language UB in C++ today.
+Now that we have a framework in place for specifying what an implicit contract assertion is and how it behaves, we can apply that specification to \emph{every} case of UB  that is --- at least in principle --- runtime checkable, i.e., per Section~\ref{mitigation}, 79 cases of UB, which is the vast majority of core language UB in C++ today.
 
 The required transformation is to change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``operation $X$ has an implicit precondition that $A$ is \tcode{true}; continuing execution past a violation of this precondition is undefined behaviour''.
-% TD: JMB, I really think that instead of repeating this "continuing execution... is UB" wording 73 times, it would be better to find a term for it. I again propose "non-continuable precondition". I am happy to use something else if you have a better idea.
+% TD: JMB, I really think that instead of repeating this "continuing execution... is UB" wording 79 times, it would be better to find a term for it. I again propose "non-continuable precondition". I am happy to use something else if you have a better idea.
 % JMB: I actually think we want to stick with what we have in the library --- a precondition violation means the operation has undefined behavior if actually evaluated.   We can call out the cases where an erroneous value is produced then by stating the fallback behavior (and in all other cases there is UB) ---  "if the precondition is violated, an erroneous value is produced", etc.
 % TD: Hm, I'm not sure I like this, it would effectively hide the fact that there is UB, or at least make it a lot less obvious in which cases there is UB and in which there isn't. Let's leave it as it is for now, and maybe we have a better idea of how to word this in a later revision.
 
-Note that we do not specify any restrictions on the evaluation semantics of any of these 73 newly introduced  implicit contract assertions. Since the choice of evaluation semantic is implementation-defined, every implementation can choose for themselves which evaluation semantics to offer for which one and which should be the default semantic. One possible implementation choice is to simply make all 73 cases always have the \emph{ignore} semantic, which makes all existing implementations of C++ already conforming with our proposal. Another possible choice is to say that  \emph{ignore} is the default, but other semantics are available. Yet another possible choice is to enable certain checks by default. All those choices are conforming with our proposal.
+Note that we do not specify any restrictions on the evaluation semantics of any of these 79 newly introduced  implicit contract assertions. Since the choice of evaluation semantic is implementation-defined, every implementation can choose for themselves which evaluation semantics to offer for which one and which should be the default semantic. One possible implementation choice is to simply make all 79 cases always have the \emph{ignore} semantic, which makes all existing implementations of C++ already conforming with our proposal. Another possible choice is to say that  \emph{ignore} is the default, but other semantics are available. Yet another possible choice is to enable certain checks by default. All those choices are conforming with our proposal.
 
 Since the choice of evaluation semantic is  implementation-defined, implementations are further expected to document which semantics they support for which implicit contract assertions and which selection mechanism they offer. Once we have Labels (see Section~\ref{ext}) for each case of UB guarded by an implicit contract assertion, implementations and users can refer to each case by name, giving us a shared, portable, universally agreed standard framework with terminology for reasoning about runtime UB.
 
@@ -695,7 +697,7 @@ Modify all cases of runtime-checkable UB \emph{without} fallback behaviour, as l
 For an object with a non-trivial destructor, referring to any non-static member or base class of the object \added{has an implicit precondition assertion that the destructor has not yet finished}\removed{after the destructor finishes} execution\added{; continuing execution past a violation of this precondition assertion} results in undefined behavior.
 \end{adjustwidth}
 
-Written-out wording for all 73 cases of runtime-checkable UB listed in \hyperref[appendix]{Appendix~A} can be provided in a future revision of this paper.
+Written-out wording for all 79 cases of runtime-checkable UB listed in \hyperref[appendix]{Appendix~A} can be provided in a future revision of this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

@@ -751,7 +751,7 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 \\ \hline
 \ubxref{lifetime.outside.pointer.member} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used to access a non-static data member or call a non-static member function of the object, [...]  & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.convert} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is implicitly converted ([conv.ptr]) to a pointer to a virtual base class [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.pointer.virtual} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is implicitly converted ([conv.ptr]) to a pointer to a virtual base class [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline
 \ubxref{lifetime.outside.pointer.static.cast} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{static_cast} ([expr.static.cast]), except when the conversion is to pointer to $cv$ \tcode{void}, or to pointer to $cv$ \tcode{void} and subsequently to pointer to $cv$ \tcode{char}, $cv$ \tcode{unsigned char}, or $cv$ \tcode{std::byte} ([cstddef.syn]) [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
 \\ \hline

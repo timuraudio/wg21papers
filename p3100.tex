@@ -376,16 +376,15 @@ this situation is not a new case of UB and is already omitted from the specifica
 The second is \{basic.stc.alloc.dealloc.throw\}. There is no good reason why throwing an exception from a deallocation function should cause UB. Instead, we should enforce that deallocation functions have a nonthrowing exception specification. This solution is proposed in \cite{P3424R0}, and we refer to that paper for mitigating this case of UB.
 % TD: Is this actually compile-time diagnosable? If yes, we should move this to the top of this section.
 
-One more case of UB 
-
-We are left with 79
-cases of UB for which we need to identify candidate mitigation strategies. All of those cases represent \emph{runtime} UB that cannot be diagnosed at compile time. Therefore, one possible mitigation strategy for \emph{all} those cases of UB is to insert \emph{runtime} checks.
+We are left with 79 cases of UB for which we need to identify candidate mitigation strategies. All of those cases represent \emph{runtime} UB that cannot be diagnosed at compile time. Therefore, one possible mitigation strategy for \emph{all} those cases of UB is to insert \emph{runtime} checks.
 
 Fundamentally, inserting runtime checks is possible for 78 out of those 79 cases, the only exception being \{dcl.attr.assume.false\} where, as we saw in Section~\ref{locally}, no automated runtime checking is possible in the general case (see also Section~\ref{assume}) because we cannot prove that the assumption predicate is side-effect free.
 
 However, as we saw in Section~\ref{locally}, the majority of those cases (60 out of 78) are not locally diagnosable and require expensive sanitiser-like instrumentation to perform the checks. And even for those 18 cases of UB that are locally diagnosable and do not require additional instrumentation to insert runtime checks, in most cases the checks themselves will have a significant runtime overhead. Therefore, the checks need to be \emph{optional}: we need a mechanism to enable and disable each kind of check, and we cannot require an implementation to support all checks.
 
 For example, a compiler may choose to support enabling runtime checks for arithmetic UB (they already do today for some cases; for example, GCC offers the \tcode{-ftrapv} flag, which enables checks for signed integer overflow) while not supporting any checks that require expensive instrumentation. On the other hand, a different compiler that comes with a suite of a sanitisers may choose to support some subset of those more expensive checks (and again, they already do today, just not in a standardised fashion).
+
+\pagebreak % TD: manual pagebreak to avoid a weird gap later. Remove when text changes.
 
 Defining such optional runtime checks for all those 79 cases of UB is, therefore, useful in itself. These checks cost \emph{nothing} unless they are turned on, and no implementation is actually \emph{required} to implement them, yet specifying them in the Standard has a number of advantages: it allows us to assign standard names and categories to them (see also Section~\ref{ext}); it allows for implementations of such runtime checks (including existing compiler options and sanitisers) to leverage a shared paradigm and shared terminology; and it brings those tools into the scope of the C++ Standard.
 

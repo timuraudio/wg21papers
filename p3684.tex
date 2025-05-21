@@ -1,0 +1,185 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+% Table going across a page: 
+ \usepackage{longtable}
+
+ % Start sections at 0
+% \setcounter{section}{-1}
+
+% color boxes
+\usepackage{tikz,lipsum,lmodern}
+\usepackage[most]{tcolorbox}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%TABLE OF CONTENTS SETTINGS
+
+\usepackage{titlesec}
+\usepackage{tocloft}
+
+% Custom ToC layout because the default sucks
+\cftsetindents{section}{0in}{0.24in}
+\cftsetindents{subsection}{0.24in}{0.34in}
+\cftsetindents{subsubsection}{0.58in}{0.44in}
+
+% Needed later to reduce the ToC depth mid document
+\newcommand{\changelocaltocdepth}[1]{%
+  \addtocontents{toc}{\protect\setcounter{tocdepth}{#1}}%
+  \setcounter{tocdepth}{#1}%
+}
+
+\setcounter{tocdepth}{3}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%POLLS
+
+\definecolor{pollFrame}{rgb}{0,.718,0}
+\definecolor{pollBG}{rgb}{.5,1,.5}
+
+\newtcolorbox{wgpoll}[1]{colframe=pollFrame,colback=pollBG!20!white,title={#1}}
+
+\newcommand{\wgpollresult}[5]{%
+
+  \vspace{2mm}
+  \begin{tabular}{c | c | c | c | c} %
+  SF  & F  & N  & A  & SA \\ %
+  \hline %
+  #1 & #2 & #3 & #4 & #5 \\ %
+
+  \end{tabular}
+  \vspace{2mm}  \\ %
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Contract assertions on virtual functions: \\ a principled design approach}
+\author{
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) 
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3684R0 \\
+Date: &2025-05-21 \\
+Project: & Programming Language C++ \\
+Audience: & SG21, EWG
+\end{tabular}
+
+\begin{abstract}
+TODO
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\tableofcontents*
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Revision history}
+
+%Revision 0 (2024-04-16)
+%\begin{itemize}
+%\item Original version
+%\end{itemize}
+
+%\pagebreak
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Introduction}
+
+TODO
+
+\section{Methodology}
+
+TODO
+
+\section{Desirable properties}
+
+TODO
+
+\section{Known solutions}
+
+TODO
+
+\subsection{Default behaviour}
+
+TODO
+
+\subsubsection{Inherit contract by default}
+
+TODO
+
+\subsubsection{Check interface contract only}
+
+TODO
+
+\subsubsection{Check implementation contract only}
+
+TODO
+
+\subsubsection{Caller/callee model}
+
+TODO
+
+\subsubsection{No virtual function contracts}
+
+TODO
+
+\subsection{Opt-in behaviour}
+
+TODO
+
+\subsubsection{Inherit via opt-in on base class side}
+
+TODO
+
+\subsubsection{Inherit via opt-in on derived class side}
+
+TODO
+
+\subsubsection{Prevent inheritance via opt-in}
+
+TODO
+
+\subsubsection{Warn on inheritance}
+
+TODO
+
+\subsubsection{Opt into interface checks}
+
+TODO
+
+\subsubsection{Opt into inheritance checks}
+
+TODO
+
+\section{Conformance matrix}
+
+TODO
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\section*{Acknowledgements}
+%Thanks to Oliver Rosten for his review of the paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

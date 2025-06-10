@@ -1,4 +1,5 @@
 \input{wg21common}
+\usepackage{breakurl}
 
 % Footnotes at bottom of page:
  \usepackage[bottom]{footmisc} 
@@ -120,25 +121,26 @@ In this paper, we enumerate all cases of core language undefined behaviour expli
 %%%%%%%% lah: style notes
 % use the royal "we" whenever possible when meaning users in general, the authors, the Committee, etc.; use "the user" when specifically talking about user-defined elements
 % TD: Thanks for the suggestion, but I do not agree with this style. I use "we" whenever I mean "the proposal authors" and talk about "users" when I mean users. That seems clearer to me.
-
+% implementation-defined and well-defined are always hyphenated
 
 \section{Introduction}
 \label{intro}
 
-Eliminating or at least meaningfully reducing the amount of \emph{undefined behaviour} (UB) is an important objective for the future evolution of C++ and crucial for improving the ``safety''\footnote{In this paper, we place quotes around the term ``safety'' when unqualified due to the crucial importance of distinguishing between  conflicting definitions of that term, such as functional safety, language safety, memory safety, and so on.  See \cite{P3376R0}, \cite{P3500R1}, and \cite{P3578R0} for a discussion of those definitions as well as recommendations regarding usage of the term ``safety'' in the context of C++.}
+Eliminating or at least meaningfully reducing the amount of \emph{undefined behaviour} (UB) is an important objective for the future evolution of C++ and crucial for improving the ``safety''\footnote{In this paper, we place quotes around unqualified uses of the term ``safety'' because distinguishing between  conflicting definitions of that term is crucial; consider the different meanings of "safety" regarding functional safety, language safety, memory safety, and so on.  See \cite{P3376R0}, \cite{P3500R1}, and \cite{P3578R0} for a discussion of those definitions as well as recommendations regarding usage of the term ``safety'' in the context of C++.}
 and security of C++ programs. WG21 has been continuously working in that direction. (For a recent status update, see \cite{Sutter2025} and references therein; for background, see \cite{Sutter2024} and references therein.)
 
 At WG21's February 2025 meeting in Hagenberg, EWG agreed on a framework for a systematic
-treatment of core language undefined behaviour in C++: the pursuit of a core language UB white paper in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts. The current version of that white paper is \cite{P3656R1}, proposing the process and major work items. The proposed process calls for papers to be adopted into the white paper working draft via EWG approval. This is the first such paper.
+treatment of core language undefined behaviour in C++: the pursuit of a core language UB white paper in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts. The current version of that white paper is \cite{P3656R1}, proposing the process and major work items. The proposed process calls for papers to be adopted into the white paper's working draft via EWG approval. This is the first such paper.
 
-Further, as major work items, \cite{P3656R1} proposes to enumerate and group all language UB in C++, identify tools to address them, and take a first pass at penciling in which tool to use for each UB case. The goal of this paper is to contribute to all the above major work items.
+Further, \cite{P3656R1} proposes, as major work items, to enumerate and group all language UB in C++, identify tools to address the groups, and take a first pass at determining % lah: we don't need both "first pass" and "penciling in," and "penciling in" is an idiom that English-language learners might not understand immediately
+which tool to use for each UB case. The goal of this paper is to contribute to all the above major work items.
 
-In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We then group all core language UB into broad categories such as ``Arithmetic'' and ``Bounds''. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and whether there is well-defined fallback behaviour for each case. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
+In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We then group all core language UB into broad categories, such as ``Arithmetic'' and ``Bounds''. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and whether each case has well-defined fallback behaviour. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
 
 In Section~\ref{design}, we systematically introduce such runtime checks to C++ via  \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14}. We describe how implicit contract assertions should be specified and how to apply them to all appropriate cases of core language UB. For cases of UB where well-defined fallback behaviour exists, we discuss how specifying it allows the program to continue execution past a violated implicit contract assertion without UB. We conclude by proposing an escape hatch to mitigate the runtime cost of such fallback behaviour and avoid performance regressions.
 
 In Section~\ref{ext}, we discuss how future extensions, such as Labels \cite{P3400R1},
-will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions. In Section~\ref{wording}, we propose wording for approval into the white paper that implements the design discussed in Section~\ref{design}.
+will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions. In Section~\ref{wording}, we propose, for approval into the white paper, wording that implements the design discussed in Section~\ref{design}.
 
 The first revision (R0) of this paper was published in May 2024. Following informal discussions at the St. Louis meeting, the paper was revised (R1) and presented to SG21 at the Wroc{\l}aw meeting. SG21 voted \emph{unanimously} in favour of our direction for implicit contract assertions.
 \vspace{2mm}
@@ -149,7 +151,7 @@ Result: Consensus
 \end{wgpoll}
 \vspace{2mm}
 
-The present revision (R2) is a complete rewrite of the paper that considers the above poll, the adoption of \cite{P2900R14} into the C++26 working paper, EWG's decision to publish the core language UB white paper, the current state of that white paper \cite{P3656R1}, discussions at the Hagenberg meeting, and the feedback we received on the previous revision of this paper.
+The present revision (R2) is a complete rewrite of the paper and considers the above poll, the adoption of \cite{P2900R14} into the C++26 working paper, EWG's decision to publish the core language UB white paper, the current state of that white paper \cite{P3656R1}, discussions at the Hagenberg meeting, and the feedback we received on the previous revision of this paper.
 
 \section{Analysis}
 \label{ub}
@@ -176,12 +178,11 @@ For this paper, we manually inspected all occurrences of the word ``undefined'' 
 
 Another group of WG21 members is currently engaged in an effort, based on work by Shafik Yaghmour (\cite{P1705R1}, \cite{P3075R0}) and following the process outlined in \cite{P3656R1}, to enumerate cases of core language UB directly in the C++ Standard document  \LaTeX{} source. Our list has been created independently from that effort.
 
-Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ Standard's clause identifiers, which we place between [square brackets]. Wherever possible, we use here the same stable identifiers as those used in the \LaTeX-based effort. However, some differences occur between the two lists (and, therefore, also between the stable identifiers used) because we identified a number of potential defects and omissions in the other list. We are actively contributing to the \LaTeX-based effort toward merging the two lists. 
+Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ Standard's clause identifiers, which we place between [square brackets]. Wherever possible, we use herein the same stable identifiers as those used in the \LaTeX-based effort. However, some differences occur between the two lists (and, therefore, also between the stable identifiers used) because we identified a number of potential defects and omissions in the other list. We are actively working with the creators of the \LaTeX-based effort toward merging the two lists. 
 
 Note that unlike the \LaTeX-based effort, our list excludes cases of IFNDR because this paper focuses on runtime mitigation strategies. While UB is fundamentally a runtime property of a particular program execution and thus runtime mitigation is a natural approach, IFNDR typically represents link-time issues and is, therefore, out of scope for this paper.
 
-Note further that we exclude \emph{library undefined behaviour} since the natural mitigation approach for it is to make use of contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) in library implementations and, when possible, mandate such assertions through library hardening \cite{P3471R4}, both of which are out of scope for this paper. We, therefore, consider only UB that is specified in the core language part of the C++ Standard (Clauses 1--15). Further, we found one case of UB that is specified in the core language part of \cite{N5008} but actually represents a precondition on standard library functions; 
-\footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
+Note further that we exclude \emph{library undefined behaviour} since the natural mitigation approach for it is to make use of contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) in library implementations and, when possible, mandate such assertions through library hardening \cite{P3471R4}, both of which are out of scope for this paper. We, therefore, consider only UB that is specified in the core language part of the C++ Standard (Clauses 1--15). Further, we found one case of UB that is specified in the core language part of \cite{N5008} but actually represents a precondition on Standard Library functions;\footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
 that case is, therefore, also excluded from our list.
 
 \subsection{Basic categories of UB}
@@ -190,28 +191,28 @@ that case is, therefore, also excluded from our list.
 We found that all identified cases of core language UB can be broadly classified into twelve categories:
  \renewcommand{\labelenumi}{\Roman{enumi}.}
 \begin{enumerate}
-\item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value. 
+\item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value. % lah: examples?
 \item \textbf{Bounds} --- 5 cases. Using a pointer in a way that fails to respect the range of the pointed-to object or array. Examples: incrementing a pointer beyond the past-the-end position; performing single-object delete on an operand obtained from an array-new expression;  dereferencing a pointer returned from a request for zero size.
 \item \textbf{Type and Lifetime} --- 45 cases. Operations that access storage and/or use pointers or references to storage in an inappropriate way that is not already covered by Initialisation and Bounds. Examples: attempting to access a value of one type through  a pointer of a different, incompatible type; attempting to access the value of an object after its lifetime has ended. 
 \item \textbf{Arithmetic} --- 9 cases. Executing an arithmetic operation whose operands fail to meet certain preconditions. Examples: division by zero; conversion of a value to a different arithmetic type that cannot represent that value. 
-\item \textbf{Threading} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from different threads where neither access happens before the other, i.e., a data race. 
-\item \textbf{Sequencing} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other.
+\item \textbf{Threading} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from different threads where neither access happens before the other, i.e., a data race. % lah: examples?
+\item \textbf{Sequencing} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other. % lah: examples?
 \item \textbf{Assumptions} --- 1 case. Reaching an \tcode{[[assume]]} declaration whose operand would not evaluate to \tcode{true}.
-\item \textbf{Control Flow} --- 6 cases. Undefined behaviour due to errors in control flow.
+\item \textbf{Control Flow} --- 6 cases. Undefined behaviour due to errors in control flow. % lah: examples?
 Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
 \item \textbf{Replacement Functions} --- 3 cases. Executing a user-defined replacement function (\tcode{operator new}/\tcode{delete}) that fails to meet the specified requirements. Examples: returning \tcode{null} from a user-defined placement \tcode{new}; throwing an exception from a user-defined \tcode{delete}.
 \item \textbf{Coroutines} --- 2 cases. Misusing coroutine machinery. Examples: destroying a coroutine that is not suspended; invoking a resumption member function for a coroutine that is not suspended.
-\item \textbf{Templates} --- 1 case. Infinite recursion during template instantiation. 
+\item \textbf{Templates} --- 1 case. Infinite recursion during template instantiation. % lah: examples?
 \item \textbf{Preprocessor} --- 8 cases. Misusing preprocessor directives. Examples: \tcode{\#define}-ing a predefined macro name; passing an out-of-range integer to the \tcode{\#line} directive.
 \end{enumerate}
 
-The categories Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent undefined behaviour that is commonly referred to with the umbrella term \emph{memory safety}.
+The categories of Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent undefined behaviour that is commonly referred to with the umbrella term \emph{memory safety}.
 
 Because unambiguously categorising a particular case of UB into either \emph{type safety} or \emph{lifetime safety} is often impossible since it concerns both, we grouped them into a single combined category, Type and Lifetime. While some cases of UB are primarily caused by type aliasing and others are primarily caused by out-of-lifetime accesses, they form a spectrum, and many common operations in C++ (e.g., using a reference) rely on \emph{both} type and lifetime constraints to be satisfied. Note further that this combined category of Type and Lifetime contains the majority (58\%) of all cases of UB that we identified. 
 
 The next two categories, Arithmetic and Threading, correspond to the common terms \emph{arithmetic safety} and \emph{thread safety}, respectively; the latter contains only one case of UB, data races.
 
-The following category, Sequencing, also contains just one case of UB: unsequenced operations, such as \mbox{\tcode{i++ + ++i}}. Grouping UB due to data races and unsequenced operations into two separate categories might seem surprising at first since they have a very similar same shape (except that one is inter-thread and the other is intra-thread), but as we will see in Section~\ref{mitigation}, these two categories actually require very different approaches to mitigation.
+The following category, Sequencing, also contains just one case of UB: unsequenced operations, such as \mbox{\tcode{i++ + ++i}}. Grouping UB due to data races and unsequenced operations into two separate categories might seem surprising at first since they have a very similar same shape (except that one is interthread and the other is intrathread), but as we will see in Section~\ref{mitigation}, these two categories actually require very different approaches to mitigation.
 
 The next category, Assumptions, also contains just one case of UB: reaching an \tcode{[[assume]]} declaration whose operand would not evaluate to \tcode{true}. As we will see later, this case of UB is of a different nature than the others and warrants its own category.
 
@@ -219,11 +220,11 @@ The final five categories (Control Flow, Replacement Functions, Coroutines, Temp
 
 \subsection{Relevance for security}
 
-\cite{P3656R1} asks which cases of UB are security-related. The paper suggests having security experts indicate which cases of UB have security impact and use ``always'', ``never'', and ``sometimes'' tags. We are not security experts, so we do not attempt to do this here. However, we note that cases of UB commonly associated with security vulnerabilities (see, for example, the CWE list at \url{https://cwe.mitre.org/}) fall into the Initialisation, Bounds, and Type and Lifetime categories. 
+\cite{P3656R1} asks which cases of UB are security related. The paper suggests having security experts indicate which cases of UB have security impact and use ``always'', ``never'', and ``sometimes'' tags. We are not security experts, so we do not attempt to do this here. However, we note that cases of UB commonly associated with security vulnerabilities (see, for example, the CWE list at \url{https://cwe.mitre.org/}) fall into the Initialisation, Bounds, and Type and Lifetime categories. 
 
 Other cases of UB, such as those in categories Arithmetic and Threading, are a common source of program defects, and those program defects do sizeable damage to existing software, so mitigating them offers a lot of value. To our knowledge, however, they are not commonly exploited by malicious attackers.
 
-Eventually, mitigating all UB currently considered to be a critical security concern will simply remove the easiest routes of attack from the table, and any UB not yet addressed may become the new major candidate for attackers to leverage for nefarious purposes.  Therefore, while prioritising implementation based on current trends amongst malicious actors, though helpful, should not be used to limit the scope of our work on improving the C++ Standard (see \cite{Sutter2024}, \cite{P3500R1}, and \cite{P3578R0}).
+Eventually, mitigating all UB currently considered to be a critical security concern will simply remove the easiest routes of attack from the table, and any UB not yet addressed may become the new major candidate for attackers to leverage for nefarious purposes.  Therefore, prioritising implementation based on current trends amongst malicious actors, though helpful, should not be used to limit the scope of our work on improving the C++ Standard (see \cite{Sutter2024}, \cite{P3500R1}, and \cite{P3578R0}).
 
 \subsection{Local checkability}
 \label{locally}
@@ -241,13 +242,13 @@ are partially locally diagnosable (only if the array bound is statically known).
 are partially locally diagnosable (for the null pointer case).
 \{expr.mptr.oper.member.func.null\} is locally diagnosable because this case requires \emph{only} a null pointer check.
 \{basic.align.object.alignment\} is locally diagnosable by checking the alignment of storage when creating an object at run time.
-\{expr.assign.overlap\} is locally diagnosable by checking the overlap of the two address ranges. (The ranges are known because the address and \tcode{sizeof} are known at run time for both the source and the destination object.) \{class.abstract.pure.virtual\} is locally diagnosable by adding a runtime check to  the pure virtual function stub that the base class vtable points to. All other cases of UB in the Initialisation, Bounds, and Type and Lifetime categories require, to be diagnosable, additional instrumentation of the kind that is implemented in sanitisers such as ASan and UBSan (see Section~\ref{cost} for further discussion).
+\{expr.assign.overlap\} is locally diagnosable by checking the overlap of the two address ranges. (The ranges are known because the address and \tcode{sizeof} are known at run time for both the source and the destination object.) \{class.abstract.pure.virtual\} is locally diagnosable by adding a runtime check to  the pure virtual function stub to which the base class vtable points. All other cases of UB in the Initialisation, Bounds, and Type and Lifetime categories require, to be diagnosable, additional instrumentation of the kind that is implemented in sanitisers, such as ASan and UBSan (see Section~\ref{cost} for further discussion).
 
 All cases of UB in the Arithmetic category are locally diagnosable since they are all cases of an arithmetic operation producing a value that is somehow inappropriate (mathematically invalid, not representable in the target type, etc.) and that value can be inspected at run time.
 
 UB in the Threading category (\{intro.races.data\}) is not locally diagnosable, but UB in the Sequencing category (\{intro.execution.unsequenced.modification\}) is. 
 
-UB in the Assumption category (\{dcl.attr.assume.false\}) is, in principle, locally diagnosable by evaluating the operand of the assumption and verifying that the resulting value, contextually converted to \tcode{bool}, equals \tcode{true}. However, if that evaluation has any side effects, such a check could alter the observable state of the program. Therefore, even if the given assumption holds and no UB occurs, the check itself might render the program invalid by altering its state. Thus, this case of UB is  meaningfully diagnosable in any automated fashion only if the operand has no side effects when evaluated. However, proving that the operand has no side effects is not generally possible to do efficiently and is outright impossible in the presence of an opaque function call.
+UB in the Assumption category (\{dcl.attr.assume.false\}) is, in principle, locally diagnosable by evaluating the operand of the assumption and verifying that the resulting value, contextually converted to \tcode{bool}, equals \tcode{true}. However, if that evaluation has any side effects, such a check could alter the observable state of the program. Therefore, even if the given assumption holds and no UB occurs, the check itself might render the program invalid by altering its state. Thus, this case of UB is  meaningfully diagnosable in any automated fashion only if the operand has no side effects when evaluated. However, proving that the operand has no side effects is generally impossible to do efficiently and is outright impossible in the presence of an opaque function call.
 
 Some cases of UB in the Control Flow category are locally diagnosable. \{stmt.return.flow.off\} and \{stmt.return.coroutine.flow.off\} can be diagnosed by inserting a check at the end of every function body that does not end with a \tcode{return} or \tcode{co_return} statement. \{dcl.attr.noreturn.eventually.returns\} can be diagnosed by inserting a check into every function declared \tcode{[[noreturn]]}.
 
@@ -255,7 +256,8 @@ Some cases of UB in the Replacement Function category are partially or fully loc
 
 All cases of UB in the Coroutine category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations.
 
-UB in the Templates and Preprocessor categories is unique in that it does not actually represent runtime UB, and therefore, runtime diagnosis makes no sense. In particular, UB in the Templates category (\{temp.inst.inf.recursion\}) is diagnosable at compile time, while UB in the Preprocessor category should be specified as IFNDR instead (see Section~\ref{mitigation}).
+UB in the Templates and Preprocessor categories is unique in that it does not actually represent runtime UB, % lah: later, in the wording and in the table, you use the term "runtime-undefined behaviour," and I think you actually mean "runtime UB" or "runtime undefined behaviour" there as well
+and therefore, runtime diagnosis makes no sense. In particular, UB in the Templates category (\{temp.inst.inf.recursion\}) is diagnosable at compile time, while UB in the Preprocessor category should be specified as IFNDR instead (see Section~\ref{mitigation}).
 
 \subsection{Cost of diagnosis}
 \label{cost}
@@ -286,7 +288,7 @@ Beyond this, a number of UB cases can still be checked by a straightforward arit
 At the expensive end of the locally diagnosable UB spectrum are runtime checks for which there is no corresponding C++ expression; instead, the compiler would have to generate more complex ``magic'' checks based on knowledge unavailable in the C++ abstract machine. In particular, this case applies to all arithmetic UB except \{expr.add.out.of.bounds\} and
 \{expr.add.sub.diff.pointers\}. The compiler would have to validate the bit patterns of values of arithmetic types according to knowledge it has about how values of such types are represented on the targeted platform. Such checks can be done locally, but they can slow operations involving built-in types and, in particular, floating-point types.
 
-In addition to the cost of the check itself, we need to consider the frequency with which these checks would need to be done. Checks that would need to happen once when a function is called or when a function returns are likely to be acceptable in most scenarios. Extensive checks for arithmetic UB will probably be acceptable in fewer scenarios because they have the potential to significantly slow arithmetic operations, which are performance sensitive in many contexts. On the extreme end, if we wanted to diagnose \{intro.execution.unsequenced.modification\} via a runtime check, the check itself would be fairly inexpensive, but the compiler would have to identify all potential read operations that are not sequenced with respect to each given write operation and then insert checks to identify if those operations are actually going to reference the same address.
+In addition to the cost of the check itself, we need to consider the frequency with which these checks would need to be done. Checks that would need to happen once when a function is called or when a function returns are likely to be acceptable in most scenarios. Extensive checks for arithmetic UB will probably be acceptable in fewer scenarios because such checks have the potential to significantly slow arithmetic operations, which are performance sensitive in many contexts. On the extreme end, if we wanted to diagnose \{intro.execution.unsequenced.modification\} via a runtime check, the check itself would be fairly inexpensive, but the compiler would have to identify all potential read operations that are not sequenced with respect to each given write operation and then insert checks to identify if those operations are actually going to reference the same address.
 
 For UB that is not locally diagnosable (which is most of the UB in C++), we need to consider the cost of the required additional instrumentation. To get an idea of that cost, we must nail down exactly which additional properties that are not normally known from within the C++ abstract machine would need to be tracked by such instrumentation. This tracking would need to happen at run time throughout the \emph{entire} program; checks relying on the tracked information would have to be inserted for \emph{every} runtime operation that may be affected by such UB.
 The full list is available in \hyperref[appendix]{Appendix~A}, and we provide an overview below.
@@ -301,12 +303,12 @@ To diagnose \emph{all} cases of UB in the memory safety categories of Initializa
 \item For all storage, the type of the object associated with it (if any), including whether it is \tcode{const} or \tcode{volatile}
 \item For all objects, whether their lifetime has been started or ended
 \item For all objects, whether they are currently being constructed or destroyed
-\item The dynamic type of all \emph{non}-polymorphic objects of class type;
+\item The dynamic type of all \emph{non}-polymorphic objects of class type
 \item For all references, whether they have been initialized
 \item For all addresses that point to  functions, the type of the function
 \end{itemize}
 
-To diagnose UB in the Threading category, instrumentation would have to track, for \emph{all} memory accesses, from which threads that memory is accessed and when these accesses synchronise with each other. Doing this exhaustively is not practical, however instrumentation that is capable of diagnosing a subset of cases exists in the form of sanitisers (TSan).
+To diagnose UB in the Threading category, instrumentation would have to track, for \emph{all} memory accesses, from which threads that memory is accessed and when these accesses synchronise with each other. Doing this exhaustively is not practical; however, instrumentation that is capable of diagnosing a subset of cases exists in the form of sanitisers (TSan).
 
 The non-locally-diagnosable UB in the Control Flow category concerns operations that are not allowed during construction and destruction of objects with static or thread-local storage duration (\{basic.start.main.exit.during.destruction\} and \{basic.start.term.use.after.destruction\}). To diagnose these, instrumentation would have to insert guards tracking whether such objects are currently being constructed and destroyed.  
 
@@ -327,7 +329,7 @@ For fallback behaviour to happen, the compiler must supply the necessary instruc
 
 For this paper, we systematically identified all cases of core language UB for which such fallback behaviour exists. This section gives an overview; the full list can be found in \hyperref[appendix]{Appendix~A}. As we will see, for most cases of UB, fallback behaviour does not exist, and if it does, it is often not cheap.
 
-For UB in the Initialization category (\{basic.indet.value\}), fallback behaviour is sometimes possible for built-in types: return an erroneous value instead. For variables with automatic storage duration, this fallback behaviour is already part of C++26 as EB via \cite{P2795R5}, because for this case, the fallback behaviour is particularly cheap. The same fallback behaviour could also be employed for dynamically allocated variables but at greater cost (see \cite{P2723R1} Section 6 for discussion).
+For UB in the Initialization category (\{basic.indet.value\}), fallback behaviour is sometimes possible for built-in types: return an erroneous value instead. For variables with automatic storage duration, this fallback behaviour is already part of C++26 as EB via \cite{P2795R5} because for this case, the fallback behaviour is particularly cheap. The same fallback behaviour could also be employed for dynamically allocated variables but at greater cost (see \cite{P2723R1} Section 6 for discussion).
 
 Producing an erroneous value (instead of, for example, the value that happened to be in memory where an object was incorrectly presumed to have been initialized) requires having a point in time where a fallback value can be unconditionally placed in memory, such as when passing the declaration of an automatic variable.
 
@@ -344,12 +346,12 @@ bool f() {
 }
 \end{codeblock}
 
-the UB could be replaced by well-defined behaviour by appropriately bit-masking every accessed \tcode{bool} value (and considering the result erroneous if the bit mask operation changed the value). Similar mitigations could be put in place for other built-in types since the space of allowed bit representations for values of those types, for the targeted platform, are known to the compiler. The caveat is that such mitigations would potentially incur a significant performance overhead on many simple operations that involve built-in types.
+the UB could be replaced by well-defined behaviour by appropriately bit-masking every accessed \tcode{bool} value (and considering the result erroneous if the bit-mask operation changed the value). Similar mitigations could be put in place for other built-in types since the space of allowed bit representations for values of those types, for the targeted platform, are known to the compiler. The caveat is that such mitigations would potentially incur a significant performance overhead on many simple operations that involve built-in types.
 
 All UB in the Arithmetic category has the same possible fallback behaviour: if an arithmetic operation would produce an inappropriate value, it can be coerced into an erroneous value instead, at the cost of incurring significant performance overhead on common arithmetic operations.
 
-Defining fallback behaviour for UB in the Threading category (\{intro.races.data\}) is in principle possible: we could make all primitive memory accesses implicitly atomic, as in the Java memory model. The overhead incurred by such a model will heavily depend on the memory model of the underlying hardware; on weakly-ordered platforms, such as ARM,
-it will be larger than on strongly-ordered platforms such as x86. Note that while such fallback behaviour is well-defined, it still fails to prevent many real bugs that result from incorrect application of concurrency since user-defined types with multiple members can still be easily observed with inconsistent (``torn'') states if no proper synchronisation is performed.
+Defining fallback behaviour for UB in the Threading category (\{intro.races.data\}) is in principle possible: we could make all primitive memory accesses implicitly atomic, as in the Java memory model. The overhead incurred by such a model will heavily depend on the memory model of the underlying hardware; on weakly ordered platforms, such as ARM,
+it will be larger than on strongly ordered platforms such as x86. Note that while such fallback behaviour is well-defined, it still fails to prevent many real bugs that result from incorrect application of concurrency since user-defined types with multiple members can still be easily observed with inconsistent (``torn'') states if no proper synchronisation is performed.
 
 The fallback behaviour for UB in the Sequencing category (\{intro.execution.unsequenced.modifica\-tion\})
 is much more straightforward: we can simply define that the unsequenced operations happen in some unspecified order. This fallback behaviour can still have performance overhead in the form of losing  optimisation opportunities, but such overhead will likely be manageable. 
@@ -368,12 +370,13 @@ In this section, we attempt to systematically identify, at a very high level, ca
 Arguably, the best mitigation strategy is to make the offending construct ill-formed, but we can do so only for cases in which we can unambiguously identify at \emph{compile time} that UB will occur for all inputs; otherwise, we would break existing correct C++ code. Only one case of UB fits this particular situation: 
 \{temp.inst.inf.recursion\}. This case should be specified as ill-formed instead of UB.
 
-Similarly, UB in the Preprocessor category should not be specified as UB either. We defer to \cite{P2843R2}, which proposes to specify all cases in this category as IFNDR instead, placing them outside of the scope of this paper.
+Similarly, UB in the Preprocessor category should not be specified as UB. We defer to \cite{P2843R2}, which proposes to instead specify all cases in this category as IFNDR, placing them outside of the scope of this paper.
 
 Two more cases of UB should not actually be considered UB. The first is \{class.dtor.not.class.type\}. While the wording for this case says that ``if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior'',
 this situation is not a new case of UB and is already omitted from the specification of other cases of UB elsewhere. This section should, therefore, be a non-normative note referring to those sections.
+% lah: add a citation for this quote. Even if the {} section matches, I imagine there's a paragraph number. This looks like it's taken from [class.dtor]/16 in N5008.
 
-The second is \{basic.stc.alloc.dealloc.throw\}. There is no good reason why throwing an exception from a deallocation function should cause UB. Instead, we should enforce that deallocation functions have a nonthrowing exception specification. This solution is proposed in \cite{P3424R0}, and we refer to that paper for mitigating this case of UB.
+The second is \{basic.stc.alloc.dealloc.throw\}. No good reason justifies why throwing an exception from a deallocation function should cause UB. Instead, we should enforce that deallocation functions have a nonthrowing exception specification. This solution is proposed in \cite{P3424R0}, and we refer to that paper for mitigating this case of UB.
 % TD: Is this actually compile-time diagnosable? If yes, we should move this to the top of this section.
 
 We are left with 79 cases of UB for which we need to identify candidate mitigation strategies. All of those cases represent \emph{runtime} UB that cannot be diagnosed at compile time. Therefore, one possible mitigation strategy for \emph{all} those cases of UB is to insert \emph{runtime} checks.
@@ -384,7 +387,7 @@ However, as we saw in Section~\ref{locally}, the majority of those cases (60 out
 
 For example, a compiler may choose to support enabling runtime checks for arithmetic UB (they already do today for some cases; for example, GCC offers the \tcode{-ftrapv} flag, which enables checks for signed integer overflow) while not supporting any checks that require expensive instrumentation. On the other hand, a different compiler that comes with a suite of a sanitisers may choose to support some subset of those more expensive checks (and again, they already do today, just not in a standardised fashion).
 
-\pagebreak % TD: manual pagebreak to avoid a weird gap later. Remove when text changes.
+%\pagebreak % TD: manual pagebreak to avoid a weird gap later. Remove when text changes.
 
 Defining such optional runtime checks for all those 79 cases of UB is, therefore, useful in itself. These checks cost \emph{nothing} unless they are turned on, and no implementation is actually \emph{required} to implement them, yet specifying them in the Standard has a number of advantages: it allows us to assign standard names and categories to them (see also Section~\ref{ext}); it allows for implementations of such runtime checks (including existing compiler options and sanitisers) to leverage a shared paradigm and shared terminology; and it brings those tools into the scope of the C++ Standard.
 
@@ -396,6 +399,7 @@ However, practically all this fallback behaviour comes with non-negligible --- a
 
 For the 61 cases of runtime UB in which meaningful, well-defined fallback behaviour does not exist (and therefore, continuation after an error has occurred is not possible), only two known ways can, in principle, give all those cases defined behaviour at run time.
 \begin{enumerate}
+\renewcommand{\labelenumi}{\arabic{enumi}.}
 \item \emph{Diagnose} them (and pay all the overhead for the associated runtime checks, including the required instrumentation) and then terminate the program.
 \item Make the entire construct that could potentially exhibit the given case of UB ill-formed, and provide its functionality via a different, ``safer'' language feature.
 \end{enumerate}
@@ -403,9 +407,9 @@ For the 61 cases of runtime UB in which meaningful, well-defined fallback behavi
 The fundamental dilemma is that for many cases, neither alternative is acceptable. The instrumentation required to diagnose Bounds and Type and Lifetime UB in the general case already exists, but its overhead is prohibitively large for most production scenarios. On the other hand, replacement by ``safer'' alternative features --- such as replacing pointers and references with borrow checking, as proposed in \cite{P3390R0} --- is viable for newly written code but fundamentally incompatible with legacy code because it would make vast swathes of existing, \emph{correct} C++ ill-formed.
 
 Such subsetting of the language is exactly where we see the role of Profiles. Enabling a particular profile would make the associated set of ``unsafe'' legacy features ill-formed. By leveraging Profiles,
-we can explicitly distinguish between newly written, ``safe'' parts of the code and legacy, ``unsafe'' parts, which is similar to how this is done in languages like Rust but offers us much greater granularity.
+we can explicitly distinguish between newly written, ``safe'' parts of the code and legacy, ``unsafe'' parts, which is similar to how this delineation is done in languages like Rust but offers us much greater granularity.
 
-On the other hand, we do not believe that Profiles should intersect with runtime behaviour, as proposed by  \cite{P3081R1}. Enabling or disabling a profile should never change the runtime semantics of a C++ program for all the same reasons \cite{P2900R14} strove to achieve its prime directive in its design: if the only way to have safer code is to change your code's behaviour entirely, you fail at improving the safety of software that cannot afford the cost of enabling the checks.
+On the other hand, we do not believe that Profiles should intersect with runtime behaviour, as proposed by  \cite{P3081R1}. Enabling or disabling a profile should never change the runtime semantics of a C++ program for all the same reasons \cite{P2900R14} strove to achieve its prime directive in its design; if the only way to have ``safer'' code is to change your code's behaviour entirely, you fail at improving the ``safety'' of software that cannot afford the cost of enabling the checks.
 
 At most, a profile could reject the program if a certain runtime check required by the chosen ``safety'' level is not available (making Profiles a useful auditing tool). A profile should never dictate whether a runtime check is enabled or disabled or what should happen if that check fails because, as we will see in Section~\ref{design} of this paper, all the required machinery for configuring runtime checks is already provided --- more cohesively and flexibly --- by the Contracts framework.
 
@@ -415,7 +419,7 @@ At most, a profile could reject the program if a certain runtime check required 
 \subsection{Defining implicit contract assertions}
 \label{defineicas}
 
-In this section, we propose a framework for systematically introducing runtime checks that guard against core language UB to C++. This framework builds on top of Contracts.
+In this section, we propose a framework for systematically introducing to C++ runtime checks that guard against core language UB. This framework builds upon Contracts.
 
 For C++26, we adopted an initial subset of Contracts functionality via \cite{P2900R14}. This initial subset contains three kinds of \emph{contract assertions}: \tcode{pre}, \tcode{post}, and \tcode{contract_assert}. Since these contract assertions are specified by the user with explicit syntax, in this paper we call them \emph{explicit} contract assertions. For example, the author of a vector-like class can add a precondition assertion to its subscript operator to guard against out-of-bounds access:
 
@@ -439,7 +443,8 @@ int main() {
 }
 \end{codeblock}
 
-In C++ today, the behaviour of this program is undefined if the value of \tcode{i} is not smaller than 10 (\{expr.add.out.of.bounds\}). However, instead of saying that out-of-bounds access into a plain array is undefined behaviour, we can say that access into a plain array has an \emph{implicit precondition assertion} that the index is not out of bounds. Then, the program behaves as-if the compiler had wrapped every raw array subscript operation for which it statically knows the array bound \tcode{N} into an inline function with a precondition assertion:
+In C++ today, the behaviour of this program is undefined if the value of \tcode{i} is not smaller than 10 (\{expr.add.out.of.bounds\}). However, instead of saying that out-of-bounds access into a plain array is undefined behaviour, we can say that access into a plain array has an \emph{implicit precondition assertion} that the index is not out of bounds. Then, the program behaves as if % lah: this seems to be english language as if, not computer language as-if
+the compiler had wrapped every raw array subscript operation for which it statically knows the array bound \tcode{N} into an inline function with a precondition assertion:
 
 \begin{codeblock}
 template <typename T, std::size_t N>
@@ -454,16 +459,16 @@ Other than being an implicit precondition assertion automatically generated by t
 \subsection{Extending the library API}
 \label{library}
 
-To give the user a way to programmatically distinguish explicit and implicit contract assertions in the contract-violation handler, we propose to add a new enum value \tcode{implicit} to the enum \mbox{\tcode{assertion_kind}}. We simply append the new enumerator to the existing ones, which gives it the numerical value \tcode{4}, without attaching any particular meaning to that numerical value.
+To give the user a way to programmatically distinguish explicit and implicit contract assertions in the contract-violation handler, we propose to add a new enum value, \tcode{implicit}, to the enum \mbox{\tcode{assertion_kind}}. We simply append the new enumerator to the existing ones, which gives it the numerical value \tcode{4}, without attaching any particular meaning to that numerical value.
 
-Alternatively, we could define its numerical value to be \tcode{0}, as that value is not yet taken; however, we prefer to avoid using \tcode{0} and thus to retain the ability to detect the case in which the enum has not been explicitly initialised with a valid value.\footnote{See also \cite{P3227R0}, which was adopted into \cite{P2900R14} and made the same argument for adding new enumerators to the enumeration \tcode{evaluation_semantic}.}
+Alternatively, we could define its numerical value to be \tcode{0} since that value is not yet taken; however, we prefer to avoid using \tcode{0} and thus to retain the ability to detect the case in which the enum has not been explicitly initialised with a valid value.\footnote{See also \cite{P3227R0}, which was adopted into \cite{P2900R14} and made the same argument for adding new enumerators to the enumeration \tcode{evaluation_semantic}.}
 
 No other changes to the library API for contract-violation handling are necessary. In particular, unlike the previous revision of this paper and unlike \cite{P3081R1}, which adopted its library API from that earlier revision, we no longer propose to add new enumerators to the enumeration \mbox{\tcode{detection_mode}} to encode the category of error (Initialization, Bounds, and so on); instead, this encoding can be accomplished more effectively and flexibly via Labels (see Section~\ref{idlabels}).
 
-Further, we do not propose any changes to the specification of \tcode{comment()} and \tcode{location()}. C++26 non-normatively recommends that these functions return a textual representation of the expression that triggered the contract violation and the source location of the contract violation, respectively. While returning such a representation is, in principle, possible for violations of implicit contract assertions, generating a textual representation for every expression in the program that could lead to UB is likely to cause an unacceptable amount of code bloat. However, generating some other string that may help us identify the problem, such as the diagnostic message already printed by existing sanitisers, is equally conforming, as is simply returning an empty string and a default-constructed source location if no information is available or if the information cannot be made programmatically accessible in the contract-violation handler (for example,
+Further, we propose no changes to the specification of \tcode{comment()} and \tcode{location()}. C++26 non-normatively recommends that these functions return a textual representation of the expression that triggered the contract violation and the source location of the contract violation, respectively. While returning such a representation is, in principle, possible for violations of implicit contract assertions, generating a textual representation for every expression in the program that could lead to UB is likely to cause an unacceptable amount of code bloat. However, generating some other string that may help us identify the problem, such as the diagnostic message already printed by existing sanitisers, is equally conforming, as is simply returning an empty string and a default-constructed source location if no information is available or if the information cannot be made programmatically accessible in the contract-violation handler (for example,
 because it is located in a separate debug information file). 
 
-Finally, we do not propose a separate contract-violation handler for implicit contract assertions. Having a single, program-wide handler for all contract violations is a central aspect of the \cite{P2900R14} design. By standardising on a central reporting mechanism, we clearly separate the responsibility for reporting from the responsibility of knowing all the different mechanisms within a program by which a bug might be detected. For example, the user might want to hard-code a particular form of termination or to use a particular logger. Forcing them to repeat these things in multiple places is not good design. If the user wishes to use a different handler for implicit contract assertions, they can always branch on the \tcode{assertion_kind} in the global contract-violation handler and dispatch to a custom handler from there.
+Finally, we do not propose a separate contract-violation handler for implicit contract assertions. Having a single, program-wide handler for all contract violations is a central aspect of the \cite{P2900R14} design. By standardising on a central reporting mechanism, we clearly separate the responsibility for reporting from the responsibility of knowing all the different mechanisms within a program by which a bug might be detected. For example, the user might want to hard-code a particular form of termination or to use a particular logger. Forcing the user to repeat these things in multiple places is poor design. A user who wishes to use a different handler for implicit contract assertions can always branch on the \tcode{assertion_kind} in the global contract-violation handler and dispatch to a custom handler from there.
 
 \subsection{Applying implicit contract assertions}
 \label{applyicas}
@@ -475,19 +480,19 @@ The required transformation is to change every occurrence of “if $A$ is not \t
 % JMB: I actually think we want to stick with what we have in the library --- a precondition violation means the operation has undefined behavior if actually evaluated.   We can call out the cases where an erroneous value is produced then by stating the fallback behavior (and in all other cases there is UB) ---  "if the precondition is violated, an erroneous value is produced", etc.
 % TD: Hm, I'm not sure I like this, it would effectively hide the fact that there is UB, or at least make it a lot less obvious in which cases there is UB and in which there isn't. Let's leave it as it is for now, and maybe we have a better idea of how to word this in a later revision.
 
-Note that we do not specify any restrictions on the evaluation semantics of any of these 79 newly introduced  implicit contract assertions. Since the choice of evaluation semantic is implementation-defined, every implementation can choose for themselves which evaluation semantics to offer for which one and which should be the default semantic. One possible implementation choice is to simply make all 79 cases always have the \emph{ignore} semantic, which makes all existing implementations of C++ already conforming with our proposal. Another possible choice is to say that  \emph{ignore} is the default, but other semantics are available. Yet another possible choice is to enable certain checks by default. All those choices are conforming with our proposal.
+Note that we specify no restrictions on the evaluation semantics of any of these 79 newly introduced  implicit contract assertions. Since the choice of evaluation semantic is implementation-defined, each implementation can choose which evaluation semantics to offer for which one and which should be the default semantic. One possible implementation choice is to simply make all 79 cases always have the \emph{ignore} semantic, which makes all existing implementations of C++ already conforming with our proposal. Another possible choice is to say that  \emph{ignore} is the default, but other semantics are available. Yet another possible choice is to enable certain checks by default. All those choices are conforming with our proposal.
 
-Since the choice of evaluation semantic is  implementation-defined, implementations are further expected to document which semantics they support for which implicit contract assertions and which selection mechanism they offer. Once we have Labels (see Section~\ref{ext}) for each case of UB guarded by an implicit contract assertion, implementations and users can refer to each case by name, giving us a shared, portable, universally agreed standard framework with terminology for reasoning about runtime UB.
+Since the choice of evaluation semantic is  implementation-defined, implementations are further expected to document which semantics they support for which implicit contract assertions and which selection mechanism they offer. Once we have Labels (see Section~\ref{ext}) for each case of UB guarded by an implicit contract assertion, implementations and users can refer to each case by name, giving us a shared, portable, universally agreed upon standard framework with terminology for reasoning about runtime UB.
 
 Many possible choices for the evaluation semantics of implicit contract assertions map directly to existing compiler and sanitiser options. For example, for signed integer overflow, the GCC flag \tcode{-ftrapw} is a conforming implementation of the \emph{quick-enforce} semantic; sanitisers like ASan and UBSan are conforming implementations of the \emph{enforce} semantic for those cases of UB that they identify. These tools can continue to work in the way they do; however, bringing them into the scope of the C++ Standard as proposed here has the benefit that they can now opt into using the unified standard framework.
 
 Today, the integration between such tools and user code tends to be poor. For example, all Clang sanitisers have a callback, \tcode{__sanitizer_set_death_callback}, but this callback takes no arguments. It can be used to inform us that the process is about to terminate, but it does not provide an API to programmatically query what happened or where. ASan has a slightly more sophisticated callback, \tcode{__asan_set_error_report_callback}, which takes a single argument of type \tcode{const char*}. This argument provides a string that contains the generated error report. With our proposal, all these tools can instead hook into the standard contract-violation-handling API. This API provides not only a user callback in the form of a  program-wide replaceable contract-violation handler, but also programmatically accessible information about the defect via the  \mbox{\tcode{contract_violation}} object passed into the contract-violation handler. This more comprehensive API can serve as a uniform, standard callback mechanism for sanitisers and other tools.
 
-Further, coding guidelines can place restrictions on which evaluation semantics are permitted for which kinds of implicit contract assertions; our proposal provides the necessary standard terminology for this. For example, in a safety-critical context, a set of coding guidelines may prescribe that unchecked semantics may not be used for certain kinds of implicit contract assertions, and a matching profile could render nonconforming programs ill-formed. Thus, the usage of toolchains and compiler options that could lead to the program exhibiting a particular kind of UB could be prevented by construction. Of course, this requires alternatives to exist that offer checked semantics for the associated implicit contract assertions with acceptable performance tradeoffs.
+Further, coding guidelines can place restrictions on which evaluation semantics are permitted for which kinds of implicit contract assertions; our proposal provides the necessary standard terminology for this. For example, in a ``safety''-critical context, a set of coding guidelines may prescribe that unchecked semantics may not be used for certain kinds of implicit contract assertions, and a matching profile could render nonconforming programs ill-formed. Thus, the usage of toolchains and compiler options that could lead to the program exhibiting a particular kind of UB could be prevented by construction. Of course, this option requires alternatives to exist that offer checked semantics for the associated implicit contract assertions with acceptable performance tradeoffs.
 
-Finally, applying implicit contract assertions throughout the language in the proposed fashion addresses another much-discussed issue: the fact that \emph{explicit} contract assertions in C++26, as specified in \cite{P2900R14}, can themselves have UB when checked, because explicit contract assertion predicates are boolean expressions and thus follow the usual rules for evaluating expressions in C++. This property has been repeatedly raised as a concern (see \cite{P2680R1}, \cite{P3173R0}, \cite{P3285R0}, and \cite{P3362R0}).
+Finally, applying implicit contract assertions throughout the language in the proposed fashion addresses another much-discussed issue: \emph{explicit} contract assertions in C++26, as specified in \cite{P2900R14}, can themselves have UB when checked because explicit contract-assertion predicates are boolean expressions and thus follow the usual rules for evaluating expressions in C++. This property has been repeatedly raised as a concern (see \cite{P2680R1}, \cite{P3173R0}, \cite{P3285R0}, and \cite{P3362R0}).
 
-The approach suggested in those papers is to constrain explicit contract-assertion predicates to expressions that can be statically proven to have no UB. However, this approach does not seem to be specifiable, implementable, or usable in practice (see  \cite{P3376R0}, \cite{P3386R0}, and \cite{P3499R1}) and has thus been rejected by WG21. What \emph{does} work is to specify a framework for mitigating UB across the entire language, as proposed here. Once we have this framework, it will then automatically also apply to the evaluation of explicit contract assertions.
+The approach suggested in those papers is to constrain explicit contract-assertion predicates to expressions that can be statically proven to have no UB. However, this approach does not seem to be specifiable, implementable, or usable in practice (see  \cite{P3376R0}, \cite{P3386R0}, and \cite{P3499R1}) and has thus been rejected by WG21. What \emph{does} work is to specify a framework for mitigating UB across the entire language, as proposed here. This framework, once we have it, will then automatically also apply to the evaluation of explicit contract assertions.
 
 \subsection{Specifying the fallback behaviour}
 \label{specifyfallback}
@@ -509,18 +514,18 @@ Considering all the above reasoning reveals that such a generic, nonsyntactic es
 
 Just like the \emph{ignore} semantic, the \emph{assume} semantic is a \emph{nonchecking} semantic; i.e., its predicate is not evaluated. Further, just like with the \emph{ignore} semantic, if the predicate evaluates to \tcode{true} at the point where the contract assertion is placed, the \emph{assume} semantic has no effect; i.e., the program behaves exactly as if the contract assertion were not there. However, unlike the \emph{ignore} semantic, if the predicate does \emph{not} evaluate to \tcode{true}, the behaviour is undefined. This semantic allows compilers to optimise on the assumption that the predicate is \tcode{true}, just like they do today for those cases of core language UB.
 
-With this definition, we can map all five evaluation semantics for implicit contract assertions that guard against core language UB to concrete behaviours. For example, for signed integer overflow this mapping is as follows:
+With this definition, we can map all five evaluation semantics for implicit contract assertions that guard against core language UB to concrete behaviours. For example, for signed integer overflow, this mapping is as follows.
 \begin{itemize}
 \item The GCC compiler option \tcode{-ftrapv}, which aborts the program on signed integer overflow, is a conforming implementation of the \emph{quick_enforce} semantic.
 \item A sanitiser that detects signed integer overflow and prints a diagnostic is a conforming
 implementation of the \emph{enforce} or \emph{observe} semantic (depending on whether the
 process is terminated or execution continues after printing the diagnostic).
-\item The GCC compiler option \tcode{-fwrapv}, which implements wraparound for signed integer addition using twos-complement representation, is a conforming implementation of the \emph{ignore} semantic,  silently executing the safe fallback behaviour.
+\item The GCC compiler option \tcode{-fwrapv}, which implements wraparound for signed integer addition using twos-complement representation, is a conforming implementation of the \emph{ignore} semantic,  silently executing the ``safe'' fallback behaviour.
 \item The default behaviour in C++ today, which is to assume that signed integer addition never overflows and to optimise based on this assumption when the appropriate optimisation flags are selected by the user, is a conforming implementation of the \emph{assume} semantic.
 \end{itemize}
-Just like with all other evaluation semantics, the mechanism by which the \emph{assume} semantic is selected is implementation-defined and will in practice be accomplished by vendor-provided compiler flags. In addition, Labels (see Section~\ref{semantic}) will provide the ability to choose and constrain the evaluation semantic in code with arbitrary granularity.
+Just like with all other evaluation semantics, the mechanism by which the \emph{assume} semantic is selected is implementation-defined and will, in practice, be accomplished by vendor-provided compiler flags. In addition, Labels (see Section~\ref{semantic}) will provide the ability to choose and constrain the evaluation semantic in code with arbitrary granularity.
 
-Importantly, in light of the sustained opposition in WG21 to allowing the \emph{assume} semantic for explicit contract assertions,\footnote{This opposition is the reason why  no such semantic was included in \cite{P2900R14}. The presence of the \emph{assume} semantic in the C++2a Contracts proposal \cite{P0542R5} contributed to that proposal being removed from the C++20 Working Draft.} we propose that the \emph{assume} semantic is allowed for only \emph{implicit} contract assertions. \emph{Explicit} contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) may \emph{not} be evaluated with the \emph{assume} semantic.
+Importantly, in light of the sustained opposition in WG21 to allowing the \emph{assume} semantic for explicit contract assertions,\footnote{Due to this opposition, no such semantic was included in \cite{P2900R14}. The presence of the \emph{assume} semantic in the C++2a Contracts proposal \cite{P0542R5} contributed to that proposal being removed from the C++20 Working Draft.} we propose that the \emph{assume} semantic is allowed for only \emph{implicit} contract assertions. \emph{Explicit} contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) may \emph{not} be evaluated with the \emph{assume} semantic.
 
 This restriction is important because, for explicit contract assertions, the \emph{assume} semantic  has the potential to introduce undefined behaviour to an otherwise correct program if we wrote a buggy contract predicate. On the other hand, this risk does not exist for implicit contract assertions since they are generated by the compiler; for error cases that cause UB, the \emph{assume} semantic is merely a tool to achieve the same semantics those error cases already have in C++ today.
 
@@ -572,7 +577,7 @@ In addition, users (and, more importantly, libraries) can use such labels to ann
 
 Another important feature enabled by Labels is the possibility to control and constrain the evaluation semantic in code. This possibility also extends to implicit contract assertions (see \cite{P3400R1} Section 2.2.8). Any possible label, such as ``always enforce'', ``never enforce'', and so on, can be applied to any group of implicit contract assertions at any granularity --- per file, per namespace, per function, per block, and so on.
 
-In addition to labels that specify or constrain the evaluation semantics directly, there are labels that give the user higher-level control of the evaluation semantics based on meaningful decisions, such as an ``audit'' label to identify expensive checks:
+We also have, in addition to labels that specify or constrain the evaluation semantics directly, labels that give the user higher-level control of the evaluation semantics based on meaningful decisions, such as an ``audit'' label to identify expensive checks:
 
 \begin{codeblock}
 int f(int a, int b)
@@ -591,7 +596,7 @@ need to control mitigations for those defects based on exactly the criteria need
 \section{Proposed wording}
 \label{wording}
 
-The proposed wording is relative to the current C++ working paper \cite{N5008}.
+The proposed wording is relative to the current C++ working paper, \cite{N5008}.
 
 Modify [basic.contract.general] as follows:
 
@@ -627,7 +632,8 @@ It is implementation-defined which evaluation semantic is used for any given eva
 
 [...]
 
-The evaluation of a contract assertion using the ignore \added{or assume} semantic has no effect. \added{If the semantic is assume, and the predicate would not evaluate to \tcode{true}, evaluation of the contract assertion has runtime-undefined behaviour.}
+The evaluation of a contract assertion using the ignore \added{or assume} semantic has no effect. \added{If the semantic is assume and the predicate would not evaluate to \tcode{true}, evaluation of the contract assertion has runtime-undefined behaviour.}
+% lah: Is it [runtime undefined] behavior? Or is it runtime [undefined behavior]? The relationship of the words determines if we have a hyphen. I think you mean runtime UB. 
 
 % TODO: do we need an explanatory note, like we have in [dcl.attr.assume], and/or a cross-reference to there?
 
@@ -698,274 +704,295 @@ For an object with a non-trivial destructor, referring to any non-static member 
 
 Written-out wording for all 79 cases of runtime-checkable UB listed in \hyperref[appendix]{Appendix~A} can be provided in a future revision of this paper.
 
+% lah: Moved the text portion back; in professional publishing, the text is usually always set portrait and tables and figures are rotated landscape when needed. 
+\addcontentsline{toc}{section}{Appendix: UB list}
+\section*{Appendix A: List of language UB}
+\label{appendix}
+
+All wording is taken from the current C++ working paper \cite{N5008}. Each row corresponds to one case of explicit core language UB. Rows are arranged by category, as defined in Section~\ref{categories}; within each category, rows are ordered in the same order in which the corresponding wording appears in \cite{N5008}.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \pagebreak
 \begin{landscape}
 
-\addcontentsline{toc}{section}{Appendix: UB list}
-\section*{Appendix A: List of language UB}
-\label{appendix}
+% lah: adding \raggedright and \tabularnewline so we don't get the awkward spacing and hyphenation that occur when small amounts of text are justified
 
-All wording taken from the current C++ working paper \cite{N5008}. Each row corresponds to one case of explicit core language UB. Rows are arranged by category, as defined in Section~\ref{categories}; within each category, rows are ordered in the same order in which the corresponding wording appears in \cite{N5008}.
+% lah: first column was too narrow for long words, like representation. I adjusted the other columns a bit to allow enough width
 
+% lah: We can use longtable's commands to set a head that repeats on each page, so that it doesn't have to be repeated numerous times in your code and which might make more sense than having a continued section of the table be at the top of the page with no head and then a head appear (sometimes more than once) later on the page. 
 \renewcommand\arraystretch{1.5}%
-\begin{longtable}{|p{2cm}|p{6.5cm}|p{1.7cm}|p{1.7cm}|p{5cm}|p{5cm}|}
+\begin{longtable}{|p{2.4cm}|p{6.5cm}|p{1.9cm}|p{1.9cm}|p{6.7cm}|p{2.5cm}|}
+\hline
+{\bfseries Identifier} & {\bfseries Wording} & {\bfseries Runtime checkable} & {\bfseries Locally checkable} & {\bfseries Checking strategy} & {\bfseries\raggedright Fallback\\ behaviour}
+\tabularnewline \hline
+\endfirsthead
+\hline
+{\bfseries Identifier} & {\bfseries Wording} & {\bfseries Runtime checkable} & {\bfseries Locally checkable} & {\bfseries Checking strategy} & {\bfseries\raggedright Fallback\\ behaviour}
+\tabularnewline \hline
+\endhead
+
 \multicolumn{6}{c}{\textbf{I. Initialization}}
 \\ \hline
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-\\ \hline
-\ubxref{basic.indet.value} & [basic.indet]/2: Except in the following cases, if an indeterminate value is produced by an evaluation, the behavior is undefined, [...] & Yes & \parbox[t]{2cm}{No} &Track whether storage has been initialized & Only for built-in types: initialise default-initialised variables with erroneous value 
-\\ \hline
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & {\raggedright Fallback\\ behaviour}
+%\tabularnewline \hline
+\ubxref{basic.indet.value} & \raggedright[basic.indet]/2: Except in the following cases, if an indeterminate value is produced by an evaluation, the behavior is undefined, [...] & Yes & \parbox[t]{2cm}{No} &\raggedright Track whether storage has been initialized & \raggedright Only for built-in types: initialise default-initialised variables with erroneous value 
+\tabularnewline \hline
 
 \multicolumn{6}{c}{\textbf{II. Bounds}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{basic.stc.alloc.zero.dereference} & \raggedright[basic.stc.dynamic.allocation]/2: The effect of indirecting through a pointer returned from a request for zero size is undefined. & Yes & No & \raggedright Track pointer provenance, insert bounds check & None
 \\ \hline
-\ubxref{basic.stc.alloc.zero.dereference} & [basic.stc.dynamic.allocation]/2: The effect of indirecting through a pointer returned from a request for zero size is undefined. & Yes & No & Track pointer provenance, insert bounds check & None
+\ubxref{expr.delete.mismatch} & \raggedright[expr.delete]/2: In a single-object delete expression, the value of the operand of delete may be a null pointer value, a pointer value that resulted from a previous non-array new-expression, or a pointer to a base class subobject of an object created by such a new-expression. If not, the behavior is undefined.  & Yes & No & \raggedright Track pointer provenance, insert bounds check & None
 \\ \hline
-\ubxref{expr.delete.mismatch} & [expr.delete]/2: In a single-object delete expression, the value of the operand of delete may be a null pointer value, a pointer value that resulted from a previous non-array new-expression, or a pointer to a base class subobject of an object created by such a new-expression. If not, the behavior is undefined.  & Yes & No & Track pointer provenance, insert bounds check & None
+\ubxref{expr.delete.array.mismatch} & \raggedright[expr.delete]/2: In an array delete expression, the value of the operand of delete may be a null pointer value or a pointer value that resulted from a previous array new-expression whose allocation function was not a non-allocating form ([new.delete.placement]). If not, the behavior is undefined.  & Yes & No & \raggedright Track pointer provenance, insert bounds check & None
 \\ \hline
-\ubxref{expr.delete.array.mismatch} & [expr.delete]/2: In an array delete expression, the value of the operand of delete may be a null pointer value or a pointer value that resulted from a previous array new-expression whose allocation function was not a non-allocating form ([new.delete.placement]). If not, the behavior is undefined.  & Yes & No & Track pointer provenance, insert bounds check & None
+\ubxref{expr.add.out.of.bounds} & \raggedright[expr.add]/4: When an expression \tcode{J} that has integral type is added to or subtracted from an expression \tcode{P} of pointer type, the result has the type of \tcode{P}. If \tcode{P} evaluates to a null pointer value and \tcode{J} evaluates to 0, the result is a null pointer value. Otherwise, if \tcode{P} points to a (possibly-hypothetical) array element $i$ of an array object \tcode{x} with $n$ elements ([dcl.array]), the expressions \tcode{P + J} and \tcode{J + P} (where \tcode{J} has the value $j$) point to the (possibly-hypothetical) array element 
+$i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} points to the (possibly-hypothetical) array element $i - j$ of \tcode{x} if $0 \leq i - j \leq n$. Otherwise, the behavior is undefined. & Yes & \raggedright Only if the array bound is statically known & \raggedright Track pointer provenance, insert bounds check & None
 \\ \hline
-\ubxref{expr.add.out.of.bounds} & [expr.add]/4: When an expression \tcode{J} that has integral type is added to or subtracted from an expression \tcode{P} of pointer type, the result has the type of \tcode{P}. If \tcode{P} evaluates to a null pointer value and \tcode{J} evaluates to 0, the result is a null pointer value. Otherwise, if \tcode{P} points to a (possibly-hypothetical) array element $i$ of an array object \tcode{x} with $n$ elements ([dcl.array]), the expressions \tcode{P + J} and \tcode{J + P} (where \tcode{J} has the value $j$) point to the (possibly-hypothetical) array element 
-$i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} points to the (possibly-hypothetical) array element $i - j$ of \tcode{x} if $0 \leq i - j \leq n$. Otherwise, the behavior is undefined. & Yes & Only if the array bound is statically known & Track pointer provenance, insert bounds check & None
-\\ \hline
-\ubxref{expr.add.sub.diff.pointers} & [expr.add]/4: When an expression \tcode{J} that has integral type is added to or subtracted from an expression \tcode{P} of pointer type, the result has the type of \tcode{P}. If \tcode{P} evaluates to a null pointer value and \tcode{J} evaluates to 0, the result is a null pointer value. Otherwise, if \tcode{P} points to a (possibly-hypothetical) array element $i$ of an array object \tcode{x} with $n$ elements ([dcl.array]), the expressions \tcode{P + J} and \tcode{J + P} (where \tcode{J} has the value $j$) point to the (possibly-hypothetical) array element 
-$i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} points to the (possibly-hypothetical) array element $i - j$ of \tcode{x} if $0 \leq i - j \leq n$. Otherwise, the behavior is undefined. & Yes & Only if the array bound is statically known & Track pointer provenance, insert bounds check & None
+\ubxref{expr.add.sub.diff.pointers} & \raggedright[expr.add]/4: When an expression \tcode{J} that has integral type is added to or subtracted from an expression \tcode{P} of pointer type, the result has the type of \tcode{P}. If \tcode{P} evaluates to a null pointer value and \tcode{J} evaluates to 0, the result is a null pointer value. Otherwise, if \tcode{P} points to a (possibly-hypothetical) array element $i$ of an array object \tcode{x} with $n$ elements ([dcl.array]), the expressions \tcode{P + J} and \tcode{J + P} (where \tcode{J} has the value $j$) point to the (possibly-hypothetical) array element 
+$i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} points to the (possibly-hypothetical) array element $i - j$ of \tcode{x} if $0 \leq i - j \leq n$. Otherwise, the behavior is undefined. & Yes & \raggedright Only if the array bound is statically known & \raggedright Track pointer provenance, insert bounds check & None
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{III. Type and Lifetime}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{intro.object.implicit.create} & \raggedright[intro.object]/11: For each operation that is specified as implicitly creating objects, that operation implicitly creates and starts the lifetime of zero or more objects of implicit-lifetime types ([basic.types.general]) in its specified region of storage if doing so would result in the program having defined behavior. If no such set of objects would give the program defined behavior, the behavior of the program is undefined. & Yes & No & \raggedright Track whether storage can hold implicit lifetime objects & None
 \\ \hline
-\ubxref{intro.object.implicit.create} & [intro.object]/11: For each operation that is specified as implicitly creating objects, that operation implicitly creates and starts the lifetime of zero or more objects of implicit-lifetime types ([basic.types.general]) in its specified region of storage if doing so would result in the program having defined behavior. If no such set of objects would give the program defined behavior, the behavior of the program is undefined. & Yes & No & Track whether storage can hold implicit lifetime objects & None
+\ubxref{intro.object.implicit.pointer} & \raggedright[intro.object]/11: Further, after implicitly creating objects within a specified region of storage, some operations are described as producing a pointer to a suitable created object. These operations select one of the implicitly-created objects whose address is the address of the start of the region of storage, and produce a pointer value that points to that object, if that value would result in the program having defined behavior. If no such pointer value would give the program defined behavior, the behavior of the program is undefined. & Yes & No & \raggedright Track whether storage can hold implicit lifetime objects & None
 \\ \hline
-\ubxref{intro.object.implicit.pointer} & [intro.object]/11: Further, after implicitly creating objects within a specified region of storage, some operations are described as producing a pointer to a suitable created object. These operations select one of the implicitly-created objects whose address is the address of the start of the region of storage, and produce a pointer value that points to that object, if that value would result in the program having defined behavior. If no such pointer value would give the program defined behavior, the behavior of the program is undefined. & Yes & No & Track whether storage can hold implicit lifetime objects & None
+\ubxref{basic.align.object.alignment} & \raggedright[basic.align]/1: Attempting to create an object ([intro.object]) in storage that does not meet the alignment requirements of the object's type is undefined behavior. & Yes & Yes & Insert alignment check & None
 \\ \hline
-\ubxref{basic.align.object.alignment} & [basic.align]/1: Attempting to create an object ([intro.object]) in storage that does not meet the alignment requirements of the object's type is undefined behavior. & Yes & Yes & Insert alignment check & None
+\ubxref{lifetime.outside.pointer.delete} & \raggedright[basic.life]/7: Before the lifetime of an object has started but after the storage which the object will occupy has been allocated or, after the lifetime of an object has ended and before the storage which the object occupied is reused or released, any pointer that represents the address of the storage location where the object will be or was located may be used but only in limited ways. [...] The program has undefined behavior if the pointer is used as the operand of a \emph{delete-expression} [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.delete} & [basic.life]/7: Before the lifetime of an object has started but after the storage which the object will occupy has been allocate1 or, after the lifetime of an object has ended and before the storage which the object occupied is reused or released, any pointer that represents the address of the storage location where the object will be or was located may be used but only in limited ways. [...] The program has undefined behavior if the pointer is used as the operand of a \emph{delete-expression} [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.pointer.member} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used to access a non-static data member or call a non-static member function of the object, [...]  & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.member} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used to access a non-static data member or call a non-static member function of the object, [...]  & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.pointer.virtual} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is implicitly converted ([conv.ptr]) to a pointer to a virtual base class [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.virtual} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is implicitly converted ([conv.ptr]) to a pointer to a virtual base class [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.pointer.static.cast} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{static_cast} ([expr.static.cast]), except when the conversion is to pointer to $cv$ \tcode{void}, or to pointer to $cv$ \tcode{void} and subsequently to pointer to $cv$ \tcode{char}, $cv$ \tcode{unsigned char}, or $cv$ \tcode{std::byte} ([cstddef.syn]) [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.static.cast} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{static_cast} ([expr.static.cast]), except when the conversion is to pointer to $cv$ \tcode{void}, or to pointer to $cv$ \tcode{void} and subsequently to pointer to $cv$ \tcode{char}, $cv$ \tcode{unsigned char}, or $cv$ \tcode{std::byte} ([cstddef.syn]) [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.pointer.dynamic.cast} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]). & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.dynamic.cast} & [basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]). & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.glvalue.access} & \raggedright[basic.life]/8: Similarly, before the lifetime of an object has started but after the storage which the object will occupy has been allocated or, after the lifetime of an object has ended and before the storage which the object occupied is reused or released, any glvalue that refers to the original object may be used but only in limited ways. [...] The program has undefined behavior if the glvalue is used to access the object [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.access} & [basic.life]/8: Similarly, before the lifetime of an object has started but after the storage which the object will occupy has been allocated or, after the lifetime of an object has ended and before the storage which the object occupied is reused or released, any glvalue that refers to the original object may be used but only in limited ways. [...] The program has undefined behavior if the glvalue is used to access the object [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.glvalue.member} & \raggedright [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used to call a non-static member function of the object [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.member} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used to call a non-static member function of the object [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.glvalue.ref.virtual} & \raggedright[basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is bound to a reference to a virtual base class ([dcl.init.ref]) [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.ref.virtual} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is bound to a reference to a virtual base class ([dcl.init.ref]) [...] & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{lifetime.outside.glvalue.dynamic.cast} & \raggedright[basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]) or as the operand of \tcode{typeid}. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.dynamic.cast} & [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]) or as the operand of \tcode{typeid}. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{original.type.implicit.destructor} & \raggedright[basic.life]/11: If a program ends the lifetime of an object of type \tcode{T} with static ([basic.stc.static]), thread ([basic.stc.thread]), or automatic ([basic.stc.auto]) storage duration and if \tcode{T} has a non-trivial destructor, and another object of the original type does not occupy that same storage location when the implicit destructor call takes place, the behavior of the program is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{original.type.implicit.destructor} & [basic.life]/11: If a program ends the lifetime of an object of type \tcode{T} with static ([basic.stc.static]), thread ([basic.stc.thread]), or automatic ([basic.stc.auto]) storage duration and if \tcode{T} has a non-trivial destructor, and another object of the original type does not occupy that same storage location when the implicit destructor call takes place, the behavior of the program is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{creating.within.const.complete.obj} & \raggedright[basic.life]/12: Creating a new object within the storage that a const, complete object with static, thread, or automatic storage duration occupies, or within the storage that such a const object used to occupy before its lifetime ended, results in undefined behavior. & Yes & No & \raggedright Track whether storage is associated with a \tcode{const} object & None
 \\ \hline
-\ubxref{creating.within.const.complete.obj} & [basic.life]/12: Creating a new object within the storage that a const, complete object with static, thread, or automatic storage duration occupies, or within the storage that such a const object used to occupy before its lifetime ended, results in undefined behavior. & Yes & No & Track whether storage is associated with \tcode{const} object & None
+\ubxref{basic.compound.invalid.pointer} & \raggedright[basic.compound]/4: If a pointer value $P$ is used in an evaluation $E$ and $P$ is not valid in the context of $E$, then the behavior is undefined if $E$ is an indirection ([expr.unary.op]) or an invocation of a deallocation function ([basic.stc.dynamic.deallocation]) [...]  & Yes & No & \raggedright Track whether storage has been allocated/freed  & None
+\\ \hline % lah: re allocated/freed, what is the slash? and? or? and/or?
+\ubxref{expr.basic.lvalue.strict.aliasing.violation} & \raggedright[basic.lval]/11.3: If a program attempts to access ([defns.access]) the stored value of an object through a glvalue through which it is not type-accessible, the behavior is undefined.  & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{basic.compound.invalid.pointer} & [basic.compound]/4: If a pointer value $P$ is used in an evaluation $E$ and $P$ is not valid in the context of $E$, then the behavior is undefined if $E$ is an indirection ([expr.unary.op]) or an invocation of a deallocation function ([basic.stc.dynamic.deallocation]) [...]  & Yes & No & Track whether storage has been allocated / freed  & None
+\ubxref{expr.basic.lvalue.union.initialization} & \raggedright[basic.lval]/11.3: If a program invokes a defaulted copy/move constructor or copy/move assignment operator for a union of type \tcode{U} with a glvalue argument that does not denote an object of type $cv$ \tcode{U} within its lifetime, the behavior is undefined.  & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.basic.lvalue.strict.aliasing.violation} & [basic.lval]/11.3: If a program attempts to access ([defns.access]) the stored value of an object through a glvalue through which it is not type-accessible, the behavior is undefined.  & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{expr.type.reference.lifetime} & \raggedright[expr.type]/1: If a pointer to $X$ would be valid in the context of the evaluation of the expression ([basic.fundamental]), the result designates $X$; otherwise, the behavior is undefined. & Yes & No & \raggedright Track whether storage has been allocated/freed & None
+\\ \hline % lah: is the slash and? or? and/or? 
+\ubxref{conv.lval.valid.representation} & \raggedright[conv.lval]/3.4: Otherwise, if the bits in the value representation of the object to which the glvalue refers are not valid for the object's type, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & \raggedright Coerce invalid value representations into erroneous values
+\tabularnewline \hline
+\ubxref{conv.ptr.virtual.base} & \raggedright[conv.ptr]/3: Otherwise, if \tcode{B} is a virtual base class of \tcode{D} and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{D} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & \raggedright Only for the null pointer case & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed/destroyed; insert null pointer check & None
+\\ \hline % lah: is the slash and? or? and/or? 
+\ubxref{conv.member.missing.member} & \raggedright[conv.mem]/2: If class \tcode{D} does not contain the original member and is not a base class of the class containing the original member, the behavior is undefined. & Yes & No & \raggedright Track which type the pointer to member originated from & None
 \\ \hline
-\ubxref{expr.basic.lvalue.union.initialization} & [basic.lval]/11.3: If a program invokes a defaulted copy/move constructor or copy/move assignment operator for a union of type \tcode{U} with a glvalue argument that does not denote an object of type $cv$ \tcode{U} within its lifetime, the behavior is undefined.  & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{expr.call.different.type} & \raggedright[expr.call]/5: Calling a function through an expression whose function type is not call-compatible with the type of the called function's definition results in undefined behavior. & Yes & No & \raggedright Track type information of function based on address & None
 \\ \hline
-\ubxref{expr.type.reference.lifetime} & [expr.type]/1: If a pointer to $X$ would be valid in the context of the evaluation of the expression ([basic.fundamental]), the result designates $X$; otherwise, the behavior is undefined. & Yes & No & Track whether storage has been allocated / freed & None
+\ubxref{expr.ref.member.not.similar} & \raggedright[expr.ref]/9: If \tcode{E2} is a non-static member and the result of \tcode{E1} is an object whose type is not similar ([conv.qual]) to the type of \tcode{E1}, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{conv.lval.valid.representation} & [conv.lval]/3.4: Otherwise, if the bits in the value representation of the object to which the glvalue refers are not valid for the object's type, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & Coerce invalid value representations into erroneous values
+\ubxref{expr.dynamic.cast.pointer.lifetime} & \raggedright[expr.dynamic.cast]/7: If \tcode{v} has type ``pointer to $cv$ \tcode{U}'' and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{U} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & \raggedright Only for the null pointer case & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed/destroyed; insert null pointer check & None
+\\ \hline % lah: does the slash mean and, or, or and/or? 
+\ubxref{expr.dynamic.cast.glvalue.lifetime } & \raggedright[expr.dynamic.cast]/7: If \tcode{v} is a glvalue of type \tcode{U} and \tcode{v} does not refer to an object whose type is similar to \tcode{U} and that is within its lifetime or within its period of construction or destruction, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed/destroyed & None
+\\ \hline % lah: does the slash mean and, or, or and/or? 
+\ubxref{expr.static.cast.base.class} & \raggedright[expr.static.cast]/2: An xvalue of type ``$cv1$ \tcode{B}'' can be cast to type ``rvalue reference to $cv2$ \tcode{D}'' with the same constraints as for an lvalue of type ``$cv1$ \tcode{B}''. If the object of type ``$cv1$ \tcode{B}'' is actually a base class subobject of an object of type \tcode{D}, the result refers to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{conv.ptr.virtual.base} & [conv.ptr]/3: Otherwise, if \tcode{B} is a virtual base class of \tcode{D} and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{D} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & Only for the null pointer case & Track whether storage is associated with object of correct type within its lifetime or object currently being constructed/destroyed; insert null pointer check & None
+\ubxref{expr.static.cast.downcast.wrong.derived.type} & \raggedright[expr.static.cast]/11: If the prvalue of type ``pointer to $cv1$ \tcode{B}'' points to a \tcode{B} that is actually a base class subobject of an object of type \tcode{D}, the resulting pointer points to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & \raggedright Only for the null pointer case  & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed/destroyed; insert a null pointer check & None
+\\ \hline % la: address the slash
+\ubxref{expr.static.cast.does.not.contain.orignal.member} & \raggedright[expr.static.cast]/12: If class \tcode{B} contains the original member, or is a base class of the class containing the original member, the resulting pointer to member points to the original member. Otherwise, the behavior is undefined. & Yes & No & \raggedright Track which type the pointer to member originated from & None
 \\ \hline
-\ubxref{conv.member.missing.member} & [conv.mem]/2: If class \tcode{D} does not contain the original member and is not a base class of the class containing the original member, the behavior is undefined. & Yes & No & Track which type the pointer to member originated from & None
+\ubxref{expr.unary.dereference} & \raggedright[expr.unary.op]/1: If the operand points to an object or function, the result denotes that object or function; otherwise, the behavior is undefined except as specified in [expr.typeid]. & Yes & \raggedright Only for the null pointer case & \raggedright Track whether storage is associated with an object of correct type within its lifetime; track whether the address is associated with a function; insert a null pointer check & None
 \\ \hline
-\ubxref{expr.call.different.type} & [expr.call]/5: Calling a function through an expression whose function type is not call-compatible with the type of the called function's definition results in undefined behavior. & Yes & No & Track type information of function based on address & None
+\ubxref{expr.delete.dynamic.type.differ} & \raggedright[expr.delete]/3: In a single-object delete expression, if the static type of the object to be deleted is not similar ([conv.qual]) to its dynamic type and the selected deallocation function (see below) is not a destroying operator delete, the static type shall be a base class of the dynamic type of the object to be deleted and the static type shall have a virtual destructor or the behavior is undefined.  & Yes & No & \raggedright Track dynamic type of non-polymorphic objects & None
 \\ \hline
-\ubxref{expr.ref.member.not.similar} & [expr.ref]/9: If \tcode{E2} is a non-static member and the result of \tcode{E1} is an object whose type is not similar ([conv.qual]) to the type of \tcode{E1}, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{expr.delete.dynamic.array.dynamic.type.differ} & \raggedright[expr.delete]/3: In an array delete expression, if the dynamic type of the object to be deleted is not similar to its static type, the behavior is undefined. & Yes & No & \raggedright Track dynamic type of non-polymorphic objects & None
 \\ \hline
-\ubxref{expr.dynamic.cast.pointer.lifetime} & [expr.dynamic.cast]/7: If \tcode{v} has type ``pointer to $cv$ \tcode{U}'' and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{U} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & Only for the null pointer case & Track whether storage is associated with object of correct type within its lifetime or object currently being constructed/destroyed; insert null pointer check & None
+\ubxref{expr.mptr.oper.not.contain.member} & \raggedright[expr.mptr.oper]/4: Abbreviating \emph{pm-expression}\tcode{.*}\emph{cast-expression} as \tcode{E1.*E2}, \tcode{E1} is called the object expression. If the result of \tcode{E1} is an object whose type is not similar to the type of \tcode{E1}, or whose most derived object does not contain the member to which \tcode{E2} refers, the behavior is undefined. & Yes & No & \raggedright Track which type the pointer to member originated from and the dynamic type of non-polymorphic objects & None
 \\ \hline
-\ubxref{expr.dynamic.cast.glvalue.lifetime } & [expr.dynamic.cast]/7: If \tcode{v} is a glvalue of type \tcode{U} and \tcode{v} does not refer to an object whose type is similar to \tcode{U} and that is within its lifetime or within its period of construction or destruction, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime or object currently being constructed/destroyed & None
+\ubxref{expr.mptr.oper.member.func.null} & \raggedright[expr.mptr.oper]/6: The result of a .* expression whose second operand is a pointer to a member function is a prvalue. If the second operand is the null member pointer value, the behavior is undefined. & Yes & Yes & \raggedright Insert null pointer check & None
 \\ \hline
-\ubxref{expr.static.cast.base.class} & [expr.static.cast]/2: An xvalue of type ``$cv1$ \tcode{B}'' can be cast to type ``rvalue reference to $cv2$ \tcode{D}'' with the same constraints as for an lvalue of type ``$cv1$ \tcode{B}''. If the object of type ``$cv1$ \tcode{B}'' is actually a base class subobject of an object of type \tcode{D}, the result refers to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
+\ubxref{expr.add.not.similar} & \raggedright[expr.add]/6: For addition or subtraction, if the expressions \tcode{P} or \tcode{Q} have type ``pointer to $cv$ \tcode{T}'', where \tcode{T} and the array element type are not similar, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type & None
 \\ \hline
-\ubxref{expr.static.cast.downcast.wrong.derived.type} & [expr.static.cast]/11: If the prvalue of type ``pointer to $cv1$ \tcode{B}'' points to a \tcode{B} that is actually a base class subobject of an object of type \tcode{D}, the resulting pointer points to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & Only for the null pointer case  & Track whether storage is associated with object of correct type within its lifetime or object currently being constructed/destroyed; insert null pointer check & None
+\ubxref{expr.assign.overlap} & \raggedright[expr.assign]/7: If the value being stored in an object is read via another object that overlaps in any way the storage of the first object, then the overlap shall be exact and the two objects shall have the same type, otherwise the behavior is undefined. & Yes & Yes & \raggedright Check overlap of the two address ranges & None
 \\ \hline
-\ubxref{expr.static.cast.does.not.contain.orignal.member} & [expr.static.cast]/12: If class \tcode{B} contains the original member, or is a base class of the class containing the original member, the resulting pointer to member points to the original member. Otherwise, the behavior is undefined. & Yes & No & Track which type the pointer to member originated from & None
+\ubxref{dcl.type.cv.modify.const.obj} & \raggedright[dcl.type.cv]/4: Any attempt to modify ([expr.assign], [expr.post.incr], [expr.pre.incr]) a const object ([basic.type.qualifier]) during its lifetime ([basic.life]) results in undefined behavior. & Yes & No & \raggedright Track whether storage is associated with a \tcode{const} object & None
 \\ \hline
-\ubxref{expr.unary.dereference} & [expr.unary.op]/1: If the operand points to an object or function, the result denotes that object or function; otherwise, the behavior is undefined except as specified in [expr.typeid]. & Yes & Only for the null pointer case & Track whether storage is associated with object of correct type within its lifetime; track whether address is associated with a function; insert null pointer check & None
+\ubxref{dcl.type.cv.access.volatile} & \raggedright[dcl.type.cv]/5: If an attempt is made to access an object defined with a volatile-qualified type through the use of a non-volatile glvalue, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with a \tcode{volatile} object & None
 \\ \hline
-\ubxref{expr.delete.dynamic.type.differ} & [expr.delete]/3: In a single-object delete expression, if the static type of the object to be deleted is not similar ([conv.qual]) to its dynamic type and the selected deallocation function (see below) is not a destroying operator delete, the static type shall be a base class of the dynamic type of the object to be deleted and the static type shall have a virtual destructor or the behavior is undefined.  & Yes & No & Track dynamic type of non-polymorphic objects & None
+\ubxref{dcl.ref.incompatible.function} & \raggedright[dcl.ref]/6: Attempting to bind a reference to a function where the converted initializer is a glvalue whose type is not call-compatible ([expr.call]) with the type of the function's definition results in undefined behavior.  & Yes & No & \raggedright Track the types of all functions based on their addresses & None
 \\ \hline
-\ubxref{expr.delete.dynamic.array.dynamic.type.differ} & [expr.delete]/3: In an array delete expression, if the dynamic type of the object to be deleted is not similar to its static type, the behavior is undefined. & Yes & No & Track dynamic type of non-polymorphic objects & None
+\ubxref{dcl.ref.incompatible.type} & \raggedright[dcl.ref]/6: Attempting to bind a reference to an object where the converted initializer is a glvalue through which the object is not type-accessible ([basic.lval]) results in undefined behavior. & Yes & No  & \raggedright Track whether storage is associated with an object of correct type & None
 \\ \hline
-\ubxref{expr.mptr.oper.not.contain.member} & [expr.mptr.oper]/4: Abbreviating \emph{pm-expression}\tcode{.*}\emph{cast-expression} as \tcode{E1.*E2}, \tcode{E1} is called the object expression. If the result of \tcode{E1} is an object whose type is not similar to the type of \tcode{E1}, or whose most derived object does not contain the member to which \tcode{E2} refers, the behavior is undefined. & Yes & No & Track which type the pointer to member originated from and dynamic type of non-polymorphic objects & None
+\ubxref{dcl.ref.uninitialized.reference} & \raggedright[dcl.ref]/6: The behavior of an evaluation of a reference ([expr.prim.id], [expr.ref]) that does not happen after ([intro.races]) the initialization of the reference is undefined. & Yes & No & \raggedright Track whether references have been initialised & None
 \\ \hline
-\ubxref{expr.mptr.oper.member.func.null} & [expr.mptr.oper]/6: The result of a .* expression whose second operand is a pointer to a member function is a prvalue. If the second operand is the null member pointer value, the behavior is undefined. & Yes & Yes & Insert null pointer check & None
+\ubxref{class.dtor.not.class.type} & \raggedright[class.dtor]/16: The invocation of a destructor is subject to the usual rules for member functions ([class.mfct]); that is, if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior. & \raggedright This should be a non-normative note & --- & --- & ---
 \\ \hline
-\ubxref{expr.add.not.similar} & [expr.add]/6: For addition or subtraction, if the expressions \tcode{P} or \tcode{Q} have type ``pointer to $cv$ \tcode{T}'', where \tcode{T} and the array element type are not similar, the behavior is undefined. & Yes & No & Track whether storage is associated with object of correct type & None
+\ubxref{class.dtor.no.longer.exists} & \raggedright[class.dtor]/18: Once a destructor is invoked for an object, the object's lifetime ends; the behavior is undefined if the destructor is invoked for an object whose lifetime has ended ([basic.life]). & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.assign.overlap} & [expr.assign]/7: If the value being stored in an object is read via another object that overlaps in any way the storage of the first object, then the overlap shall be exact and the two objects shall have the same type, otherwise the behavior is undefined. & Yes & Yes & Check overlap of the two address ranges & None
+\ubxref{class.abstract.pure.virtual} & \raggedright[class.abstract]/6: Member functions can be called from a constructor (or destructor) of an abstract class; the effect of making a virtual call ([class.virtual]) to a pure virtual function directly or indirectly for the object being created (or destroyed) from such a constructor (or destructor) is undefined. & Yes & Yes &  \raggedright Insert a \tcode{pre(false)} into the pure virtual stub pointed to from the base-class vtable & None
 \\ \hline
-\ubxref{dcl.type.cv.modify.const.obj} & [dcl.type.cv]/4: Any attempt to modify ([expr.assign], [expr.post.incr], [expr.pre.incr]) a const object ([basic.type.qualifier]) during its lifetime ([basic.life]) results in undefined behavior. & Yes & No & Track whether storage is associated with a \tcode{const} object & None
-\\ \hline
-\ubxref{dcl.type.cv.access.volatile} & [dcl.type.cv]/5: If an attempt is made to access an object defined with a volatile-qualified type through the use of a non-volatile glvalue, the behavior is undefined. & Yes & No & Track whether storage is associated with a \tcode{volatile} object & None
-\\ \hline
-\ubxref{dcl.ref.incompatible.function} & [dcl.ref]/6: Attempting to bind a reference to a function where the converted initializer is a glvalue whose type is not call-compatible ([expr.call]) with the type of the function's definition results in undefined behavior.  & Yes & No & Track types of all functions based on address & None
-\\ \hline
-\ubxref{dcl.ref.incompatible.type} & [dcl.ref]/6: Attempting to bind a reference to an object where the converted initializer is a glvalue through which the object is not type-accessible ([basic.lval]) results in undefined behavior. & Yes & No  & Track whether storage is associated with object of correct type & None
-\\ \hline
-\ubxref{dcl.ref.uninitialized.reference} & [dcl.ref]/6: The behavior of an evaluation of a reference ([expr.prim.id], [expr.ref]) that does not happen after ([intro.races]) the initialization of the reference is undefined. & Yes & No & Track whether references have been initialised & None
-\\ \hline
-\ubxref{class.dtor.not.class.type} & [class.dtor]/16: The invocation of a destructor is subject to the usual rules for member functions ([class.mfct]); that is, if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior. & This should be a non-normative note & --- & --- & ---
-\\ \hline
-\ubxref{class.dtor.no.longer.exists} & [class.dtor]/18: Once a destructor is invoked for an object, the object's lifetime ends; the behavior is undefined if the destructor is invoked for an object whose lifetime has ended ([basic.life]). & Yes & No & Track whether storage is associated with object of correct type within its lifetime & None
-\\ \hline
-\ubxref{class.abstract.pure.virtual} & [class.abstract]/6: Member functions can be called from a constructor (or destructor) of an abstract class; the effect of making a virtual call ([class.virtual]) to a pure virtual function directly or indirectly for the object being created (or destroyed) from such a constructor (or destructor) is undefined. & Yes & Yes &  Insert a \tcode{pre(false)} into the pure virtual stub pointed to from the base class vtable & None
-\\ \hline
-\ubxref{class.base.init.mem.fun} & [class.base.init]/16: Member functions (including virtual member functions, [class.virtual]) can be called for an object under construction or destruction. Similarly, an object under construction or destruction can be the operand of the \tcode{typeid} operator ([expr.typeid]) or of a \tcode{dynamic_cast} ([expr.dynamic.cast]). However, if these operations are performed during evaluation of a \emph{ctor-initializer} (or in a function called directly or indirectly from a \emph{ctor-initializer}) before all the \emph{mem-initializer}s for base classes have completed, a precondition assertion of a constructor, or a postcondition assertion of a destructor ([dcl.contract.func]), the program has undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
-\ubxref{class.cdtor.before.ctor.after.dtor} & [class.cdtor]/1: For an object with a non-trivial constructor, referring to any non-static member or base class of the object before the constructor begins execution results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
-\ubxref{class.cdtor.before.ctor.after.dtor} & [class.cdtor]/1:  For an object with a non-trivial destructor, referring to any non-static member or base class of the object after the destructor finishes execution results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
-\ubxref{class.cdtor.convert.or.form.pointer} & [class.cdtor]/3: To explicitly or implicitly convert a pointer (a glvalue) referring to an object of class \tcode{X} to a pointer (reference) to a direct or indirect base class \tcode{B} of \tcode{X}, the construction of \tcode{X} and the construction of all of its direct or indirect bases that directly or indirectly derive from \tcode{B} shall have started and the destruction of these classes shall not have completed, otherwise the conversion results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
-\ubxref{class.cdtor.convert.or.form.pointer} & [class.cdtor]/3: To form a pointer to (or access the value of) a direct non-static member of an object \tcode{obj}, the construction of \tcode{obj} shall have started and its destruction shall not have completed, otherwise the computation of the pointer value (or accessing the member value) results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
-\ubxref{class.cdtor.virtual.not.x} & [class.cdtor]/4: If the virtual function call uses an explicit class member access ([expr.ref]) and the object expression refers to the complete object of \tcode{x} or one of that object's base class subobjects but not \tcode{x} or one of its base class subobjects, the behavior is undefined. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
-\ubxref{class.cdtor.typeid} & [class.cdtor]/5: If the operand of \tcode{typeid} refers to the object under construction or destruction and the static type of the operand is neither the constructor or destructor's class nor one of its bases, the behavior is undefined. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
-\ubxref{class.cdtor.dynamic.cast} & [class.cdtor]/6: If the operand of the \tcode{dynamic_cast} refers to the object under construction or destruction and the static type of the operand is not a pointer to or object of the constructor or destructor's own class or one of its bases, the \tcode{dynamic_cast} results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
-\ubxref{except.handle.handler.ctor.dtor} & [except.handle]/11: Referring to any non-static member or base class of an object in the handler for a \emph{function-try-block} of a constructor or destructor for that object results in undefined behavior. & Yes & No & Track whether objects are currently being constructed/destroyed & None
-\\ \hline
+\ubxref{class.base.init.mem.fun} & \raggedright[class.base.init]/16: Member functions (including virtual member functions, [class.virtual]) can be called for an object under construction or destruction. Similarly, an object under construction or destruction can be the operand of the \tcode{typeid} operator ([expr.typeid]) or of a \tcode{dynamic_cast} ([expr.dynamic.cast]). However, if these operations are performed during evaluation of a \emph{ctor-initializer} (or in a function called directly or indirectly from a \emph{ctor-initializer}) before all the \emph{mem-initializer}s for base classes have completed, a precondition assertion of a constructor, or a postcondition assertion of a destructor ([dcl.contract.func]), the program has undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % lah: address the slash
+\ubxref{class.cdtor.before.ctor.after.dtor} & \raggedright[class.cdtor]/1: For an object with a non-trivial constructor, referring to any non-static member or base class of the object before the constructor begins execution results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % lah: address the slash
+\ubxref{class.cdtor.before.ctor.after.dtor} & \raggedright[class.cdtor]/1:  For an object with a non-trivial destructor, referring to any non-static member or base class of the object after the destructor finishes execution results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % lah: address the slash
+\ubxref{class.cdtor.convert.or.form.pointer} & \raggedright[class.cdtor]/3: To explicitly or implicitly convert a pointer (a glvalue) referring to an object of class \tcode{X} to a pointer (reference) to a direct or indirect base class \tcode{B} of \tcode{X}, the construction of \tcode{X} and the construction of all of its direct or indirect bases that directly or indirectly derive from \tcode{B} shall have started and the destruction of these classes shall not have completed, otherwise the conversion results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % lah: address the slash
+\ubxref{class.cdtor.convert.or.form.pointer} & \raggedright[class.cdtor]/3: To form a pointer to (or access the value of) a direct non-static member of an object \tcode{obj}, the construction of \tcode{obj} shall have started and its destruction shall not have completed, otherwise the computation of the pointer value (or accessing the member value) results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % lah: address the slash
+\ubxref{class.cdtor.virtual.not.x} & \raggedright[class.cdtor]/4: If the virtual function call uses an explicit class member access ([expr.ref]) and the object expression refers to the complete object of \tcode{x} or one of that object's base class subobjects but not \tcode{x} or one of its base class subobjects, the behavior is undefined. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % lah: address the slash
+\ubxref{class.cdtor.typeid} & \raggedright[class.cdtor]/5: If the operand of \tcode{typeid} refers to the object under construction or destruction and the static type of the operand is neither the constructor or destructor's class nor one of its bases, the behavior is undefined. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % lah: address the slash
+\ubxref{class.cdtor.dynamic.cast} & \raggedright[class.cdtor]/6: If the operand of the \tcode{dynamic_cast} refers to the object under construction or destruction and the static type of the operand is not a pointer to or object of the constructor or destructor's own class or one of its bases, the \tcode{dynamic_cast} results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % lah: address the slash
+\ubxref{except.handle.handler.ctor.dtor} & \raggedright[except.handle]/11: Referring to any non-static member or base class of an object in the handler for a \emph{function-try-block} of a constructor or destructor for that object results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
+\\ \hline % address the slash
 
 \multicolumn{6}{c}{\textbf{IV. Arithmetic}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-\\ \hline
-\ubxref{expr.expr.eval} & [expr.pre]/4: If during the evaluation of an expression, the result is not mathematically defined or not in the range of representable values for its type, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
-\\ \hline
-\ubxref{conv.double.out.of.range} & [conv.double]/2: A prvalue of floating-point type can be converted to a prvalue of another floating-point type with a greater or equal conversion rank ([conv.rank]). [...] If the source value can be exactly represented in the destination type, the result of the conversion is that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
-\\ \hline
-\ubxref{conv.fpint.float.not.represented} & [conv.fpint]/1: A prvalue of a floating-point type can be converted to a prvalue of an integer type. The conversion truncates; that is, the fractional part is discarded. The behavior is undefined if the truncated value cannot be represented in the destination type. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
-\\ \hline
-\ubxref{conv.fpint.int.not.represented} & [conv.fpint]/2: A prvalue of an integer type or of an unscoped enumeration type can be converted to a prvalue of a floating-point type. [...] If the value being converted is outside the range of values that can be represented, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
-\\ \hline
-\ubxref{expr.static.cast.enum.outside.range} & [expr.static.cast]/9: If the enumeration type does not have a fixed underlying type, the value is unchanged if the original value is within the range of the enumeration values ([dcl.enum]), and otherwise, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
-\\ \hline
-\ubxref{expr.static.cast.fp.outside.range} & [expr.static.cast]/10: A prvalue of floating-point type can be explicitly converted to any other floating-point type. If the source value can be exactly represented in the destination type, the result of the conversion has that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
-\\ \hline
-\ubxref{expr.mul.div.by.zero} & [expr.mul]/4: The binary \tcode{/} operator yields the quotient, and the binary \tcode{\%} operator yields the remainder from the division of the first expression by the second. If the second operand of \tcode{/} or \tcode{\%} is zero, the behavior is undefined. & Yes & Yes & Insert check whether second operand is zero & Coerce into erroneous value
-\\ \hline
-\ubxref{expr.mul.representable.type.result} & [expr.mul]/4: For integral operands, the \tcode{/} operator yields the algebraic quotient with any fractional part discarded; if the quotient \tcode{a/b} is representable in the type of the result, \tcode{(a/b)*b + a\%b} is equal to \tcode{a}; otherwise, the behavior of both \tcode{a/b} and \tcode{a\%b} is undefined. & Yes & Yes & Insert check whether value is valid & Coerce into erroneous value
-\\ \hline
-\ubxref{expr.shift.neg.and.width} & [expr.shift]/1: The behavior is undefined if the right operand is negative, or greater than or equal to the width of the promoted left operand. & Yes  & Yes & Insert check whether right operand is valid & Coerce into erroneous value
-\\ \hline
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{expr.expr.eval} & \raggedright[expr.pre]/4: If during the evaluation of an expression, the result is not mathematically defined or not in the range of representable values for its type, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
+\tabularnewline \hline
+\ubxref{conv.double.out.of.range} & \raggedright[conv.double]/2: A prvalue of floating-point type can be converted to a prvalue of another floating-point type with a greater or equal conversion rank ([conv.rank]). [...] If the source value can be exactly represented in the destination type, the result of the conversion is that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
+\tabularnewline \hline
+\ubxref{conv.fpint.float.not.represented} & \raggedright[conv.fpint]/1: A prvalue of a floating-point type can be converted to a prvalue of an integer type. The conversion truncates; that is, the fractional part is discarded. The behavior is undefined if the truncated value cannot be represented in the destination type. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
+\tabularnewline \hline
+\ubxref{conv.fpint.int.not.represented} & \raggedright[conv.fpint]/2: A prvalue of an integer type or of an unscoped enumeration type can be converted to a prvalue of a floating-point type. [...] If the value being converted is outside the range of values that can be represented, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
+\tabularnewline \hline
+\ubxref{expr.static.cast.enum.outside.range} & \raggedright[expr.static.cast]/9: If the enumeration type does not have a fixed underlying type, the value is unchanged if the original value is within the range of the enumeration values ([dcl.enum]), and otherwise, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
+\tabularnewline \hline
+\ubxref{expr.static.cast.fp.outside.range} & \raggedright[expr.static.cast]/10: A prvalue of floating-point type can be explicitly converted to any other floating-point type. If the source value can be exactly represented in the destination type, the result of the conversion has that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
+\tabularnewline \hline
+\ubxref{expr.mul.div.by.zero} & \raggedright[expr.mul]/4: The binary \tcode{/} operator yields the quotient, and the binary \tcode{\%} operator yields the remainder from the division of the first expression by the second. If the second operand of \tcode{/} or \tcode{\%} is zero, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the second operand is zero & \raggedright Coerce into erroneous value
+\tabularnewline \hline
+\ubxref{expr.mul.representable.type.result} & \raggedright[expr.mul]/4: For integral operands, the \tcode{/} operator yields the algebraic quotient with any fractional part discarded; if the quotient \tcode{a/b} is representable in the type of the result, \tcode{(a/b)*b + a\%b} is equal to \tcode{a}; otherwise, the behavior of both \tcode{a/b} and \tcode{a\%b} is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
+\tabularnewline \hline
+\ubxref{expr.shift.neg.and.width} & \raggedright[expr.shift]/1: The behavior is undefined if the right operand is negative, or greater than or equal to the width of the promoted left operand. & Yes  & Yes & \raggedright Insert check whether right operand is valid & \raggedright Coerce into erroneous value
+\tabularnewline \hline
 
 \multicolumn{6}{c}{\textbf{V. Threading}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-\\ \hline
-\ubxref{intro.races.data} & [intro.races]/17: Any such data race results in undefined behavior. & Yes & No & Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & Make all primitive memory accesses implicitly atomic
-\\ \hline
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{intro.races.data} & \raggedright[intro.races]/17: Any such data race results in undefined behavior. & Yes & No & \raggedright Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & \raggedright Make all primitive memory accesses implicitly atomic
+\tabularnewline \hline
+\pagebreak
 
 \multicolumn{6}{c}{\textbf{VI. Sequencing}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-\\ \hline
-\ubxref{intro.execution.unsequenced.modification} & [conv.rank]/10:  The behavior is undefined if a side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread]). & Yes & Yes & Identify all potential read operations that are not sequenced with respect to each given write operation; insert checks to identify if those operations are referencing the same address & Sequence operations in some unspecified order
-\\ \hline
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{intro.execution.unsequenced.modification} & \raggedright[conv.rank]/10:  The behavior is undefined if a side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread]). & Yes & Yes & \raggedright Identify all potential read operations that are not sequenced with respect to each given write operation; insert checks to identify if those operations are referencing the same address & \raggedright Sequence operations in some unspecified order
+\tabularnewline \hline
+%\pagebreak[3]
 
 \multicolumn{6}{c}{\textbf{VII. Assumptions}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-\\ \hline
-\ubxref{dcl.attr.assume.false} & [dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime-undefined behavior. & No & --- & No automatic checking strategy possible because predicate cannot be in general proven to be side-effect free; instead, the user has to change \tcode{[[assume(x)]]} to \tcode{contract_assert<may_be_assumed>(x)} and select appropriate evaluation semantic & Ignore the assumption
-\\ \hline
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+% lah: in the content below, I think you mean runtime UB, not runtime-undefined behaviour
+\ubxref{dcl.attr.assume.false} & \raggedright[dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime-undefined behavior. & No & --- & \raggedright No automatic checking strategy is possible because the predicate cannot be, in general, proven to be free of side effects; instead, the user has to change \tcode{[[assume(x)]]} to \mbox{\tcode{contract_assert<may_be_assumed>(x)}} and select an appropriate evaluation semantic & \raggedright Ignore the assumption
+\tabularnewline \hline
+\pagebreak
 
 \multicolumn{6}{c}{\textbf{VIII. Control Flow}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{basic.start.main.exit.during.destruction} & \raggedright[basic.start.main]/4: If \tcode{std::exit} is invoked during the destruction of an object with static or thread storage duration, the program has undefined behavior. & Yes & No & \raggedright Track whether static or thread-local objects are currently being destroyed & None
 \\ \hline
-\ubxref{basic.start.main.exit.during.destruction} & [basic.start.main]/4: If \tcode{std::exit} is invoked during the destruction of an object with static or thread storage duration, the program has undefined behavior. & Yes & No & Track whether static or thread-local objects are currently being destroyed & None
+\ubxref{basic.start.term.use.after.destruction} & \raggedright[basic.start.term]/4: If a function contains a block variable of static or thread storage duration that has been destroyed and the function is called during the destruction of an object with static or thread storage duration, the program has undefined behavior if the flow of control passes through the definition of the previously destroyed block variable. & Yes & No & \raggedright Track the lifetime of static objects & None
 \\ \hline
-\ubxref{basic.start.term.use.after.destruction} & [basic.start.term]/4: If a function contains a block variable of static or thread storage duration that has been destroyed and the function is called during the destruction of an object with static or thread storage duration, the program has undefined behavior if the flow of control passes through the definition of the previously destroyed block variable. & Yes & No & Track lifetime of static objects & None
+\ubxref{stmt.return.flow.off} & \raggedright [stmt.return]/4: Otherwise, flowing off the end of a function that is neither \tcode{main} ([basic.start.main]) nor a coroutine ([dcl.fct.def.coroutine]) results in undefined behavior. & Yes & Yes & \raggedright Insert \mbox{\tcode{contract_assert(false)}} at end of \emph{function-body} & \raggedright Only for built-in return types: return erroneous value
+\tabularnewline \hline
+\ubxref{stmt.return.coroutine.flow.off} & \raggedright[stmt.return.coroutine]/3: If a search for the name \tcode{return_void} in the scope of the promise type finds any declarations, flowing off the end of a coroutine's \emph{function-body} is equivalent to a \mbox{\tcode{co_return}} with no operand; otherwise flowing off the end of a coroutine's \emph{function-body} results in undefined behavior. & Yes & Yes & \raggedright Insert \mbox{\tcode{contract_assert(false)}} at end of  \emph{function-body} & \raggedright Only for built-in return types: return erroneous value
+\tabularnewline \hline
+\ubxref{stmt.dcl.local.static.init.recursive} & \raggedright[stmt.dcl]/3: If control re-enters the declaration recursively while the variable is being initialized, the behavior is undefined. & Yes & No & \raggedright Insert a recursion counter into a guard for static and thread-local object construction & None
 \\ \hline
-\ubxref{stmt.return.flow.off} & [stmt.return]/4: Otherwise, flowing off the end of a function that is neither \tcode{main} ([basic.start.main]) nor a coroutine ([dcl.fct.def.coroutine]) results in undefined behavior. & Yes & Yes & Insert \mbox{\tcode{contract_assert(false)}} at end of \emph{function-body} & Only for built-in return types: return erroneous value
+\ubxref{dcl.attr.noreturn.eventually.returns} & \raggedright[dcl.attr.noreturn]/2: If a function \tcode{f} is invoked where \tcode{f} was previously declared with the \tcode{noreturn} attribute and that invocation eventually returns, the behavior is runtime-undefined. & Yes & Yes & \raggedright Insert \tcode{post(false)} & None
 \\ \hline
-\ubxref{stmt.return.coroutine.flow.off} & [stmt.return.coroutine]/3: If a search for the name \tcode{return_void} in the scope of the promise type finds any declarations, flowing off the end of a coroutine's \emph{function-body} is equivalent to a \mbox{\tcode{co_return}} with no operand; otherwise flowing off the end of a coroutine's \emph{function-body} results in undefined behavior. & Yes & Yes & Insert \mbox{\tcode{contract_assert(false)}} at end of  \emph{function-body} & Only for built-in return types: return erroneous value
-\\ \hline
-\ubxref{stmt.dcl.local.static.init.recursive} & [stmt.dcl]/3: If control re-enters the declaration recursively while the variable is being initialized, the behavior is undefined. & Yes & No & Insert recursion counter into guard for static and thread-local object construction & None
-\\ \hline
-\ubxref{dcl.attr.noreturn.eventually.returns} & [dcl.attr.noreturn]/2: If a function \tcode{f} is invoked where \tcode{f} was previously declared with the \tcode{noreturn} attribute and that invocation eventually returns, the behavior is runtime-undefined. & Yes & Yes & Insert \tcode{post(false)} & None
-\\ \hline
+\pagebreak
+% lah: In the content above, I think you mean runtime UB, not runtime-U B
 
 \multicolumn{6}{c}{\textbf{IX. Replacement Functions}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{basic.stc.alloc.dealloc.constraint} & \raggedright[basic.stc.dynamic.general]/3: If the behavior of an allocation or deallocation function does not satisfy the semantic constraints specified in [basic.stc.dynamic.allocation] and [basic.stc.dynamic.deallocation], the behavior is undefined. & \raggedright Partially: some constraints can be checked locally (e.g., allocation function does not return null); others cannot be checked at all. & Partially & \raggedright Insert checks where possible & None
 \\ \hline
-\ubxref{basic.stc.alloc.dealloc.constraint} & [basic.stc.dynamic.general]/3: If the behavior of an allocation or deallocation function does not satisfy the semantic constraints specified in [basic.stc.dynamic.allocation] and [basic.stc.dynamic.deallocation], the behavior is undefined. & Partially: some constraints can be checked locally (e.g., allocation function does not return null); others cannot be checked at all. & Partially & Insert checks where possible & None
+\ubxref{basic.stc.alloc.dealloc.throw} & \raggedright [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. & \raggedright Address this via \cite{P3424R0} instead & --- & --- & ---
 \\ \hline
-\ubxref{basic.stc.alloc.dealloc.throw} & [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. & Address this via \cite{P3424R0} instead & --- & --- & ---
+\ubxref{expr.new.non.allocating.null} & \raggedright[expr.new]/22: If the allocation function is a non-allocating form ([new.delete.placement]) that returns null, the behavior is undefined. & Yes & Yes & \raggedright  Insert \tcode{post(r: r)} & None
 \\ \hline
-\ubxref{expr.new.non.allocating.null} & [expr.new]/22: If the allocation function is a non-allocating form ([new.delete.placement]) that returns null, the behavior is undefined. & Yes & Yes & Insert \tcode{post(r: r)} & None
-\\ \hline
+\pagebreak
 
 \multicolumn{6}{c}{\textbf{X. Coroutines}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{dcl.fct.def.coroutine.resume.not.suspended} & \raggedright[dcl.fct.def.coroutine]/9: Invoking a resumption member function for a coroutine that is not suspended results in undefined behavior. & Yes & No & \raggedright Track the suspension state associated with every coroutine handle & None
 \\ \hline
-\ubxref{dcl.fct.def.coroutine.resume.not.suspended} & [dcl.fct.def.coroutine]/9: Invoking a resumption member function for a coroutine that is not suspended results in undefined behavior. & Yes & No & Track suspension state associated with every coroutine handle & None
-\\ \hline
-\ubxref{dcl.fct.def.coroutine.destroy.not.suspended} & [dcl.fct.def.coroutine/12: If \tcode{destroy} is called for a coroutine that is not suspended, the program has undefined behavior. & Yes & No & Track suspension state associated with every coroutine handle & None
+\ubxref{dcl.fct.def.coroutine.destroy.not.suspended} & \raggedright[dcl.fct.def.coroutine/12: If \tcode{destroy} is called for a coroutine that is not suspended, the program has undefined behavior. & Yes & No & \raggedright Track the suspension state associated with every coroutine handle & None
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{XI. Templates}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-\\ \hline
-\ubxref{temp.inst.inf.recursion} & [temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined. & No, make ill-formed instead & --- & --- & ---
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{temp.inst.inf.recursion} & \raggedright[temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined. & \raggedright No, make the behaviour ill-formed instead & --- & --- & ---
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{XII. Preprocessor}} 
 \\ \hline
 
-Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
+%\\ \hline
+\ubxref{cpp.cond.defined} & \raggedright[cpp.cond]/11: If the preprocessing token \tcode{defined} is generated as a result of this replacement process or use of the \tcode{defined} unary operator does not match one of the two specified forms prior to macro replacement, the behavior is undefined. & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.cond.defined} & [cpp.cond]/11: If the preprocessing token \tcode{defined} is generated as a result of this replacement process or use of the \tcode{defined} unary operator does not match one of the two specified forms prior to macro replacement, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
+\ubxref{cpp.include.one.of.two.forms} & \raggedright[cpp.include]/4:  The preprocessing tokens after \tcode{include} in the directive are processed just as in normal text ([...]). If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined. & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.include.one.of.two.forms} & [cpp.include]/4:  The preprocessing tokens after \tcode{include} in the directive are processed just as in normal text ([...]). If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
+\ubxref{cpp.replace.macro.pptoken} & \raggedright[cpp.replace.general]/13: If there are sequences of preprocessing tokens within the list of arguments that would otherwise act as preprocessing directives, the behavior is undefined. & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.replace.macro.pptoken} & [cpp.replace.general]/13: If there are sequences of preprocessing tokens within the list of arguments that would otherwise act as preprocessing directives, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
+\ubxref{cpp.stringize.invalid.char} & \raggedright[cpp.stringize]/2: If the replacement that results is not a valid character string literal, the behavior is undefined. & \raggedright No, make  the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.stringize.invalid.char} & [cpp.stringize]/2: If the replacement that results is not a valid character string literal, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
+\ubxref{cpp.concat.invalid.preprocessing.token} & \raggedright[cpp.concat]/3: If the result is not a valid preprocessing token, the behavior is undefined.  & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.concat.invalid.preprocessing.token} & [cpp.concat]/3: If the result is not a valid preprocessing token, the behavior is undefined.  & No, make IFNDR instead & --- & --- & ---
+\ubxref{cpp.line.zero.or.overflow} & \raggedright[cpp.line]/3: If the digit sequence specifies zero or a number greater than $2147483647$, the behavior is undefined. & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.line.zero.or.overflow} & [cpp.line]/3: If the digit sequence specifies zero or a number greater than $2147483647$, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
+\ubxref{cpp.line.pptoken.not.match} & \raggedright[cpp.line]/5: If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined; otherwise, the result is processed as appropriate. & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
-\ubxref{cpp.line.pptoken.not.match} & [cpp.line]/5: If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined; otherwise, the result is processed as appropriate. & No, make IFNDR instead & --- & --- & ---
-\\ \hline
-\ubxref{cpp.predefined.define.undef} & [cpp.predefined]/4: If any of the pre-defined macro names in this subclause, or the identifier \tcode{defined}, is the subject of a \tcode{\#define} or a \tcode{\#undef} preprocessing directive, the behavior is undefined. & No, make IFNDR instead & --- & --- & ---
+\ubxref{cpp.predefined.define.undef} & \raggedright[cpp.predefined]/4: If any of the pre-defined macro names in this subclause, or the identifier \tcode{defined}, is the subject of a \tcode{\#define} or a \tcode{\#undef} preprocessing directive, the behavior is undefined. & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
 
 \end{longtable}
-
 
 \end{landscape}
 
@@ -976,14 +1003,14 @@ Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy
 
 \section*{Document history}
 \begin{itemize}
-\item \textbf{R0}, 2023-03-08: Initial version.
-\item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.
 \item \textbf{R2}, 2025-05-19: Complete rewrite after the WG21 meeting in Hagenberg.
+\item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.
+\item \textbf{R0}, 2023-03-08: Initial version.
 \end{itemize}
 
 \section*{Acknowledgements}
 
-Thanks to Herb Sutter, Oliver Rosten, Andrzej Krzemie\' nski, and Roger Orr for their helpful feedback on a previous revision of this paper.
+Thanks to Herb Sutter, Oliver Rosten, Andrzej Krzemie{\'n}ski, and Roger Orr for their helpful feedback on a previous revision of this paper.
 
 Thanks to Lori Hughes for reviewing this paper and providing editorial feedback. 
 

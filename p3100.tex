@@ -130,17 +130,16 @@ Eliminating or at least meaningfully reducing the amount of \emph{undefined beha
 and security of C++ programs. WG21 has been continuously working in that direction. (For a recent status update, see \cite{Sutter2025} and references therein; for background, see \cite{Sutter2024} and references therein.)
 
 At WG21's February 2025 meeting in Hagenberg, EWG agreed on a framework for a systematic
-treatment of core language undefined behaviour in C++: the pursuit of a core language UB white paper in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts. The current version of that white paper is \cite{P3656R1}, proposing the process and major work items. The proposed process calls for papers to be adopted into the white paper's working draft via EWG approval. This is the first such paper.
+treatment of core language undefined behaviour in C++: the pursuit of a core language UB white paper in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts. The current version of that white paper is \cite{P3656R1}, proposing the process and major work items. The proposed process calls for papers to be adopted into the white paper working draft via EWG approval. This is the first such paper.
 
-Further, \cite{P3656R1} proposes, as major work items, to enumerate and group all language UB in C++, identify tools to address the groups, and take a first pass at determining % lah: we don't need both "first pass" and "penciling in," and "penciling in" is an idiom that English-language learners might not understand immediately
-which tool to use for each UB case. The goal of this paper is to contribute to all the above major work items.
+Further, \cite{P3656R1} proposes, as major work items, to enumerate and group all language UB in C++, identify tools to address the groups, and take a first pass at determining which tool to use for each UB case. The goal of this paper is to contribute to all the above major work items.
 
-In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We then group all core language UB into broad categories, such as ``Arithmetic'' and ``Bounds''. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and whether each case has well-defined fallback behaviour. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
+In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We then group all core language UB into broad categories, such as ``Arithmetic'' and ``Bounds''. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and for which cases we can define meaningful, well-defined fallback behaviour. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
 
 In Section~\ref{design}, we systematically introduce such runtime checks to C++ via  \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14}. We describe how implicit contract assertions should be specified and how to apply them to all appropriate cases of core language UB. For cases of UB where well-defined fallback behaviour exists, we discuss how specifying it allows the program to continue execution past a violated implicit contract assertion without UB. We conclude by proposing an escape hatch to mitigate the runtime cost of such fallback behaviour and avoid performance regressions.
 
 In Section~\ref{ext}, we discuss how future extensions, such as Labels \cite{P3400R1},
-will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions. In Section~\ref{wording}, we propose, for approval into the white paper, wording that implements the design discussed in Section~\ref{design}.
+will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions. In Section~\ref{wording}, we propose wording for approval into the white paper that implements the design discussed in Section~\ref{design}.
 
 The first revision (R0) of this paper was published in May 2024. Following informal discussions at the St. Louis meeting, the paper was revised (R1) and presented to SG21 at the Wroc{\l}aw meeting. SG21 voted \emph{unanimously} in favour of our direction for implicit contract assertions.
 \vspace{2mm}
@@ -178,7 +177,7 @@ For this paper, we manually inspected all occurrences of the word ``undefined'' 
 
 Another group of WG21 members is currently engaged in an effort, based on work by Shafik Yaghmour (\cite{P1705R1}, \cite{P3075R0}) and following the process outlined in \cite{P3656R1}, to enumerate cases of core language UB directly in the C++ Standard document  \LaTeX{} source. Our list has been created independently from that effort.
 
-Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ Standard's clause identifiers, which we place between [square brackets]. Wherever possible, we use herein the same stable identifiers as those used in the \LaTeX-based effort. However, some differences occur between the two lists (and, therefore, also between the stable identifiers used) because we identified a number of potential defects and omissions in the other list. We are actively working with the creators of the \LaTeX-based effort toward merging the two lists. 
+Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ Standard's clause identifiers, which we place between [square brackets]. Wherever possible, we use herein the same stable identifiers as those used in the \LaTeX-based effort. However, some differences occur between the two lists (and, therefore, also between the stable identifiers used) because we identified a number of potential defects and omissions in the other list. We are actively contributing to the \LaTeX-based effort toward merging the two lists. 
 
 Note that unlike the \LaTeX-based effort, our list excludes cases of IFNDR because this paper focuses on runtime mitigation strategies. While UB is fundamentally a runtime property of a particular program execution and thus runtime mitigation is a natural approach, IFNDR typically represents link-time issues and is, therefore, out of scope for this paper.
 
@@ -191,18 +190,17 @@ that case is, therefore, also excluded from our list.
 We found that all identified cases of core language UB can be broadly classified into twelve categories:
  \renewcommand{\labelenumi}{\Roman{enumi}.}
 \begin{enumerate}
-\item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value. % lah: examples?
+\item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value.
 \item \textbf{Bounds} --- 5 cases. Using a pointer in a way that fails to respect the range of the pointed-to object or array. Examples: incrementing a pointer beyond the past-the-end position; performing single-object delete on an operand obtained from an array-new expression;  dereferencing a pointer returned from a request for zero size.
 \item \textbf{Type and Lifetime} --- 45 cases. Operations that access storage and/or use pointers or references to storage in an inappropriate way that is not already covered by Initialisation and Bounds. Examples: attempting to access a value of one type through  a pointer of a different, incompatible type; attempting to access the value of an object after its lifetime has ended. 
 \item \textbf{Arithmetic} --- 9 cases. Executing an arithmetic operation whose operands fail to meet certain preconditions. Examples: division by zero; conversion of a value to a different arithmetic type that cannot represent that value. 
-\item \textbf{Threading} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from different threads where neither access happens before the other, i.e., a data race. % lah: examples?
-\item \textbf{Sequencing} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other. % lah: examples?
+\item \textbf{Threading} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from different threads where neither access happens before the other, i.e., a data race.
+\item \textbf{Sequencing} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other.
 \item \textbf{Assumptions} --- 1 case. Reaching an \tcode{[[assume]]} declaration whose operand would not evaluate to \tcode{true}.
-\item \textbf{Control Flow} --- 6 cases. Undefined behaviour due to errors in control flow. % lah: examples?
-Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
+\item \textbf{Control Flow} --- 6 cases. Undefined behaviour due to errors in control flow. Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
 \item \textbf{Replacement Functions} --- 3 cases. Executing a user-defined replacement function (\tcode{operator new}/\tcode{delete}) that fails to meet the specified requirements. Examples: returning \tcode{null} from a user-defined placement \tcode{new}; throwing an exception from a user-defined \tcode{delete}.
 \item \textbf{Coroutines} --- 2 cases. Misusing coroutine machinery. Examples: destroying a coroutine that is not suspended; invoking a resumption member function for a coroutine that is not suspended.
-\item \textbf{Templates} --- 1 case. Infinite recursion during template instantiation. % lah: examples?
+\item \textbf{Templates} --- 1 case. Infinite recursion during template instantiation.
 \item \textbf{Preprocessor} --- 8 cases. Misusing preprocessor directives. Examples: \tcode{\#define}-ing a predefined macro name; passing an out-of-range integer to the \tcode{\#line} directive.
 \end{enumerate}
 
@@ -212,7 +210,7 @@ Because unambiguously categorising a particular case of UB into either \emph{typ
 
 The next two categories, Arithmetic and Threading, correspond to the common terms \emph{arithmetic safety} and \emph{thread safety}, respectively; the latter contains only one case of UB, data races.
 
-The following category, Sequencing, also contains just one case of UB: unsequenced operations, such as \mbox{\tcode{i++ + ++i}}. Grouping UB due to data races and unsequenced operations into two separate categories might seem surprising at first since they have a very similar same shape (except that one is interthread and the other is intrathread), but as we will see in Section~\ref{mitigation}, these two categories actually require very different approaches to mitigation.
+The following category, Sequencing, also contains just one case of UB: unsequenced operations, such as \mbox{\tcode{i++ + ++i}}. Grouping UB due to data races and unsequenced operations into two separate categories might seem surprising at first since they have a very similar same shape (except that one is inter-thread and the other is intra-thread), but as we will see in Section~\ref{mitigation}, these two categories actually require very different approaches to mitigation.
 
 The next category, Assumptions, also contains just one case of UB: reaching an \tcode{[[assume]]} declaration whose operand would not evaluate to \tcode{true}. As we will see later, this case of UB is of a different nature than the others and warrants its own category.
 
@@ -256,8 +254,7 @@ Some cases of UB in the Replacement Function category are partially or fully loc
 
 All cases of UB in the Coroutine category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations.
 
-UB in the Templates and Preprocessor categories is unique in that it does not actually represent runtime UB, % lah: later, in the wording and in the table, you use the term "runtime-undefined behaviour," and I think you actually mean "runtime UB" or "runtime undefined behaviour" there as well
-and therefore, runtime diagnosis makes no sense. In particular, UB in the Templates category (\{temp.inst.inf.recursion\}) is diagnosable at compile time, while UB in the Preprocessor category should be specified as IFNDR instead (see Section~\ref{mitigation}).
+UB in the Templates and Preprocessor categories is unique in that it does not actually represent runtime UB, and therefore, runtime diagnosis makes no sense. In particular, UB in the Templates category (\{temp.inst.inf.recursion\}) is diagnosable at compile time, while UB in the Preprocessor category should be specified as IFNDR instead (see Section~\ref{mitigation}).
 
 \subsection{Cost of diagnosis}
 \label{cost}
@@ -350,8 +347,8 @@ the UB could be replaced by well-defined behaviour by appropriately bit-masking 
 
 All UB in the Arithmetic category has the same possible fallback behaviour: if an arithmetic operation would produce an inappropriate value, it can be coerced into an erroneous value instead, at the cost of incurring significant performance overhead on common arithmetic operations.
 
-Defining fallback behaviour for UB in the Threading category (\{intro.races.data\}) is in principle possible: we could make all primitive memory accesses implicitly atomic, as in the Java memory model. The overhead incurred by such a model will heavily depend on the memory model of the underlying hardware; on weakly ordered platforms, such as ARM,
-it will be larger than on strongly ordered platforms such as x86. Note that while such fallback behaviour is well-defined, it still fails to prevent many real bugs that result from incorrect application of concurrency since user-defined types with multiple members can still be easily observed with inconsistent (``torn'') states if no proper synchronisation is performed.
+Defining fallback behaviour for UB in the Threading category (\{intro.races.data\}) is in principle possible: we could make all primitive memory accesses implicitly atomic, as in the Java memory model. The overhead incurred by such a model will heavily depend on the memory model of the underlying hardware; on weakly-ordered platforms, such as ARM,
+it will be larger than on strongly-ordered platforms such as x86. Note that while such fallback behaviour is well-defined, it still fails to prevent many real bugs that result from incorrect application of concurrency since user-defined types with multiple members can still be easily observed with inconsistent (``torn'') states if no proper synchronisation is performed.
 
 The fallback behaviour for UB in the Sequencing category (\{intro.execution.unsequenced.modifica\-tion\})
 is much more straightforward: we can simply define that the unsequenced operations happen in some unspecified order. This fallback behaviour can still have performance overhead in the form of losing  optimisation opportunities, but such overhead will likely be manageable. 
@@ -376,7 +373,7 @@ Two more cases of UB should not actually be considered UB. The first is \{class.
 this situation is not a new case of UB and is already omitted from the specification of other cases of UB elsewhere. This section should, therefore, be a non-normative note referring to those sections.
 % lah: add a citation for this quote. Even if the {} section matches, I imagine there's a paragraph number. This looks like it's taken from [class.dtor]/16 in N5008.
 
-The second is \{basic.stc.alloc.dealloc.throw\}. No good reason justifies why throwing an exception from a deallocation function should cause UB. Instead, we should enforce that deallocation functions have a nonthrowing exception specification. This solution is proposed in \cite{P3424R0}, and we refer to that paper for mitigating this case of UB.
+The second is \{basic.stc.alloc.dealloc.throw\}. There is no good reason why throwing an exception from a deallocation function should cause UB. Instead, we should enforce that deallocation functions have a nonthrowing exception specification. This solution is proposed in \cite{P3424R0}, and we refer to that paper for mitigating this case of UB.
 % TD: Is this actually compile-time diagnosable? If yes, we should move this to the top of this section.
 
 We are left with 79 cases of UB for which we need to identify candidate mitigation strategies. All of those cases represent \emph{runtime} UB that cannot be diagnosed at compile time. Therefore, one possible mitigation strategy for \emph{all} those cases of UB is to insert \emph{runtime} checks.
@@ -386,8 +383,6 @@ Fundamentally, inserting runtime checks is possible for 78 out of those 79 cases
 However, as we saw in Section~\ref{locally}, the majority of those cases (60 out of 78) are not locally diagnosable and require expensive sanitiser-like instrumentation to perform the checks. And even for those 18 cases of UB that are locally diagnosable and do not require additional instrumentation to insert runtime checks, in most cases the checks themselves will have a significant runtime overhead. Therefore, the checks need to be \emph{optional}: we need a mechanism to enable and disable each kind of check, and we cannot require an implementation to support all checks.
 
 For example, a compiler may choose to support enabling runtime checks for arithmetic UB (they already do today for some cases; for example, GCC offers the \tcode{-ftrapv} flag, which enables checks for signed integer overflow) while not supporting any checks that require expensive instrumentation. On the other hand, a different compiler that comes with a suite of a sanitisers may choose to support some subset of those more expensive checks (and again, they already do today, just not in a standardised fashion).
-
-%\pagebreak % TD: manual pagebreak to avoid a weird gap later. Remove when text changes.
 
 Defining such optional runtime checks for all those 79 cases of UB is, therefore, useful in itself. These checks cost \emph{nothing} unless they are turned on, and no implementation is actually \emph{required} to implement them, yet specifying them in the Standard has a number of advantages: it allows us to assign standard names and categories to them (see also Section~\ref{ext}); it allows for implementations of such runtime checks (including existing compiler options and sanitisers) to leverage a shared paradigm and shared terminology; and it brings those tools into the scope of the C++ Standard.
 
@@ -419,7 +414,7 @@ At most, a profile could reject the program if a certain runtime check required 
 \subsection{Defining implicit contract assertions}
 \label{defineicas}
 
-In this section, we propose a framework for systematically introducing to C++ runtime checks that guard against core language UB. This framework builds upon Contracts.
+In this section, we propose a framework for systematically introducing runtime checks to C++ that guard against core language UB. This framework builds upon Contracts.
 
 For C++26, we adopted an initial subset of Contracts functionality via \cite{P2900R14}. This initial subset contains three kinds of \emph{contract assertions}: \tcode{pre}, \tcode{post}, and \tcode{contract_assert}. Since these contract assertions are specified by the user with explicit syntax, in this paper we call them \emph{explicit} contract assertions. For example, the author of a vector-like class can add a precondition assertion to its subscript operator to guard against out-of-bounds access:
 
@@ -443,8 +438,7 @@ int main() {
 }
 \end{codeblock}
 
-In C++ today, the behaviour of this program is undefined if the value of \tcode{i} is not smaller than 10 (\{expr.add.out.of.bounds\}). However, instead of saying that out-of-bounds access into a plain array is undefined behaviour, we can say that access into a plain array has an \emph{implicit precondition assertion} that the index is not out of bounds. Then, the program behaves as if % lah: this seems to be english language as if, not computer language as-if
-the compiler had wrapped every raw array subscript operation for which it statically knows the array bound \tcode{N} into an inline function with a precondition assertion:
+In C++ today, the behaviour of this program is undefined if the value of \tcode{i} is not smaller than 10 (\{expr.add.out.of.bounds\}). However, instead of saying that out-of-bounds access into a plain array is undefined behaviour, we can say that access into a plain array has an \emph{implicit precondition assertion} that the index is not out of bounds. Then, the program behaves as-if the compiler had wrapped every raw array subscript operation for which it statically knows the array bound \tcode{N} into an inline function with a precondition assertion:
 
 \begin{codeblock}
 template <typename T, std::size_t N>
@@ -492,7 +486,7 @@ Further, coding guidelines can place restrictions on which evaluation semantics 
 
 Finally, applying implicit contract assertions throughout the language in the proposed fashion addresses another much-discussed issue: \emph{explicit} contract assertions in C++26, as specified in \cite{P2900R14}, can themselves have UB when checked because explicit contract-assertion predicates are boolean expressions and thus follow the usual rules for evaluating expressions in C++. This property has been repeatedly raised as a concern (see \cite{P2680R1}, \cite{P3173R0}, \cite{P3285R0}, and \cite{P3362R0}).
 
-The approach suggested in those papers is to constrain explicit contract-assertion predicates to expressions that can be statically proven to have no UB. However, this approach does not seem to be specifiable, implementable, or usable in practice (see  \cite{P3376R0}, \cite{P3386R0}, and \cite{P3499R1}) and has thus been rejected by WG21. What \emph{does} work is to specify a framework for mitigating UB across the entire language, as proposed here. This framework, once we have it, will then automatically also apply to the evaluation of explicit contract assertions.
+The approach suggested in those papers is to constrain explicit contract-assertion predicates to expressions that can be statically proven to have no UB. However, this approach does not seem to be specifiable, implementable, or usable in practice (see  \cite{P3376R0}, \cite{P3386R0}, and \cite{P3499R1}) and has thus been rejected by WG21. What \emph{does} work is to specify a framework for mitigating UB across the entire language, as proposed here. Once we have this framework, it will then automatically also apply to the evaluation of explicit contract assertions.
 
 \subsection{Specifying the fallback behaviour}
 \label{specifyfallback}
@@ -514,7 +508,7 @@ Considering all the above reasoning reveals that such a generic, nonsyntactic es
 
 Just like the \emph{ignore} semantic, the \emph{assume} semantic is a \emph{nonchecking} semantic; i.e., its predicate is not evaluated. Further, just like with the \emph{ignore} semantic, if the predicate evaluates to \tcode{true} at the point where the contract assertion is placed, the \emph{assume} semantic has no effect; i.e., the program behaves exactly as if the contract assertion were not there. However, unlike the \emph{ignore} semantic, if the predicate does \emph{not} evaluate to \tcode{true}, the behaviour is undefined. This semantic allows compilers to optimise on the assumption that the predicate is \tcode{true}, just like they do today for those cases of core language UB.
 
-With this definition, we can map all five evaluation semantics for implicit contract assertions that guard against core language UB to concrete behaviours. For example, for signed integer overflow, this mapping is as follows.
+With this definition, we can map all five evaluation semantics for implicit contract assertions that guard against core language UB to concrete behaviours. For example, for signed integer overflow, this mapping is as follows:
 \begin{itemize}
 \item The GCC compiler option \tcode{-ftrapv}, which aborts the program on signed integer overflow, is a conforming implementation of the \emph{quick_enforce} semantic.
 \item A sanitiser that detects signed integer overflow and prints a diagnostic is a conforming
@@ -577,7 +571,7 @@ In addition, users (and, more importantly, libraries) can use such labels to ann
 
 Another important feature enabled by Labels is the possibility to control and constrain the evaluation semantic in code. This possibility also extends to implicit contract assertions (see \cite{P3400R1} Section 2.2.8). Any possible label, such as ``always enforce'', ``never enforce'', and so on, can be applied to any group of implicit contract assertions at any granularity --- per file, per namespace, per function, per block, and so on.
 
-We also have, in addition to labels that specify or constrain the evaluation semantics directly, labels that give the user higher-level control of the evaluation semantics based on meaningful decisions, such as an ``audit'' label to identify expensive checks:
+In addition to labels that specify or constrain the evaluation semantics directly, there are labels that give the user higher-level control of the evaluation semantics based on meaningful decisions, such as an ``audit'' label to identify expensive checks:
 
 \begin{codeblock}
 int f(int a, int b)
@@ -632,9 +626,7 @@ It is implementation-defined which evaluation semantic is used for any given eva
 
 [...]
 
-The evaluation of a contract assertion using the ignore \added{or assume} semantic has no effect. \added{If the semantic is assume and the predicate would not evaluate to \tcode{true}, evaluation of the contract assertion has runtime-undefined behaviour.}
-% lah: Is it [runtime undefined] behavior? Or is it runtime [undefined behavior]? The relationship of the words determines if we have a hyphen. I think you mean runtime UB. 
-
+The evaluation of a contract assertion using the ignore \added{or assume} semantic has no effect. \added{If the semantic is assume and the predicate would not evaluate to \tcode{true}, evaluation of the contract assertion has runtime undefined behaviour.}
 % TODO: do we need an explanatory note, like we have in [dcl.attr.assume], and/or a cross-reference to there?
 
 \end{adjustwidth}
@@ -704,7 +696,6 @@ For an object with a non-trivial destructor, referring to any non-static member 
 
 Written-out wording for all 79 cases of runtime-checkable UB listed in \hyperref[appendix]{Appendix~A} can be provided in a future revision of this paper.
 
-% lah: Moved the text portion back; in professional publishing, the text is usually always set portrait and tables and figures are rotated landscape when needed. 
 \addcontentsline{toc}{section}{Appendix: UB list}
 \section*{Appendix A: List of language UB}
 \label{appendix}
@@ -716,11 +707,6 @@ All wording is taken from the current C++ working paper \cite{N5008}. Each row c
 \pagebreak
 \begin{landscape}
 
-% lah: adding \raggedright and \tabularnewline so we don't get the awkward spacing and hyphenation that occur when small amounts of text are justified
-
-% lah: first column was too narrow for long words, like representation. I adjusted the other columns a bit to allow enough width
-
-% lah: We can use longtable's commands to set a head that repeats on each page, so that it doesn't have to be repeated numerous times in your code and which might make more sense than having a continued section of the table be at the top of the page with no head and then a head appear (sometimes more than once) later on the page. 
 \renewcommand\arraystretch{1.5}%
 \begin{longtable}{|p{2.4cm}|p{6.5cm}|p{1.9cm}|p{1.9cm}|p{6.7cm}|p{2.5cm}|}
 \hline
@@ -734,16 +720,13 @@ All wording is taken from the current C++ working paper \cite{N5008}. Each row c
 
 \multicolumn{6}{c}{\textbf{I. Initialization}}
 \\ \hline
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & {\raggedright Fallback\\ behaviour}
-%\tabularnewline \hline
+
 \ubxref{basic.indet.value} & \raggedright[basic.indet]/2: Except in the following cases, if an indeterminate value is produced by an evaluation, the behavior is undefined, [...] & Yes & \parbox[t]{2cm}{No} &\raggedright Track whether storage has been initialized & \raggedright Only for built-in types: initialise default-initialised variables with erroneous value 
 \tabularnewline \hline
 
 \multicolumn{6}{c}{\textbf{II. Bounds}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{basic.stc.alloc.zero.dereference} & \raggedright[basic.stc.dynamic.allocation]/2: The effect of indirecting through a pointer returned from a request for zero size is undefined. & Yes & No & \raggedright Track pointer provenance, insert bounds check & None
 \\ \hline
 \ubxref{expr.delete.mismatch} & \raggedright[expr.delete]/2: In a single-object delete expression, the value of the operand of delete may be a null pointer value, a pointer value that resulted from a previous non-array new-expression, or a pointer to a base class subobject of an object created by such a new-expression. If not, the behavior is undefined.  & Yes & No & \raggedright Track pointer provenance, insert bounds check & None
@@ -760,8 +743,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{III. Type and Lifetime}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{intro.object.implicit.create} & \raggedright[intro.object]/11: For each operation that is specified as implicitly creating objects, that operation implicitly creates and starts the lifetime of zero or more objects of implicit-lifetime types ([basic.types.general]) in its specified region of storage if doing so would result in the program having defined behavior. If no such set of objects would give the program defined behavior, the behavior of the program is undefined. & Yes & No & \raggedright Track whether storage can hold implicit lifetime objects & None
 \\ \hline
 \ubxref{intro.object.implicit.pointer} & \raggedright[intro.object]/11: Further, after implicitly creating objects within a specified region of storage, some operations are described as producing a pointer to a suitable created object. These operations select one of the implicitly-created objects whose address is the address of the start of the region of storage, and produce a pointer value that points to that object, if that value would result in the program having defined behavior. If no such pointer value would give the program defined behavior, the behavior of the program is undefined. & Yes & No & \raggedright Track whether storage can hold implicit lifetime objects & None
@@ -870,8 +851,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{IV. Arithmetic}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{expr.expr.eval} & \raggedright[expr.pre]/4: If during the evaluation of an expression, the result is not mathematically defined or not in the range of representable values for its type, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
 \tabularnewline \hline
 \ubxref{conv.double.out.of.range} & \raggedright[conv.double]/2: A prvalue of floating-point type can be converted to a prvalue of another floating-point type with a greater or equal conversion rank ([conv.rank]). [...] If the source value can be exactly represented in the destination type, the result of the conversion is that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
@@ -894,8 +873,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{V. Threading}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{intro.races.data} & \raggedright[intro.races]/17: Any such data race results in undefined behavior. & Yes & No & \raggedright Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & \raggedright Make all primitive memory accesses implicitly atomic
 \tabularnewline \hline
 \pagebreak
@@ -903,8 +880,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{VI. Sequencing}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{intro.execution.unsequenced.modification} & \raggedright[conv.rank]/10:  The behavior is undefined if a side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread]). & Yes & Yes & \raggedright Identify all potential read operations that are not sequenced with respect to each given write operation; insert checks to identify if those operations are referencing the same address & \raggedright Sequence operations in some unspecified order
 \tabularnewline \hline
 %\pagebreak[3]
@@ -912,18 +887,13 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{VII. Assumptions}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
-% lah: in the content below, I think you mean runtime UB, not runtime-undefined behaviour
-\ubxref{dcl.attr.assume.false} & \raggedright[dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime-undefined behavior. & No & --- & \raggedright No automatic checking strategy is possible because the predicate cannot be, in general, proven to be free of side effects; instead, the user has to change \tcode{[[assume(x)]]} to \mbox{\tcode{contract_assert<may_be_assumed>(x)}} and select an appropriate evaluation semantic & \raggedright Ignore the assumption
+\ubxref{dcl.attr.assume.false} & \raggedright[dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime undefined behavior. & No & --- & \raggedright No automatic checking strategy is possible because the predicate cannot be, in general, proven to be free of side effects; instead, the user has to change \tcode{[[assume(x)]]} to \mbox{\tcode{contract_assert<may_be_assumed>(x)}} and select an appropriate evaluation semantic & \raggedright Ignore the assumption
 \tabularnewline \hline
 \pagebreak
 
 \multicolumn{6}{c}{\textbf{VIII. Control Flow}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{basic.start.main.exit.during.destruction} & \raggedright[basic.start.main]/4: If \tcode{std::exit} is invoked during the destruction of an object with static or thread storage duration, the program has undefined behavior. & Yes & No & \raggedright Track whether static or thread-local objects are currently being destroyed & None
 \\ \hline
 \ubxref{basic.start.term.use.after.destruction} & \raggedright[basic.start.term]/4: If a function contains a block variable of static or thread storage duration that has been destroyed and the function is called during the destruction of an object with static or thread storage duration, the program has undefined behavior if the flow of control passes through the definition of the previously destroyed block variable. & Yes & No & \raggedright Track the lifetime of static objects & None
@@ -937,13 +907,10 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \ubxref{dcl.attr.noreturn.eventually.returns} & \raggedright[dcl.attr.noreturn]/2: If a function \tcode{f} is invoked where \tcode{f} was previously declared with the \tcode{noreturn} attribute and that invocation eventually returns, the behavior is runtime-undefined. & Yes & Yes & \raggedright Insert \tcode{post(false)} & None
 \\ \hline
 \pagebreak
-% lah: In the content above, I think you mean runtime UB, not runtime-U B
 
 \multicolumn{6}{c}{\textbf{IX. Replacement Functions}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{basic.stc.alloc.dealloc.constraint} & \raggedright[basic.stc.dynamic.general]/3: If the behavior of an allocation or deallocation function does not satisfy the semantic constraints specified in [basic.stc.dynamic.allocation] and [basic.stc.dynamic.deallocation], the behavior is undefined. & \raggedright Partially: some constraints can be checked locally (e.g., allocation function does not return null); others cannot be checked at all. & Partially & \raggedright Insert checks where possible & None
 \\ \hline
 \ubxref{basic.stc.alloc.dealloc.throw} & \raggedright [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. & \raggedright Address this via \cite{P3424R0} instead & --- & --- & ---
@@ -955,8 +922,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{X. Coroutines}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{dcl.fct.def.coroutine.resume.not.suspended} & \raggedright[dcl.fct.def.coroutine]/9: Invoking a resumption member function for a coroutine that is not suspended results in undefined behavior. & Yes & No & \raggedright Track the suspension state associated with every coroutine handle & None
 \\ \hline
 \ubxref{dcl.fct.def.coroutine.destroy.not.suspended} & \raggedright[dcl.fct.def.coroutine/12: If \tcode{destroy} is called for a coroutine that is not suspended, the program has undefined behavior. & Yes & No & \raggedright Track the suspension state associated with every coroutine handle & None
@@ -965,16 +930,12 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{XI. Templates}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{temp.inst.inf.recursion} & \raggedright[temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined. & \raggedright No, make the behaviour ill-formed instead & --- & --- & ---
 \\ \hline
 
 \multicolumn{6}{c}{\textbf{XII. Preprocessor}} 
 \\ \hline
 
-%Identifier & Wording & Runtime checkable & Locally checkable & Checking strategy & Fallback behaviour 
-%\\ \hline
 \ubxref{cpp.cond.defined} & \raggedright[cpp.cond]/11: If the preprocessing token \tcode{defined} is generated as a result of this replacement process or use of the \tcode{defined} unary operator does not match one of the two specified forms prior to macro replacement, the behavior is undefined. & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
 \\ \hline
 \ubxref{cpp.include.one.of.two.forms} & \raggedright[cpp.include]/4:  The preprocessing tokens after \tcode{include} in the directive are processed just as in normal text ([...]). If the directive resulting after all replacements does not match one of the two previous forms, the behavior is undefined. & \raggedright No, make the behaviour IFNDR instead & --- & --- & ---
@@ -997,7 +958,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \end{landscape}
 
 \pagebreak
-%\pagestyle{plain}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

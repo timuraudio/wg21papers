@@ -416,7 +416,7 @@ As an example, let us consider indexing into a plain array rather than a user-de
 
 \begin{codeblock}
 int main() {
-  int a[10] = { 1, 1, 2, 3, 5, 8, 13, 21, 34, 55 };
+  int a[10] = { 1, 1, 2, 3, 5 };
   std::size_t i; 
   std::cin >> i;
   return a[i];
@@ -427,9 +427,9 @@ In C++ today, the behaviour of this program is undefined if the value of \tcode{
 
 \begin{codeblock}
 template <typename T, std::size_t N>
-T& __index_into_array(T (&a)[N], std::size_t i)
+T& __index_into_array(T (&a)[N], std::size_t i) 
 pre (i < N) {
-  return a[i];
+  return *(&a + i);
 }
 \end{codeblock}
 
@@ -554,19 +554,16 @@ In addition, users (and, more importantly, libraries) can use such labels to ann
 \subsection{Granular control of the evaluation semantic}
 \label{semantic}
 
-Another important feature enabled by Labels is the possibility to control and constrain the evaluation semantic in code. This possibility also extends to implicit contract assertions (see \cite{P3400R1} Section 2.2.8). Any possible label, such as ``always enforce'', ``never enforce'', and so on, can be applied to any group of implicit contract assertions at any granularity --- per file, per namespace, per function, per block, and so on.
-
-In addition to labels that specify or constrain the evaluation semantics directly, there are labels that give the user higher-level control of the evaluation semantics based on meaningful decisions, such as an ``audit'' label to identify expensive checks:
+Another important feature enabled by Labels is the possibility to control and constrain the evaluation semantic in code. This possibility also extends to implicit contract assertions (see \cite{P3400R1} Section 2.2.8). Any possible label, such as ``always enforce'', ``never enforce'', and so on, can be applied to any group of implicit contract assertions at any granularity --- per file, per namespace, per function, per block, and so on:
 
 \begin{codeblock}
-int f(int a, int b)
-{
-    // Add the \tcode{audit} label to all implicit arithmetic preconditions in this scope.
-    contract_assert implicit arithmetic |= audit;
-
-    return a + b;  // overflow checked if audit checks are enabled
+int f(int a, int b) {
+  contract_assert implicit arithmetic |= always_enforce;
+  return a + b;
 }
 \end{codeblock}
+
+In addition to labels that specify or constrain the evaluation semantics directly, there are labels that give the user higher-level control of the evaluation semantics based on meaningful decisions, for example an ``audit'' label to identify expensive checks.
 
 Labels used in this way provide granular control when needed, allow the Standard to
 specify useful groupings of different sources of program defects, and give developers the freedom they

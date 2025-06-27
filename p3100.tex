@@ -184,7 +184,7 @@ We found that all identified cases of core language UB can be broadly classified
 \begin{enumerate}
 \item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value.
 \item \textbf{Bounds} --- 5 cases. Using a pointer in a way that fails to respect the range of the pointed-to object or array. Examples: incrementing a pointer beyond the past-the-end position; performing single-object delete on an operand obtained from an array-new expression;  dereferencing a pointer returned from a request for zero size.
-\item \textbf{Type and Lifetime} --- 45 cases. Operations that access storage and/or use pointers or references to storage in an inappropriate way that is not already covered by Initialisation and Bounds. Examples: attempting to access a value of one type through  a pointer of a different, incompatible type; attempting to access the value of an object after its lifetime has ended. 
+\item \textbf{Type and Lifetime} --- 52 cases. Operations that access storage and/or use pointers or references to storage in an inappropriate way that is not already covered by Initialisation and Bounds. Examples: attempting to access a value of one type through  a pointer of a different, incompatible type; attempting to access the value of an object after its lifetime has ended. 
 \item \textbf{Arithmetic} --- 9 cases. Executing an arithmetic operation whose operands fail to meet certain preconditions. Examples: division by zero; conversion of a value to a different arithmetic type that cannot represent that value. 
 \item \textbf{Threading} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from different threads where neither access happens before the other, i.e., a data race.
 \item \textbf{Sequencing} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other.
@@ -197,7 +197,9 @@ We found that all identified cases of core language UB can be broadly classified
 
 The categories of Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent undefined behaviour that is commonly referred to with the umbrella term \emph{memory safety}.
 
-Because unambiguously categorising a particular case of UB into either \emph{type safety} or \emph{lifetime safety} is often impossible since it concerns both, we grouped them into a single combined category, Type and Lifetime. While some cases of UB are primarily caused by type aliasing and others are primarily caused by out-of-lifetime accesses, they form a spectrum, and many common operations in C++ (e.g., using a reference) rely on \emph{both} type and lifetime constraints to be satisfied. Note further that this combined category of Type and Lifetime contains the majority (58\%) of all cases of UB that we identified. 
+Because unambiguously categorising a particular case of UB into either \emph{type safety} or \emph{lifetime safety} is often impossible since it concerns both, we grouped them into a single combined category, Type and Lifetime. While some cases of UB are primarily caused by type aliasing and others are primarily caused by out-of-lifetime accesses, they form a spectrum, and many common operations in C++ (e.g., using a reference) rely on \emph{both} type and lifetime constraints to be satisfied.
+
+It is remarkable that the three categories related to memory safety account for 71\% of all cases of UB, with the Type and Lifetime category alone accounting for 63\%.
 
 The next two categories, Arithmetic and Threading, correspond to the common terms \emph{arithmetic safety} and \emph{thread safety}, respectively; the latter contains only one case of UB, data races.
 
@@ -246,6 +248,8 @@ Some cases of UB in the Replacement Function category are partially or fully loc
 All cases of UB in the Coroutine category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations.
 
 Finally, UB in the Templates category {temp.inst.inf.recursion\}) is unique in that it does not actually represent runtime UB, but instead is a purely compile-time issue, and therefore checking for it at runtime makes no sense.
+
+Overall, only 18 cases of UB (22\% of all cases) are unconditionally locally diagnosable.
 
 \subsection{Cost of diagnosis}
 \label{cost}
@@ -309,9 +313,11 @@ Given the substantial overhead of the instrumentation itself, i.e., involving bo
 \subsection{Well-defined fallback behaviour}
 \label{fallback}
 
-If we want to turn UB into well-defined behaviour, a useful question is whether any well-defined behaviour actually exists that the affected operation could be defined to have instead of UB in the presence of a bug. Here, we call such well-defined behaviour \emph{fallback behaviour}.
+If we want to turn UB into well-defined behaviour, a useful question is whether any well-defined behaviour actually exists that the affected operation could be defined to have instead of UB in the presence of a bug. Here, we call such well-defined behaviour \emph{fallback behaviour}. 
 
 We could also use the term \emph{erroneous behaviour} (EB), which is conceptually the same thing. However, since the approval of \cite{P2795R5} for C++26, EB has very specific semantics. Here, we are considering the wider concept of introducing new well-defined behaviour for error cases, rather than the exact semantics that EB has in C++26, so we use a different term for now.
+
+Note that we are not counting program termination (even though this also well-defined behaviour) as fallback behaviour. Rather, we only consider behaviour that would allow the program to continue to be true fallback behaviour; termination is instead modelled via the \emph{enforce} and \emph{quick-enforce} semantics).
 
 For fallback behaviour to happen, the compiler must supply the necessary instructions. However, in the vast majority of cases, core language UB is fundamentally \emph{not} diagnosable at compile time (see Section~\ref{locally}); i.e., whether or not the UB will occur depends on runtime parameters. Fallback behaviour \emph{cannot}, therefore, depend on knowing that an error occurred. For non-locally-diagnosable UB, fallback behaviour also cannot depend on any additional instrumentation being present.
 
@@ -348,7 +354,7 @@ The fallback behaviour for UB in the Assumption category (\{dcl.attr.assume.fals
 
 Finally, we can define partial fallback behaviour for two cases of UB in the Control Flow category  (\{stmt.return.flow.off\} and \{stmt.return.coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is analogous to \{basic.indet.value\}; again, no fallback behaviour exists for user-defined return types in the general case.
 
-For all other cases of runtime-checkable UB (63 cases in total), we cannot imagine any meaningful fallback behaviour. % TIMUR TODO: mention that termination is always a solution but that's not fallback behaviour!
+Overall, we can define meaningful well-defined fallback behaviour for only 16 cases of UB (20\% of all cases), and for 3 out of those 16 cases, this is only possible in certain cases (when the operation in question produces a value of built-in type).
 
 \subsection{Mitigation strategies}
 \label{mitigation}
@@ -356,7 +362,7 @@ For all other cases of runtime-checkable UB (63 cases in total), we cannot imagi
 In this section, we attempt to systematically identify, at a very high level, candidate mitigation strategies for all cases of core language UB.
 
 Arguably, the best mitigation strategy is to make the offending construct ill-formed, but we can do so only for cases in which we can unambiguously identify at \emph{compile time} that UB will occur for all inputs; otherwise, we would break existing correct C++ code. Only one case of UB fits this particular situation: 
-\{temp.inst.inf.recursion\}. This case should be specified as ill-formed instead of UB. % TIMUR TODO: Core issue?
+\{temp.inst.inf.recursion\}. This case should be specified as ill-formed instead of UB. % TODO: once there is a core issue or paper for this, cite it here.
 
 Two more cases of UB should not actually be considered UB. The first is \{class.dtor.not.class.type\}. While the wording for this case says that ``if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior'',
 this situation is not a new case of UB and is already omitted from the specification of other cases of UB elsewhere. This section should, therefore, be a non-normative note referring to those sections.

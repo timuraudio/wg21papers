@@ -390,12 +390,8 @@ For the 61 cases of runtime UB in which meaningful, well-defined fallback behavi
 
 The fundamental dilemma is that for many cases, neither alternative is acceptable. The instrumentation required to diagnose Bounds and Type and Lifetime UB in the general case already exists, but its overhead is prohibitively large for most production scenarios. On the other hand, replacement by ``safer'' alternative features --- such as replacing pointers and references with borrow checking, as proposed in \cite{P3390R0} --- is viable for newly written code but fundamentally incompatible with legacy code because it would make vast swathes of existing, \emph{correct} C++ ill-formed.
 
-Such subsetting of the language is exactly where we see the role of Profiles. Enabling a particular profile would make the associated set of ``unsafe'' legacy features ill-formed. By leveraging Profiles,
-we can explicitly distinguish between newly written, ``safe'' parts of the code and legacy, ``unsafe'' parts, which is similar to how this delineation is done in languages like Rust but offers us much greater granularity.
-
-On the other hand, we do not believe that Profiles should intersect with runtime behaviour, as proposed by  \cite{P3081R1}. Enabling or disabling a profile should never change the runtime semantics of a C++ program for all the same reasons \cite{P2900R14} strove to achieve its prime directive in its design; if the only way to have ``safer'' code is to change your code's behaviour entirely, you fail at improving the ``safety'' of software that cannot afford the cost of enabling the checks.
-
-At most, a profile could reject the program if a certain runtime check required by the chosen ``safety'' level is not available (making Profiles a useful auditing tool). A profile should never dictate whether a runtime check is enabled or disabled or what should happen if that check fails because, as we will see in Section~\ref{design} of this paper, all the required machinery for configuring runtime checks is already provided --- more cohesively and flexibly --- by the Contracts framework.
+In this paper, we discuss runtime mitigation of UB via insertion of runtime checks and introduction of well-defined fallback behaviour where applicable. Thus, this paper covers two out of six low-level tools for mitigating UB in C++; see \cite{P3756R0} %TODO: double-check date & author list of this reference before release
+for a description of the entire toolbox as well as the role of Profiles as a higher-level feature that provides named configuration sets from these low-level tools, tailored to specific engineering or regulatory requirements.
 
 \section{Proposed design}
 \label{design}

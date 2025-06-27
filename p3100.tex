@@ -126,31 +126,21 @@ In this paper, we enumerate all cases of core language undefined behaviour expli
 \section{Introduction}
 \label{intro}
 
-Eliminating or at least meaningfully reducing the amount of \emph{undefined behaviour} (UB) is an important objective for the future evolution of C++ and crucial for improving the ``safety''\footnote{In this paper, we place quotes around unqualified uses of the term ``safety'' because distinguishing between  conflicting definitions of that term is crucial; consider the different meanings of "safety" regarding functional safety, language safety, memory safety, and so on.  See \cite{P3376R0}, \cite{P3500R1}, and \cite{P3578R0} for a discussion of those definitions as well as recommendations regarding usage of the term ``safety'' in the context of C++.}
-and security of C++ programs. WG21 has been continuously working in that direction. (For a recent status update, see \cite{Sutter2025} and references therein; for background, see \cite{Sutter2024} and references therein.)
+Eliminating or at least meaningfully reducing the amount of \emph{undefined behaviour} (UB) is an important objective for the future evolution of C++. WG21 has been continuously working in that direction. For a recent status update, see \cite{Sutter2025} and references therein; for background, see \cite{Sutter2024} and references therein.
 
 At WG21's February 2025 meeting in Hagenberg, EWG agreed on a framework for a systematic
 treatment of core language undefined behaviour in C++: the pursuit of a core language UB white paper in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts. The current version of that white paper is \cite{P3656R1}, proposing the process and major work items. The proposed process calls for papers to be adopted into the white paper working draft via EWG approval. This is the first such paper.
 
 Further, \cite{P3656R1} proposes, as major work items, to enumerate and group all language UB in C++, identify tools to address the groups, and take a first pass at determining which tool to use for each UB case. The goal of this paper is to contribute to all the above major work items.
 
-In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We then group all core language UB into eleven broad categories, such as ``Arithmetic'' and ``Bounds''. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and for which cases we can define meaningful, well-defined fallback behaviour. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
+In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We group all core language UB into eleven categories. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and for which cases we can define meaningful, well-defined fallback behaviour. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
 
 In Section~\ref{design}, we systematically introduce such runtime checks to C++ via  \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14}. We describe how implicit contract assertions should be specified and how to apply them to all appropriate cases of core language UB. For cases of UB where well-defined fallback behaviour exists, we discuss how specifying it allows the program to continue execution past a violated implicit contract assertion without UB. We conclude by proposing an escape hatch to mitigate the runtime cost of such fallback behaviour and avoid performance regressions.
 
 In Section~\ref{ext}, we discuss how future extensions, such as Labels \cite{P3400R1},
 will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions. In Section~\ref{wording}, we propose wording for approval into the white paper that implements the design discussed in Section~\ref{design}.
 
-The first revision (R0) of this paper was published in May 2024. Following informal discussions at the St. Louis meeting, the paper was revised (R1) and presented to SG21 at the Wroc{\l}aw meeting. SG21 voted \emph{unanimously} in favour of our direction for implicit contract assertions.
-\vspace{2mm}
-\begin{wgpoll}{{SG21, Wroc{\l}aw, 2024-11-22, Poll 6}}
-We support the direction of P3100R1 and encourage the authors to come back with a fully specified proposal.
-\wgpollresult{19}{6}{0}{0}{0}
-Result: Consensus
-\end{wgpoll}
-\vspace{2mm}
-
-The present revision (R2) is a complete rewrite of the paper and considers the above poll, the adoption of \cite{P2900R14} into the C++26 working paper, EWG's decision to publish the core language UB white paper, the current state of that white paper \cite{P3656R1}, discussions at the Hagenberg meeting, and the feedback we received on the previous revision of this paper.
+The design proposed in Section~\ref{design} of this paper has been approved by SG21, SG23, and finally by EWG. At the WG21 meeting in Sofia (June 2025), EWG reached consensus to incorporate it into the contracts UB white paper.
 
 \section{Analysis}
 \label{ub}

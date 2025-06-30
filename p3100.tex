@@ -169,7 +169,7 @@ Each individual case of UB in our list has a stable identifier. We place those i
 
 There is currently an open pull request against the C++ Standard document that proposes to add these identifiers directly to the C++ Standard document alongside a new appendix to that document enumerating all cases of UB and providing explanation and code examples. This pull request and the stable identifiers used therein are fully consistent with \hyperref[appendix]{Appendix~A} of this paper. 
 
-Note that we consider only explicit UB, not implicit UB, that is, UB that exists by omission because the C++ Standard document failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core issues, rather than via the framework proposed here.
+Note that we consider only explicit UB, not implicit UB, that is, UB that exists by omission because the C++ Standard document failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core issues, and then subsequently become explicit UB that can be addressed  via the framework proposed here.
 
 Note further that our list excludes cases of IFNDR because this paper focuses on \emph{runtime} mitigation strategies. While UB is fundamentally a runtime property of a particular program execution and thus runtime mitigation is a natural approach, IFNDR typically represents link-time issues and is, therefore, out of scope for this paper. 
 

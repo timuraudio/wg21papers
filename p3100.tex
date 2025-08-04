@@ -317,7 +317,7 @@ If we want to turn UB into well-defined behaviour, a useful question is whether 
 
 We could also use the term \emph{erroneous behaviour} (EB), which is conceptually the same thing. However, since the approval of \cite{P2795R5} for C++26, EB has very specific semantics. Here, we are considering the wider concept of introducing new well-defined behaviour for error cases, rather than the exact semantics that EB has in C++26, so we use a different term for now.
 
-Note that we are not counting program termination (even though this also well-defined behaviour) as fallback behaviour. Rather, we only consider behaviour that would allow the program to continue to be true fallback behaviour; termination is instead modelled via the \emph{enforce} and \emph{quick-enforce} semantics).
+Note that we are not counting program termination (even though this also well-defined behaviour) as fallback behaviour. Rather, we only consider behaviour that would allow the program to continue to be true fallback behaviour; termination is instead modelled via the \emph{enforce} and \emph{quick-enforce} semantics.
 
 For fallback behaviour to happen, the compiler must supply the necessary instructions. However, in the vast majority of cases, core language UB is fundamentally \emph{not} diagnosable at compile time (see Section~\ref{locally}); i.e., whether or not the UB will occur depends on runtime parameters. Fallback behaviour \emph{cannot}, therefore, depend on knowing that an error occurred. For non-locally-diagnosable UB, fallback behaviour also cannot depend on any additional instrumentation being present.
 

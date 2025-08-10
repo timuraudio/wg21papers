@@ -18,6 +18,9 @@
 % big table in appendix in landscape
 \usepackage{pdflscape}
 
+% pie charts
+\usepackage{pgf-pie}  
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %TABLE OF CONTENTS SETTINGS
@@ -97,7 +100,7 @@ Audience: & EWG
 \end{tabular}
 
 \begin{abstract}
-In this paper, we enumerate all cases of core language undefined behaviour explicitly specified in C++,  group them into eleven categories, classify them along a number of relevant criteria, and discuss appropriate mitigation strategies. The conditions under which such undefined behaviour will occur can, in many cases, be identified by a runtime check. We describe how such runtime checks can be systematically introduced via \emph{implicit contract assertions}, giving users complete control over what impact that undefined behaviour has on their programs. In addition to runtime checking, we introduce well-defined fallback behaviour to replace undefined behaviour wherever possible. Building on Contracts as adopted for C++26, we provide a generic framework that can be incorporated into the ongoing core language UB white paper \cite{P3656R1}, fundamentally changing the landscape of how undefined behaviour is approached in C++.
+In this paper, we enumerate all cases of core language undefined behaviour explicitly specified in C++,  group them into ten categories, classify them along a number of relevant criteria, and discuss appropriate mitigation strategies. The conditions under which such undefined behaviour will occur can, in many cases, be identified by a runtime check. We describe how such runtime checks can be systematically introduced via \emph{implicit contract assertions}, giving users complete control over what impact that undefined behaviour has on their programs. In addition to runtime checking, we introduce well-defined fallback behaviour to replace undefined behaviour wherever possible. Building on Contracts as adopted for C++26, we provide a generic framework that can be incorporated into the ongoing core language UB white paper \cite{P3656R1}, fundamentally changing the landscape of how undefined behaviour is approached in C++.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -133,7 +136,7 @@ treatment of core language undefined behaviour in C++: the pursuit of a core lan
 
 At WG21's June 2025 meeting in Sofia, EWG reviewed a previous revision of this paper and agreed to merge it into \cite{P3656R1}. Specifically, the goal of this paper is to make a significant contribution to the major work items proposed by \cite{P3656R1}:  to enumerate and group all language UB in C++, identify tools to address the groups, and take a first pass at determining which tool to use for each UB case. 
 
-In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We group all core language UB into eleven categories. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and for which cases we can define meaningful, well-defined fallback behaviour to replace the UB. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
+In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We group all core language UB into ten categories. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and for which cases we can define meaningful, well-defined fallback behaviour to replace the UB. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
 % TIMUR TODO: rewrite this to take into account low-level tools from P3754R0
 
 In Section~\ref{design}, we systematically introduce such runtime checks to C++ via  \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14}. We describe how implicit contract assertions should be specified and how to apply them to all appropriate cases of core language UB. For cases of UB where well-defined fallback behaviour exists, we discuss how specifying it allows the program to continue execution past a violated implicit contract assertion without UB. We conclude by proposing an escape hatch to mitigate the runtime cost of such fallback behaviour and avoid performance regressions.
@@ -168,17 +171,22 @@ Each individual case of UB in our list has a stable identifier. We place those i
 
 There is currently an open pull request against the C++ Standard document that proposes to add these identifiers directly to the C++ Standard document alongside a new appendix to that document enumerating all cases of UB and providing explanation and code examples. This pull request and the stable identifiers used therein are fully consistent with \hyperref[appendix]{Appendix~A} of this paper. 
 
-Note that we consider only explicit UB, not implicit UB, that is, UB that exists by omission because the C++ Standard document failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core issues, and then subsequently become explicit UB that can be addressed  via the framework proposed here.
+We consider only explicit UB, not implicit UB, that is, UB that exists by omission because the C++ Standard document failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core Issues, and then subsequently become explicit UB that can be addressed  via the framework proposed here.
 
-Note further that our list excludes cases of IFNDR because this paper focuses on \emph{runtime} mitigation strategies. While UB is fundamentally a runtime property of a particular program execution and thus runtime mitigation is a natural approach, IFNDR typically represents link-time issues and is, therefore, out of scope for this paper. 
+Our list further excludes all cases of IFNDR because this paper focuses on \emph{runtime} mitigation strategies. While UB is fundamentally a runtime property of a particular program execution and thus runtime mitigation is a natural approach, IFNDR typically represents link-time issues and is, therefore, out of scope for this paper. 
 
-Note further that we exclude \emph{library undefined behaviour} since the natural mitigation approach for it is to make use of contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) in library implementations and, when possible, mandate such assertions through library hardening \cite{P3471R4}, both of which are out of scope for this paper. We, therefore, consider only UB that is specified in the core language part of the C++ Standard (Clauses 1--15). Further, we found one case of UB that is specified in the core language part of \cite{N5008} but actually represents a precondition on Standard Library functions;\footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
+Our list also excludes a case that is currently being addressed by Core Issue \cite{CWG3034}: the result of infinite recursion during template instantiation being specified as undefined.\footnote{[temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined.} The wording reads as if it could mean that such infinite recursion cause runtime UB, but that makes no sense as it is fundamentally a compile-time issue. We therefore consider this case a wording bug rather than an actual instance of UB.
+
+Finally, we exclude \emph{library undefined behaviour} since the natural mitigation approach for it is to make use of contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) in library implementations and, where possible, mandate such assertions through library hardening \cite{P3471R4}, both of which are out of scope for this paper. We, therefore, consider only UB that is specified in the core language part of the C++ Standard (Clauses 1--15). Further, we found one case of UB that is specified in the core language part of \cite{N5008} but actually represents a precondition on Standard Library functions;\footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
 that case is, therefore, also excluded from our list.
+
+% TIMUR TODO: OUT OF SCOPE ITEMS HERE
+Finally, there are a number of 
 
 \subsection{Basic categories of UB}
 \label{categories}
 
-We found that all identified cases of core language UB can be broadly classified into eleven categories:
+We found that all identified cases of core language UB can be broadly classified into ten categories:
  \renewcommand{\labelenumi}{\Roman{enumi}.}
 \begin{enumerate}
 \item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value.
@@ -191,8 +199,28 @@ We found that all identified cases of core language UB can be broadly classified
 \item \textbf{Control Flow} --- 6 cases. Undefined behaviour due to errors in control flow. Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
 \item \textbf{Replacement Functions} --- 3 cases. Executing a user-defined replacement function (\tcode{operator new}/\tcode{delete}) that fails to meet the specified requirements. Examples: returning \tcode{null} from a user-defined placement \tcode{new}; throwing an exception from a user-defined \tcode{delete}.
 \item \textbf{Coroutines} --- 2 cases. Misusing coroutine machinery. Examples: destroying a coroutine that is not suspended; invoking a resumption member function for a coroutine that is not suspended.
-\item \textbf{Templates} --- 1 case. Infinite recursion during template instantiation.
 \end{enumerate}
+
+%%%%% PIE CHART 1
+
+\begin{figure}[h]
+    \centering
+    \begin{tikzpicture}
+        \pie[text=legend, 
+               radius=3, 
+               rotate=90,
+               change direction,
+               color={BurntOrange, RedOrange, OrangeRed, Lavender, Orchid, Cerulean, Emerald, LimeGreen, GreenYellow, Goldenrod},
+               sum=auto,
+               after number = \,,   % keeps numbers tidy (adds thin space)
+               /tikz/nodes={font=\small} % tweak font size if needed
+            ]
+            {1/Initialisation, 5/Bounds, 52/Type and Lifetime, 9/Arithmetic, 1/Threading, 1/Sequencing, 1/Assumptions, 6/Control Flow, 3/Replacement Functions, 2/Coroutines}
+    \end{tikzpicture}
+    \caption{Distribution of identified cases of explicit language UB across specified categories}
+\end{figure}
+
+%%%%%%
 
 The categories of Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent undefined behaviour that is commonly referred to with the umbrella term \emph{memory safety}.
 
@@ -206,7 +234,7 @@ The following category, Sequencing, also contains just one case of UB: unsequenc
 
 The next category, Assumptions, also contains just one case of UB: reaching an \tcode{[[assume]]} declaration whose operand would not evaluate to \tcode{true}. As we will see later, this case of UB is of a different nature than the others and warrants its own category.
 
-The final four categories (Control Flow, Replacement Functions, Coroutines, and Templates) are less frequently discussed in the current discourse around UB. Nevertheless, they represent UB that needs to be mitigated.
+The final three categories (Control Flow, Replacement Functions, and Coroutines) are less frequently discussed in the current discourse around UB. Nevertheless, they represent UB that needs to be mitigated.
 
 \subsection{Relevance for security}
 
@@ -244,10 +272,9 @@ Some cases of UB in the Control Flow category are locally diagnosable. \{stmt.re
 
 Some cases of UB in the Replacement Function category are partially or fully locally diagnosable. In particular, some of the constraints specified in \{basic.stc.alloc.dealloc.constraint\} and \{expr.new.non.allocating.null\} are locally diagnosable, while others are not. In particular, we can check locally that a deallocation function does not exit via an exception and that an allocation function does not return null. However, checking the other constraints (locally or at all) is generally not possible.
 
-All cases of UB in the Coroutine category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations.
+Finally, all cases of UB in the Coroutine category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations.
 
-Finally, UB in the Templates category {temp.inst.inf.recursion\}) is unique in that it does not actually represent runtime UB, but instead is a purely compile-time issue, and therefore checking for it at runtime makes no sense.
-
+% TIMUR TODO: double-check all numbers
 Overall, only 18 cases of UB (22\% of all cases) are unconditionally locally diagnosable.
 
 \subsection{Cost of diagnosis}
@@ -360,8 +387,7 @@ Overall, we can define meaningful well-defined fallback behaviour for only 16 ca
 
 In this section, we attempt to systematically identify, at a very high level, candidate mitigation strategies for all cases of core language UB.
 
-Arguably, the best mitigation strategy is to make the offending construct ill-formed, but we can do so only for cases in which we can unambiguously identify at \emph{compile time} that UB will occur for all inputs; otherwise, we would break existing correct C++ code. Only one case of UB fits this particular situation: 
-\{temp.inst.inf.recursion\}. This case should be specified as ill-formed instead of UB. % TODO: once there is a core issue or paper for this, cite it here.
+Arguably, the best mitigation strategy is to make the offending construct ill-formed, but we can do so only for cases in which we can unambiguously identify at \emph{compile time} that UB will occur for all inputs; otherwise, we would break existing correct C++ code. Remarkably, no cases of UB identified in this paper unconditionally fit this particular situation.
 
 Two more cases of UB should not actually be considered UB. The first is \{class.dtor.not.class.type\}. While the wording for this case says that ``if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior'',
 this situation is not a new case of UB and is already omitted from the specification of other cases of UB elsewhere. This section should, therefore, be a non-normative note referring to those sections.
@@ -914,12 +940,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \ubxref{dcl.fct.def.coroutine.destroy.not.suspended} & \raggedright[dcl.fct.def.coroutine/12: If \tcode{destroy} is called for a coroutine that is not suspended, the program has undefined behavior. & Yes & No & \raggedright Track the suspension state associated with every coroutine handle & None
 \\ \hline
 
-\multicolumn{6}{c}{\textbf{XI. Templates}} 
-\\ \hline
-
-\ubxref{temp.inst.inf.recursion} & \raggedright[temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined. & \raggedright No, make the behaviour ill-formed instead & --- & --- & ---
-\\ \hline
-
 \end{longtable}
 
 \end{landscape}
@@ -930,7 +950,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 
 \section*{Document history}
 \begin{itemize}
-\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3745R0}; incorporated feedback from the WG21 meeting in Sofia; added references to relevant Core issues published since last revision; improved paper structure.
+\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3745R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; improved paper structure.
 \item \textbf{R3}, 2025-06-28: Removed preprocessor UB due to adoption of \cite{P2843R3} into C++26.
 \item \textbf{R2}, 2025-05-19: Complete rewrite after the WG21 meeting in Hagenberg.
 \item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.

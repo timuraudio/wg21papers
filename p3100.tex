@@ -102,9 +102,11 @@ Audience: & EWG
 \begin{abstract}
 In this paper, we enumerate all cases of core language undefined behaviour explicitly specified in C++,  group them into ten categories, classify them along a number of relevant criteria, and discuss appropriate mitigation strategies. The conditions under which such undefined behaviour will occur can, in many cases, be identified by a runtime check. We describe how such runtime checks can be systematically introduced via \emph{implicit contract assertions}, giving users complete control over what impact that undefined behaviour has on their programs. In addition to runtime checking, we introduce well-defined fallback behaviour to replace undefined behaviour wherever possible. Building on Contracts as adopted for C++26, we provide a generic framework that can be incorporated into the ongoing core language UB white paper \cite{P3656R1}, fundamentally changing the landscape of how undefined behaviour is approached in C++.
 \end{abstract}
+% TIMUR TODO: REWORK ABSTRACT CONSIDERING SOFIA MAGIC SLIDE
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\pagebreak
 \tableofcontents*
 \pagebreak
 
@@ -120,11 +122,6 @@ In this paper, we enumerate all cases of core language undefined behaviour expli
 %\pagebreak
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%%%%%%%% lah: style notes
-% use the royal "we" whenever possible when meaning users in general, the authors, the Committee, etc.; use "the user" when specifically talking about user-defined elements
-% TD: Thanks for the suggestion, but I do not agree with this style. I use "we" whenever I mean "the proposal authors" and talk about "users" when I mean users. That seems clearer to me.
-% implementation-defined and well-defined are always hyphenated
 
 \section{Introduction}
 \label{intro}
@@ -146,22 +143,6 @@ will enable programmatically identifying the category of UB that has occurred an
 
 \section{Analysis}
 \label{ub}
-
-% lah: This section has some structuring issues. 
-% First, the section head needs to cover *all* the topics in the section, and it currently doesn't include mitigating. % TD: I changed the section head to "Undefined behaviour analysis"; I ran out of time for a larger restructuring of this section; I'll tackle that for the next revision.
-% Subsection Methodology and scope is fine as is. 
-% Second, the next subsection, IMO, should be Grouping, and it should have  
-% subsubsection Categories and enumeration
-% subsubsection Security-related?
-% subsubsection Locally diagnosable?
-%   subsubsubsection: In principle
-%   subsubsubsection: Cost of diagnosis
-%   Or, another way to resolve this part of the current structuring 
-%   issue is to roll Cost of diagnosis back into Locally diagnosable
-%   instead of making it separate.    
-% subsubsection Well-defined fallback behaviour
-% Then subsection Mitigation strategies is okay as is. 
-
 
 \subsection{Methodology}
 
@@ -186,9 +167,9 @@ Further, we consider only \emph{runtime} UB, not compile-time or link-time issue
 Finally, we exclude \emph{library undefined behaviour} since the natural mitigation approach for it is to make use of contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) in library implementations and, where sensible, mandate such assertions through library hardening \cite{P3471R4}, both of which are out of scope for this paper. We, therefore, consider only UB that is specified in the core language part of the C++ Standard (Clauses 1--15). Further, we found one case of UB that is specified in the core language part of \cite{N5008} but actually represents a precondition on Standard Library functions;\footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
 that case is, therefore, also excluded from our list.
 
+\subsection{Grouping}
 
-
-\subsection{Basic UB categories}
+\subsubsection{Categories}
 \label{categories}
 
 We found that all identified cases of core language UB can be broadly classified into ten categories:
@@ -226,8 +207,6 @@ Figure \ref{piechart_categories} shows the distribution of the 81 identified cas
     \caption{Distribution of identified cases of explicit language UB across specified categories}
 \end{figure}
 
-%%%%%%
-
 The categories of Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent undefined behaviour that is commonly referred to with the umbrella term \emph{memory safety}. Much of the ongoing work around how to ``make C++ safe'' is focused on these  categories (see \cite{P3081R2}, \cite{P3700R0}, and references therein).
 
 Because unambiguously categorising a particular case of UB into either \emph{type safety} or \emph{lifetime safety} is often impossible since it concerns both, we grouped them into a single combined category, Type and Lifetime. While some cases of UB are primarily caused by type aliasing and others are primarily caused by out-of-lifetime accesses, they form a spectrum, and many common operations in C++ (e.g., using a reference) rely on \emph{both} type and lifetime constraints to be satisfied.
@@ -242,7 +221,7 @@ The next category, Assumptions, also contains just one case of UB: reaching an \
 
 The final three categories (Control Flow, Replacement Functions, and Coroutines) contain a handful of cases of UB that are less frequently discussed in the current ``safe C++'' discourse.
 
-\subsection{Relevance for security}
+\subsubsection{Relevance for security}
 
 \cite{P3656R1} asks which cases of UB are security related. The paper suggests having security experts indicate which cases of UB have security impact and use ``always'', ``never'', and ``sometimes'' tags. We are not security experts, so we do not attempt to do this here. However, we note that cases of UB commonly associated with security vulnerabilities (see, for example, the CWE list at \url{https://cwe.mitre.org/}) fall into the Initialisation, Bounds, and Type and Lifetime categories. 
 
@@ -250,7 +229,7 @@ Other cases of UB are not commonly exploited by malicious attackers to our knowl
 
 In principle, with aggressive optimising compilers any form of UB can lead to unpredictable defects and vulnerabilities. Mitigating cases of UB currently considered to be the most critical security concern will simply remove the easiest routes of attack from the table, and any UB not yet addressed may become the new major candidate for attackers to leverage for nefarious purposes.  Therefore, prioritising implementation based on current trends amongst malicious actors, though helpful, should not be used to limit the scope of our work on improving the C++ Standard (see \cite{Sutter2024}, \cite{P3500R1}, and \cite{P3578R0}).
 
-\subsection{Local checkability}
+\subsubsection{Locality of runtime diagnosis}
 \label{locally}
 
 The second question \cite{P3656R1} asks is which cases of UB are ``efficiently locally diagnosable''. We split this question into two separate questions: which cases of UB are locally diagnosable in principle (this subsection), and the estimated cost of that diagnosis (next subsection).
@@ -283,10 +262,10 @@ Finally, all cases of UB in the Coroutine category are not locally diagnosable s
 % TIMUR TODO: double-check all numbers
 Overall, only 18 cases of UB (22.2\% of all cases) are unconditionally locally diagnosable.
 
-\subsection{Cost of diagnosis}
+\subsubsection{Cost of runtime diagnosis}
 \label{cost}
 
-Considering locally diagnosable and not locally diagnosable cases of UB separately is useful to estimate the cost of diagnosis. Note that in this paper, we study the theoretical, relative cost based on the current specification of the C++ language; we do not, however, measure the actual cost of diagnosis in real implementations, and we do not present benchmarks. This work is left for future studies. % lah: This could be mentioned in a "Future work" section. % TD: I usually only mention things in a "future work" section if I (or someone else I know) actually intends to do that work, which isn't the case here.
+Considering locally diagnosable and not locally diagnosable cases of UB separately is useful to estimate the cost of diagnosis. Note that in this paper, we study the theoretical, relative cost based on the current specification of the C++ language. We do not, however, measure the actual cost of diagnosis in real implementations and present benchmarks in this paper; such measurements are left for future work.
 
 For locally diagnosable cases, some kind of runtime check --- an \emph{assertion} --- could be inserted by the implementation and then evaluated at run time. The total cost of diagnosis is, therefore, equal to the cost of evaluating that check multiplied by the number of times the check needs to be evaluated.
 
@@ -342,12 +321,12 @@ As we know from existing sanitisers, such instrumentation is expensive enough th
 
 Given the substantial overhead of the instrumentation itself, i.e., involving both a runtime cost and a cost in memory, how expensive the actual \emph{checks} would be (whether a specific pointer is valid at a specific time, etc.) is not particularly important because the performance penalty would be dominated by the instrumentation overhead.
 
-\subsection{Well-defined fallback behaviour}
+\subsubsection{Existence of well-defined fallback behaviour}
 \label{fallback}
 
 If we want to turn UB into well-defined behaviour, a useful question is whether any well-defined behaviour actually exists that the affected operation could be defined to have instead of UB in the presence of a bug. Here, we call such well-defined behaviour \emph{fallback behaviour}. 
 
-We could also use the term \emph{erroneous behaviour} (EB), which is conceptually the same thing. However, since the approval of \cite{P2795R5} for C++26, EB has very specific semantics. Here, we are considering the wider concept of introducing new well-defined behaviour for error cases, rather than the exact semantics that EB has in C++26, so we use a different term for now.
+We could also use the term \emph{erroneous behaviour} (EB), which is conceptually the same thing. However, since the approval of \cite{P2795R5} for C++26, EB has very specific semantics. Here, we are considering the wider concept of introducing new well-defined behaviour for error cases, rather than the exact semantics that EB has in C++26, so we use a different term for now. % TIMUR TODO RETHINK THIS! COULD BE CONFUSING. Distinguish between correct and erroneous. Say we want only correct if it won't mask bugs; refer to papers with discussion that we already had for initialising.
 
 Note that we are not counting program termination (even though this also well-defined behaviour) as fallback behaviour. Rather, we only consider behaviour that would allow the program to continue to be true fallback behaviour; termination is instead modelled via the \emph{enforce} and \emph{quick-enforce} semantics.
 
@@ -392,12 +371,20 @@ Overall, we can define meaningful well-defined fallback behaviour for only 16 ca
 \label{mitigation}
 
 In this section, we attempt to systematically identify, at a very high level, candidate mitigation strategies for all cases of core language UB.
+% TIMUR TODO: This isn't really accurate anymore, we only deal with a subset here, three out of six tools
+
+% TIMUR: new structure
+% Mitigation strategies - introduce the toolbox
+% subsection - Not actual UB
+% subsection - Make ill-formed. No case where we can do this unconditionally. But mention reinterpret_Cast in passing, defer to subsetting proposal
+% subsection - Refine behaviour. One case.
+% subsection - Erroneous behaviour.
+% subsection - Runtime check
 
 Arguably, the best mitigation strategy is to make the offending construct ill-formed, but we can do so only for cases in which we can unambiguously identify at \emph{compile time} that UB will occur for all inputs; otherwise, we would break existing correct C++ code. Remarkably, no cases of UB identified in this paper unconditionally fit this particular situation.
 
-Two more cases of UB should not actually be considered UB. The first is \{class.dtor.not.class.type\}. While the wording for this case says that ``if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior'',
+Two more cases of UB should not actually be considered UB. The first is \{class.dtor.not.class.type\}. While the wording for this case says that ``if the object is not of the destructor's class type and not of a class derived from the destructor's class type (including when the destructor is invoked via a null pointer value), the program has undefined behavior'' ([class.dtor]/16),
 this situation is not a new case of UB and is already omitted from the specification of other cases of UB elsewhere. This section should, therefore, be a non-normative note referring to those sections.
-% lah: add a citation for this quote. Even if the {} section matches, I imagine there's a paragraph number. This looks like it's taken from [class.dtor]/16 in N5008.
 
 The second is \{basic.stc.alloc.dealloc.throw\}. There is no good reason why throwing an exception from a deallocation function should cause UB. Instead, we should enforce that deallocation functions have a nonthrowing exception specification. This solution is proposed in \cite{P3424R0}, and we refer to that paper for mitigating this case of UB.
 % TD: Is this actually compile-time diagnosable? If yes, we should move this to the top of this section.
@@ -430,6 +417,8 @@ The fundamental dilemma is that for many cases, neither alternative is acceptabl
 % TIMUR TODO: Introduce the six low-level tools way earlier in the paper!
 In this paper, we discuss runtime mitigation of UB via insertion of runtime checks and introduction of well-defined fallback behaviour where applicable. Thus, this paper covers two out of six low-level tools for mitigating UB in C++; see \cite{P3756R0} %TIMUR TODO: this paper does not exist, remove reference!
 for a description of the entire toolbox as well as the role of Profiles as a higher-level feature that provides named configuration sets from these low-level tools, tailored to specific engineering or regulatory requirements.
+
+% TIMUR TODO: Add two piecharts from Sofia slides
 
 \section{Proposed design}
 \label{design}
@@ -472,6 +461,10 @@ pre (i < N) {
 \end{codeblock}
 
 Other than being an implicit precondition assertion automatically generated by the compiler, \tcode{pre (i < N)} behaves the same as an explicit precondition assertion. That is, the user has the same choice of four evaluation semantics (\emph{ignore}, \emph{observe}, \emph{enforce}, or \emph{quick-enforce}) to specify the desired behaviour depending on the tradeoffs that are most suitable for their application, and when an out-of-bounds access is detected and the semantic is \emph{observe} or \emph{enforce}, the same contract-violation handler is called that is used for explicit contract assertions.
+
+\subsection{Interaction with \tcode{noexcept}}
+
+% TIMUR TODO: Talk about P3541 and what SG21 decided; polls are in P2899
 
 \subsection{Extending the library API}
 \label{library}
@@ -791,32 +784,32 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \\ \hline
 \ubxref{creating.within.const.complete.obj} & \raggedright[basic.life]/12: Creating a new object within the storage that a const, complete object with static, thread, or automatic storage duration occupies, or within the storage that such a const object used to occupy before its lifetime ended, results in undefined behavior. & Yes & No & \raggedright Track whether storage is associated with a \tcode{const} object & None
 \\ \hline
-\ubxref{basic.compound.invalid.pointer} & \raggedright[basic.compound]/4: If a pointer value $P$ is used in an evaluation $E$ and $P$ is not valid in the context of $E$, then the behavior is undefined if $E$ is an indirection ([expr.unary.op]) or an invocation of a deallocation function ([basic.stc.dynamic.deallocation]) [...]  & Yes & No & \raggedright Track whether storage has been allocated/freed  & None
-\\ \hline % lah: re allocated/freed, what is the slash? and? or? and/or?
+\ubxref{basic.compound.invalid.pointer} & \raggedright[basic.compound]/4: If a pointer value $P$ is used in an evaluation $E$ and $P$ is not valid in the context of $E$, then the behavior is undefined if $E$ is an indirection ([expr.unary.op]) or an invocation of a deallocation function ([basic.stc.dynamic.deallocation]) [...]  & Yes & No & \raggedright Track whether storage has been allocated and freed  & None
+\\ \hline
 \ubxref{expr.basic.lvalue.strict.aliasing.violation} & \raggedright[basic.lval]/11.3: If a program attempts to access ([defns.access]) the stored value of an object through a glvalue through which it is not type-accessible, the behavior is undefined.  & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
 \ubxref{expr.basic.lvalue.union.initialization} & \raggedright[basic.lval]/11.3: If a program invokes a defaulted copy/move constructor or copy/move assignment operator for a union of type \tcode{U} with a glvalue argument that does not denote an object of type $cv$ \tcode{U} within its lifetime, the behavior is undefined.  & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.type.reference.lifetime} & \raggedright[expr.type]/1: If a pointer to $X$ would be valid in the context of the evaluation of the expression ([basic.fundamental]), the result designates $X$; otherwise, the behavior is undefined. & Yes & No & \raggedright Track whether storage has been allocated/freed & None
-\\ \hline % lah: is the slash and? or? and/or? 
+\ubxref{expr.type.reference.lifetime} & \raggedright[expr.type]/1: If a pointer to $X$ would be valid in the context of the evaluation of the expression ([basic.fundamental]), the result designates $X$; otherwise, the behavior is undefined. & Yes & No & \raggedright Track whether storage has been allocated and freed & None
+\\ \hline 
 \ubxref{conv.lval.valid.representation} & \raggedright[conv.lval]/3.4: Otherwise, if the bits in the value representation of the object to which the glvalue refers are not valid for the object's type, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & \raggedright Coerce invalid value representations into erroneous values
 \tabularnewline \hline
-\ubxref{conv.ptr.virtual.base} & \raggedright[conv.ptr]/3: Otherwise, if \tcode{B} is a virtual base class of \tcode{D} and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{D} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & \raggedright Only for the null pointer case & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed/destroyed; insert null pointer check & None
-\\ \hline % lah: is the slash and? or? and/or? 
+\ubxref{conv.ptr.virtual.base} & \raggedright[conv.ptr]/3: Otherwise, if \tcode{B} is a virtual base class of \tcode{D} and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{D} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & \raggedright Only for the null pointer case & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed or destroyed; insert null pointer check & None
+\\ \hline 
 \ubxref{conv.member.missing.member} & \raggedright[conv.mem]/2: If class \tcode{D} does not contain the original member and is not a base class of the class containing the original member, the behavior is undefined. & Yes & No & \raggedright Track which type the pointer to member originated from & None
 \\ \hline
 \ubxref{expr.call.different.type} & \raggedright[expr.call]/5: Calling a function through an expression whose function type is not call-compatible with the type of the called function's definition results in undefined behavior. & Yes & No & \raggedright Track type information of function based on address & None
 \\ \hline
 \ubxref{expr.ref.member.not.similar} & \raggedright[expr.ref]/9: If \tcode{E2} is a non-static member and the result of \tcode{E1} is an object whose type is not similar ([conv.qual]) to the type of \tcode{E1}, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.dynamic.cast.pointer.lifetime} & \raggedright[expr.dynamic.cast]/7: If \tcode{v} has type ``pointer to $cv$ \tcode{U}'' and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{U} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & \raggedright Only for the null pointer case & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed/destroyed; insert null pointer check & None
-\\ \hline % lah: does the slash mean and, or, or and/or? 
-\ubxref{expr.dynamic.cast.glvalue.lifetime } & \raggedright[expr.dynamic.cast]/7: If \tcode{v} is a glvalue of type \tcode{U} and \tcode{v} does not refer to an object whose type is similar to \tcode{U} and that is within its lifetime or within its period of construction or destruction, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed/destroyed & None
-\\ \hline % lah: does the slash mean and, or, or and/or? 
+\ubxref{expr.dynamic.cast.pointer.lifetime} & \raggedright[expr.dynamic.cast]/7: If \tcode{v} has type ``pointer to $cv$ \tcode{U}'' and \tcode{v} does not point to an object whose type is similar ([conv.qual]) to \tcode{U} and that is within its lifetime or within its period of construction or destruction ([class.cdtor]), the behavior is undefined.  & Yes & \raggedright Only for the null pointer case & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed or destroyed; insert null pointer check & None
+\\ \hline 
+\ubxref{expr.dynamic.cast.glvalue.lifetime } & \raggedright[expr.dynamic.cast]/7: If \tcode{v} is a glvalue of type \tcode{U} and \tcode{v} does not refer to an object whose type is similar to \tcode{U} and that is within its lifetime or within its period of construction or destruction, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed or destroyed & None
+\\ \hline 
 \ubxref{expr.static.cast.base.class} & \raggedright[expr.static.cast]/2: An xvalue of type ``$cv1$ \tcode{B}'' can be cast to type ``rvalue reference to $cv2$ \tcode{D}'' with the same constraints as for an lvalue of type ``$cv1$ \tcode{B}''. If the object of type ``$cv1$ \tcode{B}'' is actually a base class subobject of an object of type \tcode{D}, the result refers to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{expr.static.cast.downcast.wrong.derived.type} & \raggedright[expr.static.cast]/11: If the prvalue of type ``pointer to $cv1$ \tcode{B}'' points to a \tcode{B} that is actually a base class subobject of an object of type \tcode{D}, the resulting pointer points to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & \raggedright Only for the null pointer case  & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed/destroyed; insert a null pointer check & None
-\\ \hline % la: address the slash
+\ubxref{expr.static.cast.downcast.wrong.derived.type} & \raggedright[expr.static.cast]/11: If the prvalue of type ``pointer to $cv1$ \tcode{B}'' points to a \tcode{B} that is actually a base class subobject of an object of type \tcode{D}, the resulting pointer points to the enclosing object of type \tcode{D}. Otherwise, the behavior is undefined. & Yes & \raggedright Only for the null pointer case  & \raggedright Track whether storage is associated with an object of correct type within its lifetime or an object currently being constructed or destroyed; insert a null pointer check & None
+\\ \hline
 \ubxref{expr.static.cast.does.not.contain.orignal.member} & \raggedright[expr.static.cast]/12: If class \tcode{B} contains the original member, or is a base class of the class containing the original member, the resulting pointer to member points to the original member. Otherwise, the behavior is undefined. & Yes & No & \raggedright Track which type the pointer to member originated from & None
 \\ \hline
 \ubxref{expr.unary.dereference} & \raggedright[expr.unary.op]/1: If the operand points to an object or function, the result denotes that object or function; otherwise, the behavior is undefined except as specified in [expr.typeid]. & Yes & \raggedright Only for the null pointer case & \raggedright Track whether storage is associated with an object of correct type within its lifetime; track whether the address is associated with a function; insert a null pointer check & None
@@ -849,24 +842,24 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \\ \hline
 \ubxref{class.abstract.pure.virtual} & \raggedright[class.abstract]/6: Member functions can be called from a constructor (or destructor) of an abstract class; the effect of making a virtual call ([class.virtual]) to a pure virtual function directly or indirectly for the object being created (or destroyed) from such a constructor (or destructor) is undefined. & Yes & Yes &  \raggedright Insert a \tcode{pre(false)} into the pure virtual stub pointed to from the base-class vtable & None
 \\ \hline
-\ubxref{class.base.init.mem.fun} & \raggedright[class.base.init]/16: Member functions (including virtual member functions, [class.virtual]) can be called for an object under construction or destruction. Similarly, an object under construction or destruction can be the operand of the \tcode{typeid} operator ([expr.typeid]) or of a \tcode{dynamic_cast} ([expr.dynamic.cast]). However, if these operations are performed during evaluation of a \emph{ctor-initializer} (or in a function called directly or indirectly from a \emph{ctor-initializer}) before all the \emph{mem-initializer}s for base classes have completed, a precondition assertion of a constructor, or a postcondition assertion of a destructor ([dcl.contract.func]), the program has undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % lah: address the slash
-\ubxref{class.cdtor.before.ctor.after.dtor} & \raggedright[class.cdtor]/1: For an object with a non-trivial constructor, referring to any non-static member or base class of the object before the constructor begins execution results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % lah: address the slash
-\ubxref{class.cdtor.before.ctor.after.dtor} & \raggedright[class.cdtor]/1:  For an object with a non-trivial destructor, referring to any non-static member or base class of the object after the destructor finishes execution results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % lah: address the slash
-\ubxref{class.cdtor.convert.or.form.pointer} & \raggedright[class.cdtor]/3: To explicitly or implicitly convert a pointer (a glvalue) referring to an object of class \tcode{X} to a pointer (reference) to a direct or indirect base class \tcode{B} of \tcode{X}, the construction of \tcode{X} and the construction of all of its direct or indirect bases that directly or indirectly derive from \tcode{B} shall have started and the destruction of these classes shall not have completed, otherwise the conversion results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % lah: address the slash
-\ubxref{class.cdtor.convert.or.form.pointer} & \raggedright[class.cdtor]/3: To form a pointer to (or access the value of) a direct non-static member of an object \tcode{obj}, the construction of \tcode{obj} shall have started and its destruction shall not have completed, otherwise the computation of the pointer value (or accessing the member value) results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % lah: address the slash
-\ubxref{class.cdtor.virtual.not.x} & \raggedright[class.cdtor]/4: If the virtual function call uses an explicit class member access ([expr.ref]) and the object expression refers to the complete object of \tcode{x} or one of that object's base class subobjects but not \tcode{x} or one of its base class subobjects, the behavior is undefined. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % lah: address the slash
-\ubxref{class.cdtor.typeid} & \raggedright[class.cdtor]/5: If the operand of \tcode{typeid} refers to the object under construction or destruction and the static type of the operand is neither the constructor or destructor's class nor one of its bases, the behavior is undefined. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % lah: address the slash
-\ubxref{class.cdtor.dynamic.cast} & \raggedright[class.cdtor]/6: If the operand of the \tcode{dynamic_cast} refers to the object under construction or destruction and the static type of the operand is not a pointer to or object of the constructor or destructor's own class or one of its bases, the \tcode{dynamic_cast} results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % lah: address the slash
-\ubxref{except.handle.handler.ctor.dtor} & \raggedright[except.handle]/11: Referring to any non-static member or base class of an object in the handler for a \emph{function-try-block} of a constructor or destructor for that object results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed/destroyed & None
-\\ \hline % address the slash
+\ubxref{class.base.init.mem.fun} & \raggedright[class.base.init]/16: Member functions (including virtual member functions, [class.virtual]) can be called for an object under construction or destruction. Similarly, an object under construction or destruction can be the operand of the \tcode{typeid} operator ([expr.typeid]) or of a \tcode{dynamic_cast} ([expr.dynamic.cast]). However, if these operations are performed during evaluation of a \emph{ctor-initializer} (or in a function called directly or indirectly from a \emph{ctor-initializer}) before all the \emph{mem-initializer}s for base classes have completed, a precondition assertion of a constructor, or a postcondition assertion of a destructor ([dcl.contract.func]), the program has undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
+\ubxref{class.cdtor.before.ctor.after.dtor} & \raggedright[class.cdtor]/1: For an object with a non-trivial constructor, referring to any non-static member or base class of the object before the constructor begins execution results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
+\ubxref{class.cdtor.before.ctor.after.dtor} & \raggedright[class.cdtor]/1:  For an object with a non-trivial destructor, referring to any non-static member or base class of the object after the destructor finishes execution results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
+\ubxref{class.cdtor.convert.or.form.pointer} & \raggedright[class.cdtor]/3: To explicitly or implicitly convert a pointer (a glvalue) referring to an object of class \tcode{X} to a pointer (reference) to a direct or indirect base class \tcode{B} of \tcode{X}, the construction of \tcode{X} and the construction of all of its direct or indirect bases that directly or indirectly derive from \tcode{B} shall have started and the destruction of these classes shall not have completed, otherwise the conversion results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
+\ubxref{class.cdtor.convert.or.form.pointer} & \raggedright[class.cdtor]/3: To form a pointer to (or access the value of) a direct non-static member of an object \tcode{obj}, the construction of \tcode{obj} shall have started and its destruction shall not have completed, otherwise the computation of the pointer value (or accessing the member value) results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
+\ubxref{class.cdtor.virtual.not.x} & \raggedright[class.cdtor]/4: If the virtual function call uses an explicit class member access ([expr.ref]) and the object expression refers to the complete object of \tcode{x} or one of that object's base class subobjects but not \tcode{x} or one of its base class subobjects, the behavior is undefined. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
+\ubxref{class.cdtor.typeid} & \raggedright[class.cdtor]/5: If the operand of \tcode{typeid} refers to the object under construction or destruction and the static type of the operand is neither the constructor or destructor's class nor one of its bases, the behavior is undefined. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
+\ubxref{class.cdtor.dynamic.cast} & \raggedright[class.cdtor]/6: If the operand of the \tcode{dynamic_cast} refers to the object under construction or destruction and the static type of the operand is not a pointer to or object of the constructor or destructor's own class or one of its bases, the \tcode{dynamic_cast} results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
+\ubxref{except.handle.handler.ctor.dtor} & \raggedright[except.handle]/11: Referring to any non-static member or base class of an object in the handler for a \emph{function-try-block} of a constructor or destructor for that object results in undefined behavior. & Yes & No & \raggedright Track whether objects are currently being constructed or destroyed & None
+\\ \hline 
 
 \multicolumn{6}{c}{\textbf{IV. Arithmetic}} 
 \\ \hline

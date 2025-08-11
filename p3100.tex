@@ -157,15 +157,17 @@ Finally, in Section~\ref{wording}, we propose wording for approval into the core
 
 \subsubsection{Methodology}
 
-For this paper, we manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all cases of explicitly specified core language UB. Our list contains 81 cases of explicit language UB; the complete list can be found in \hyperref[appendix]{Appendix~A} of this paper. 
+We manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all cases of explicitly specified core language UB. Our list contains 81 cases of explicit language UB and can be found in \hyperref[appendix]{Appendix~A} of this paper. 
 
 Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ Standard's clause identifiers, which we place between [square brackets]. 
 
 There is currently an open pull request against the C++ Standard document that proposes to add these identifiers directly to the C++ Standard document alongside a new appendix to that document enumerating all cases of UB and providing explanation and code examples. This pull request and the stable identifiers used therein are fully consistent with \hyperref[appendix]{Appendix~A} of this paper. 
 
+Originally, we constructed our list independently from another effort to enumerate core language UB led by Shafik Yaghmour (see \cite{P1705R1}, \cite{P3075R0}). The current list in \hyperref[appendix]{Appendix~A} and in the pull request mentioned above represents a merger of the lists produced by both efforts, further increasing confidence that we in fact exhaustively covered all core language UB explicitly specified in the current C++ working paper.
+
 \subsubsection{Granularity}
 
-The granularity of this enumeration --- i.e., when a piece of core language specification is considered a distinct case of UB --- is somewhat arbitrary. As a general rule, we consider a single sentence in the C++ working paper specifying that a core language operation has UB to be one such case; if such a sentence contains a bulleted list with several cases (e.g., [basic.life]/7), we consider each bullet to be a separate case.
+The granularity of our enumeration --- i.e., when a piece of core language specification is considered a distinct case of UB --- is somewhat arbitrary. As a general rule, we consider a single sentence in the C++ working paper specifying that a core language operation has UB to be one such case; if such a sentence contains a bulleted list with several cases (e.g., [basic.life]/7), we consider each bullet to be a separate case.
 
 We could consider dividing up the cases of UB in different ways and with greater granularity. In particular, we could more closely align the enumeration with possible mitigation strategies, rather than with the textual appearance of the word ``undefined'' in the C++ working paper.
 
@@ -177,19 +179,42 @@ However, such alternative strategies would make the enumeration more difficult t
 
 \subsubsection{Scope}
 
-In this paper, we consider only explicit UB, not implicit UB --- that is, UB that exists by omission because the C++ Standard document failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core Issues, and then subsequently become explicit UB that can be addressed  via the framework proposed here. Importantly, while explicit UB can be enumerated exhaustively, and we do so in \hyperref[appendix]{Appendix~A} of this paper, with implicit UB this is impossible in principle as we can never be sure we found all such wording bugs.
+In this paper, we consider only explicit UB, not implicit UB --- that is, UB that exists by omission because the C++ Standard document failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core issues, and then subsequently become explicit UB that can be addressed  via the framework proposed here. Importantly, while explicit UB can be enumerated exhaustively, and we do so in \hyperref[appendix]{Appendix~A} of this paper, with implicit UB this is impossible in principle as we can never be sure we found all such wording bugs.
 
-Further, we consider only \emph{runtime} UB, not compile-time or link-time issues. We therefore exclude all cases of IFNDR from our analysis: although the effects of IFNDR can manifest at runtime, whether a program is IFNDR is (unlike UB) fundamentally not a run-time property. We also exclude the case of infinite recursion during template instantiation, the result of which is currently specified as undefined. The wording\footnote{[temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined.}  reads as if it could mean this case could cause runtime UB, but that makes no sense as it is fundamentally a compile-time issue. We therefore consider this case a wording bug rather than an instance of UB; it is being addressed by Core Issue \cite{CWG3034}.
+Further, in this paper we consider only \emph{runtime} UB, not compile-time or link-time issues. We therefore exclude all cases of IFNDR from our analysis: although the effects of IFNDR can manifest at runtime, whether a program is IFNDR is (unlike UB) fundamentally not a run-time property.
+We also exclude the case of infinite recursion during template instantiation, the result of which is currently specified as undefined. The current wording\footnote{[temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined.} can be interpreted to mean that such infinite recursion could cause runtime UB; however, such an interpretation makes little sense as failure during template instantiation is fundamentally a compile-time issue. We therefore consider this case a wording bug rather than an instance of UB; it is being addressed by a Core issue \cite{CWG3034}.
 
 Finally, we exclude \emph{library undefined behaviour} since the natural mitigation approach for it is to make use of contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) in library implementations and, where sensible, mandate such assertions through library hardening \cite{P3471R4}, both of which are out of scope for this paper. We, therefore, consider only UB that is specified in the core language part of the C++ Standard (Clauses 1--15). Further, we found one case of UB that is specified in the core language part of \cite{N5008} but actually represents a precondition on Standard Library functions;\footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
 that case is, therefore, also excluded from our list.
 
+
 \subsection{Grouping}
+
 
 \subsubsection{Categories}
 \label{categories}
 
 We found that all identified cases of core language UB can be broadly classified into ten categories:
+
+\begin{figure}[tb]
+    \centering
+    \begin{tikzpicture}
+        \pie[text=legend, 
+               radius=3, 
+               rotate=90,
+               change direction,
+               color={BurntOrange, RedOrange, OrangeRed, Lavender, Orchid, Cerulean, Emerald, LimeGreen, GreenYellow, Goldenrod},
+               sum=auto,
+               after number = \,,   % keeps numbers tidy (adds thin space)
+               /tikz/nodes={font=\small} % tweak font size if needed
+            ]
+            {1/Initialisation, 5/Bounds, 52/Type and Lifetime, 9/Arithmetic, 1/Threading, 1/Sequencing, 1/Assumptions, 6/Control Flow, 3/Replacement Functions, 2/Coroutines}
+    \end{tikzpicture}
+    \caption{Distribution of identified cases of explicit language UB across specified categories}
+    \label{piechart_categories}
+\end{figure}
+
+
  \renewcommand{\labelenumi}{\Roman{enumi}.}
 \begin{enumerate}
 \item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value.
@@ -206,23 +231,7 @@ We found that all identified cases of core language UB can be broadly classified
 
 Figure \ref{piechart_categories} shows the distribution of the 81 identified cases of explicit core language UB across the 10 identified categories. 
 
-\begin{figure}[h]
-    \label{piechart_categories}
-    \centering
-    \begin{tikzpicture}
-        \pie[text=legend, 
-               radius=3, 
-               rotate=90,
-               change direction,
-               color={BurntOrange, RedOrange, OrangeRed, Lavender, Orchid, Cerulean, Emerald, LimeGreen, GreenYellow, Goldenrod},
-               sum=auto,
-               after number = \,,   % keeps numbers tidy (adds thin space)
-               /tikz/nodes={font=\small} % tweak font size if needed
-            ]
-            {1/Initialisation, 5/Bounds, 52/Type and Lifetime, 9/Arithmetic, 1/Threading, 1/Sequencing, 1/Assumptions, 6/Control Flow, 3/Replacement Functions, 2/Coroutines}
-    \end{tikzpicture}
-    \caption{Distribution of identified cases of explicit language UB across specified categories}
-\end{figure}
+
 
 The categories of Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent UB that is commonly referred to with the umbrella term \emph{memory safety}. Much of the ongoing work around how to ``make C++ safe'' is focused on these  categories (see \cite{P3081R2}, \cite{P3700R0}, and references therein).
 
@@ -276,13 +285,12 @@ Some cases of UB in the Replacement Function category are partially or fully loc
 
 Finally, all cases of UB in the Coroutine category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations.
 
-% TIMUR TODO: double-check all numbers
 Overall, only 18 cases of UB (22.2\% of all cases) are unconditionally locally diagnosable.
 
 \subsubsection{Cost of runtime diagnosis}
 \label{cost}
 
-Considering locally diagnosable and not locally diagnosable cases of UB separately is useful to estimate the cost of diagnosis. Note that in this paper, we study the theoretical, relative cost based on the current specification of the C++ language. We do not, however, measure the actual cost of diagnosis in real implementations and present benchmarks in this paper; such measurements are left for future work.
+Considering locally diagnosable and not locally diagnosable cases of UB separately is useful to estimate the cost of diagnosis. In this paper, we study the theoretical, relative cost based on the current specification of the C++ language. We do not, however, measure the actual cost of diagnosis in real implementations (sanitisers, compiler options for hardening etc.) or present benchmarks in this paper; such studies are left for future work.
 
 For locally diagnosable cases, some kind of runtime check --- an \emph{assertion} --- could be inserted by the implementation and then evaluated at run time. The total cost of diagnosis is, therefore, equal to the cost of evaluating that check multiplied by the number of times the check needs to be evaluated.
 
@@ -334,9 +342,9 @@ The non-locally-diagnosable UB in the Control Flow category concerns operations 
 
 Finally, to diagnose UB in the Coroutine category, instrumentation would have to track the suspension state associated with every coroutine handle.
 
-As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by (at least) an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available. We discuss some of the consequences of this fundamental dilemma in Section~\ref{mitigation}.
+As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available. We discuss some of the consequences of this fundamental dilemma in Section~\ref{mitigation}.
 
-Given the substantial overhead of the instrumentation itself, i.e., involving both a runtime cost and a cost in memory, how expensive the actual \emph{checks} would be (whether a specific pointer is valid at a specific time, etc.) is not particularly important because the performance penalty would be dominated by the instrumentation overhead.
+Given the substantial overhead of such instrumentation in both runtime cost and additional memory consumption, the cost of the actual checks themselves (whether a specific pointer is valid at a specific time, etc.) is not particularly important for non-local diagnosis because the performance penalty would be dominated by the instrumentation overhead.
 
 \subsubsection{Existence of well-defined fallback behaviour}
 \label{fallback}

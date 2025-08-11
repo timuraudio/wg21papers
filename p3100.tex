@@ -126,25 +126,36 @@ In this paper, we enumerate all cases of core language undefined behaviour expli
 \section{Introduction}
 \label{intro}
 
+\subsection{Motivation and context}
+
 Eliminating or at least meaningfully reducing the amount of \emph{undefined behaviour} (UB) is an important objective for the future evolution of C++. WG21 has been continuously working in that direction. For a recent status update, see \cite{Sutter2025} and references therein; for background, see \cite{Sutter2024} and references therein.
 
-At WG21's February 2025 meeting in Hagenberg, EWG agreed on a framework for a systematic
-treatment of core language undefined behaviour in C++: the pursuit of a core language UB \emph{white paper} \cite{P3656R1} in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts.
+At WG21's February 2025 meeting in Hagenberg, EWG agreed on a ship vehicle for a systematic
+treatment of core language UB in C++: the pursuit of a core language UB \emph{white paper} \cite{P3656R1} in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts.
 
-At WG21's June 2025 meeting in Sofia, EWG reviewed a previous revision of this paper and agreed to merge it into \cite{P3656R1}. Specifically, the goal of this paper is to make a significant contribution to the major work items proposed by \cite{P3656R1}:  to enumerate and group all language UB in C++, identify tools to address the groups, and take a first pass at determining which tool to use for each UB case. 
+The goal of this paper is to make a significant contribution to the major work items proposed by \cite{P3656R1}:  to enumerate and group all language UB in C++, to identify which tools can be used to mitigate each case, and to propose a concrete design for a framework to specify and implement such mitigation. At WG21's June 2025 meeting in Sofia, EWG reviewed revision R2 of this paper and agreed to merge it into the core language UB white paper.
 
-In Section~\ref{ub}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We group all core language UB into ten categories. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and for which cases we can define meaningful, well-defined fallback behaviour to replace the UB. Finally, we discuss appropriate mitigation strategies for all identified cases of UB and find that runtime checking is an appropriate strategy for the large majority of cases.
-% TIMUR TODO: rewrite this to take into account low-level tools from P3754R0
+The present revision of this paper ties in with \cite{P3754R0}, the presentation we gave to EWG in Sofia. In that presentation, we identified six low-level tools for removing UB from the C++ language: \emph{refined behaviour}, \emph{erroneous behaviour}, \emph{runtime checks}, \emph{language subsetting}, \emph{annotations}, and \emph{new features}. EWG approved this ``six pillar'' model and voted to make it the foundation of the core language UB white paper. This paper focuses on the first three pillars: refined behaviour, erroneous behaviour, and runtime checks. These three tools are distinguished from the other three by being applicable to \emph{legacy code}, that is, they can be used to remove UB from an existing C++ program without source changes. 
 
-In Section~\ref{design}, we systematically introduce such runtime checks to C++ via  \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14}. We describe how implicit contract assertions should be specified and how to apply them to all appropriate cases of core language UB. For cases of UB where well-defined fallback behaviour exists, we discuss how specifying it allows the program to continue execution past a violated implicit contract assertion without UB. We conclude by proposing an escape hatch to mitigate the runtime cost of such fallback behaviour and avoid performance regressions.
+\subsection{Outline}
+
+In Section~\ref{analysis}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We group all core language UB into ten categories. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and for which cases we can replace the UB with meaningful, well-defined behaviour.
+
+In Section~\ref{mitigation}, we discuss available mitigation strategies and tools. We use the results of the above analysis to take a first pass at identifying which tools would be applicable to which cases of UB. We find that the combination of introducing implicit runtime checks and introducing well-defined erroneous behaviour following a failed check covers a large amount of cases.
+
+In Section~\ref{design}, we present a concrete design that implements these two strategies across the entire C++ language. We systematically introduce runtime checks to C++ via  \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14}. We describe how implicit contract assertions should be specified and how to apply them to all appropriate cases of core language UB. For cases of UB where well-defined fallback behaviour exists, we discuss how specifying it allows the program to continue execution past a violated implicit contract assertion without UB. We conclude by proposing an escape hatch to mitigate the runtime cost of such fallback behaviour and avoid performance regressions.
 
 In Section~\ref{ext}, we discuss how future extensions, such as Labels \cite{P3400R1},
-will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions. In Section~\ref{wording}, we propose wording for approval into the white paper that implements the design discussed in Section~\ref{design}.
+will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions.
+
+Finally, in Section~\ref{wording}, we propose wording for approval into the core language UB white paper \cite{P3656R1} that implements the design discussed in Section~\ref{design}.
 
 \section{Analysis}
-\label{ub}
+\label{analysis}
 
-\subsection{Methodology}
+\subsection{Enumeration}
+
+\subsubsection{Methodology}
 
 For this paper, we manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all cases of explicitly specified core language UB. Our list contains 81 cases of explicit language UB; the complete list can be found in \hyperref[appendix]{Appendix~A} of this paper. 
 
@@ -152,13 +163,19 @@ Each individual case of UB in our list has a stable identifier. We place those i
 
 There is currently an open pull request against the C++ Standard document that proposes to add these identifiers directly to the C++ Standard document alongside a new appendix to that document enumerating all cases of UB and providing explanation and code examples. This pull request and the stable identifiers used therein are fully consistent with \hyperref[appendix]{Appendix~A} of this paper. 
 
-Note that the granularity of this enumeration --- i.e., when a piece of core language specification is considered a distinct case of UB --- is somewhat arbitrary. As a general rule, we consider a single sentence in the C++ working paper that specifies UB to be one such case; if such a sentence contains a bulleted list with several cases (e.g., [basic.life]/7), we consider each bullet to be a separate case.
+\subsubsection{Granularity}
 
-We could consider dividing up the cases of UB in different ways and with greater granularity. In particular, we could more closely align the enumeration with possible mitigation strategies, rather than with the textual appearance of the word ``undefined'' in the C++ working paper. For example, for [basic.life]/7, instead of considering each bullet to be one case of UB, we could consider each different way in which a pointer can be invalid (lifetime of the object not started yet, lifetime of the object ended already, pointer is null, etc.) to be one case of UB. As another example, we could consider flowing off the end of an assignment operator (which has a proposed mitigation, see \cite{P2973R0}), flowing off the end of a function that returns a built-in type (which could be mitigated via returning an erroneous value, see Section~\ref{fallback}), and flowing off the end of any other non-\tcode{main} function that returns a non-\tcode{void} type as three distinct cases, rather than considering flowing off the end of a function ([stmt.return]/4) as a single case.
+The granularity of this enumeration --- i.e., when a piece of core language specification is considered a distinct case of UB --- is somewhat arbitrary. As a general rule, we consider a single sentence in the C++ working paper specifying that a core language operation has UB to be one such case; if such a sentence contains a bulleted list with several cases (e.g., [basic.life]/7), we consider each bullet to be a separate case.
+
+We could consider dividing up the cases of UB in different ways and with greater granularity. In particular, we could more closely align the enumeration with possible mitigation strategies, rather than with the textual appearance of the word ``undefined'' in the C++ working paper.
+
+For example, for [basic.life]/7, instead of considering each bullet to be one case of UB, we could consider each different way in which a pointer can be invalid (lifetime of the object not started yet, lifetime of the object ended already, pointer is null, etc.) to be one case of UB.
+
+As another example, we could consider flowing off the end of an assignment operator (which has a proposed mitigation, see \cite{P2973R0}), flowing off the end of a function that returns a built-in type (which could be mitigated via returning an erroneous value, see Section~\ref{fallback}), and flowing off the end of any other non-\tcode{main} function that returns a non-\tcode{void} type as three distinct cases, rather than considering flowing off the end of a function ([stmt.return]/4) as a single case.
 
 However, such alternative strategies would make the enumeration more difficult to map to existing wording, which in turn would make it more difficult to track changes and reason about whether the enumeration is exhaustive. Further, keeping the enumeration of cases of UB separate from the enumeration of possible mitigation strategies reduces interdependencies and complexity. Instead, whenever a mitigation strategy does not fully align with a case of UB, we point this out explicitly (for example, inserting an implicit null pointer check is considered only a \emph{partial} mitigation for dereferencing an invalid pointer).
 
-\subsection{Scope}
+\subsubsection{Scope}
 
 In this paper, we consider only explicit UB, not implicit UB --- that is, UB that exists by omission because the C++ Standard document failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core Issues, and then subsequently become explicit UB that can be addressed  via the framework proposed here. Importantly, while explicit UB can be enumerated exhaustively, and we do so in \hyperref[appendix]{Appendix~A} of this paper, with implicit UB this is impossible in principle as we can never be sure we found all such wording bugs.
 
@@ -182,7 +199,7 @@ We found that all identified cases of core language UB can be broadly classified
 \item \textbf{Threading} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from different threads where neither access happens before the other, i.e., a data race.
 \item \textbf{Sequencing} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other.
 \item \textbf{Assumptions} --- 1 case. Reaching an \tcode{[[assume]]} declaration whose operand would not evaluate to \tcode{true}.
-\item \textbf{Control Flow} --- 6 cases. Undefined behaviour due to errors in control flow. Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
+\item \textbf{Control Flow} --- 6 cases. Errors in control flow. Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
 \item \textbf{Replacement Functions} --- 3 cases. Executing a user-defined replacement function (\tcode{operator new}/\tcode{delete}) that fails to meet the specified requirements. Examples: returning \tcode{null} from a user-defined placement \tcode{new}; throwing an exception from a user-defined \tcode{delete}.
 \item \textbf{Coroutines} --- 2 cases. Misusing coroutine machinery. Examples: destroying a coroutine that is not suspended; invoking a resumption member function for a coroutine that is not suspended.
 \end{enumerate}
@@ -207,7 +224,7 @@ Figure \ref{piechart_categories} shows the distribution of the 81 identified cas
     \caption{Distribution of identified cases of explicit language UB across specified categories}
 \end{figure}
 
-The categories of Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent undefined behaviour that is commonly referred to with the umbrella term \emph{memory safety}. Much of the ongoing work around how to ``make C++ safe'' is focused on these  categories (see \cite{P3081R2}, \cite{P3700R0}, and references therein).
+The categories of Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent UB that is commonly referred to with the umbrella term \emph{memory safety}. Much of the ongoing work around how to ``make C++ safe'' is focused on these  categories (see \cite{P3081R2}, \cite{P3700R0}, and references therein).
 
 Because unambiguously categorising a particular case of UB into either \emph{type safety} or \emph{lifetime safety} is often impossible since it concerns both, we grouped them into a single combined category, Type and Lifetime. While some cases of UB are primarily caused by type aliasing and others are primarily caused by out-of-lifetime accesses, they form a spectrum, and many common operations in C++ (e.g., using a reference) rely on \emph{both} type and lifetime constraints to be satisfied.
 
@@ -367,7 +384,7 @@ Finally, we can define partial fallback behaviour for two cases of UB in the Con
 
 Overall, we can define meaningful well-defined fallback behaviour for only 16 cases of UB (20\% of all cases), and for 3 out of those 16 cases, this is only possible in certain cases (when the operation in question produces a value of built-in type).
 
-\subsection{Mitigation strategies}
+\section{Mitigation strategies}
 \label{mitigation}
 
 In this section, we attempt to systematically identify, at a very high level, candidate mitigation strategies for all cases of core language UB.
@@ -417,6 +434,7 @@ The fundamental dilemma is that for many cases, neither alternative is acceptabl
 % TIMUR TODO: Introduce the six low-level tools way earlier in the paper!
 In this paper, we discuss runtime mitigation of UB via insertion of runtime checks and introduction of well-defined fallback behaviour where applicable. Thus, this paper covers two out of six low-level tools for mitigating UB in C++; see \cite{P3756R0} %TIMUR TODO: this paper does not exist, remove reference!
 for a description of the entire toolbox as well as the role of Profiles as a higher-level feature that provides named configuration sets from these low-level tools, tailored to specific engineering or regulatory requirements.
+% TIMUR TODO: Remove Profiles from here
 
 % TIMUR TODO: Add two piecharts from Sofia slides
 
@@ -450,7 +468,7 @@ int main() {
 }
 \end{codeblock}
 
-In C++ today, the behaviour of this program is undefined if the value of \tcode{i} is not smaller than 10 (\{expr.add.out.of.bounds\}). However, instead of saying that out-of-bounds access into a plain array is undefined behaviour, we can say that access into a plain array has an \emph{implicit precondition assertion} that the index is not out of bounds. Then, the program behaves as-if the compiler had wrapped every raw array subscript operation for which it statically knows the array bound \tcode{N} into an inline function with a precondition assertion:
+In C++ today, the behaviour of this program is undefined if the value of \tcode{i} is not smaller than 10 (\{expr.add.out.of.bounds\}). However, instead of saying that out-of-bounds access into a plain array is UB, we can say that access into a plain array has an \emph{implicit precondition assertion} that the index is not out of bounds. Then, the program behaves as-if the compiler had wrapped every raw array subscript operation for which it statically knows the array bound \tcode{N} into an inline function with a precondition assertion:
 
 \begin{codeblock}
 template <typename T, std::size_t N>
@@ -520,7 +538,7 @@ For indeterminate values, \cite{P2795R5} introduced a specific escape hatch: the
 
 Further, this escape hatch needs to be flexible enough that implementations can choose whether or not it should be engaged by default. Engaging the escape hatch by default seems counterintuitive because doing so would fail to provide a ``safe default'', but in some cases, enabling the fallback behaviour by default will be infeasible or impractical due to the associated runtime overhead.
 
-Considering all the above reasoning reveals that such a generic, nonsyntactic escape hatch to revert to today's semantics --- i.e., a violation of the implicit precondition leads to undefined behaviour --- is nothing other than a new, fifth evaluation semantic in addition to the four existing ones (\emph{ignore}, \emph{observe}, \emph{enforce}, \emph{quick-enforce}) that can be applied to the evaluation of the affected implicit contract assertions. This evaluation semantic is called the \emph{assume} semantic.
+Considering all the above reasoning reveals that such a generic, nonsyntactic escape hatch to revert to today's semantics --- i.e., a violation of the implicit precondition leads to UB --- is nothing other than a new, fifth evaluation semantic in addition to the four existing ones (\emph{ignore}, \emph{observe}, \emph{enforce}, \emph{quick-enforce}) that can be applied to the evaluation of the affected implicit contract assertions. This evaluation semantic is called the \emph{assume} semantic.
 
 Just like the \emph{ignore} semantic, the \emph{assume} semantic is a \emph{nonchecking} semantic; i.e., its predicate is not evaluated. Further, just like with the \emph{ignore} semantic, if the predicate evaluates to \tcode{true} at the point where the contract assertion is placed, the \emph{assume} semantic has no effect; i.e., the program behaves exactly as if the contract assertion were not there. However, unlike the \emph{ignore} semantic, if the predicate does \emph{not} evaluate to \tcode{true}, the behaviour is undefined. This semantic allows compilers to optimise on the assumption that the predicate is \tcode{true}, just like they do today for those cases of core language UB.
 
@@ -537,7 +555,7 @@ Just like with all other evaluation semantics, the mechanism by which the \emph{
 
 Importantly, in light of the sustained opposition in WG21 to allowing the \emph{assume} semantic for explicit contract assertions,\footnote{Due to this opposition, no such semantic was included in \cite{P2900R14}. The presence of the \emph{assume} semantic in the C++2a Contracts proposal \cite{P0542R5} contributed to that proposal being removed from the C++20 Working Draft.} we propose that the \emph{assume} semantic is allowed for only \emph{implicit} contract assertions. \emph{Explicit} contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) may \emph{not} be evaluated with the \emph{assume} semantic.
 
-This restriction is important because, for explicit contract assertions, the \emph{assume} semantic  has the potential to introduce undefined behaviour to an otherwise correct program if we wrote a buggy contract predicate. On the other hand, this risk does not exist for implicit contract assertions since they are generated by the compiler; for error cases that cause UB, the \emph{assume} semantic is merely a tool to achieve the same semantics those error cases already have in C++ today.
+This restriction is important because, for explicit contract assertions, the \emph{assume} semantic  has the potential to introduce UB to an otherwise correct program if we wrote a buggy contract predicate. On the other hand, this risk does not exist for implicit contract assertions since they are generated by the compiler; for error cases that cause UB, the \emph{assume} semantic is merely a tool to achieve the same semantics those error cases already have in C++ today.
 
 Once we get Labels, as proposed in \cite{P3400R1}, we can introduce an explicit label that would allow the \emph{assume} semantic to apply to an explicit contract assertion as well. For example, the limiter example from the \tcode{[[assume]]} paper, \cite{P1774R8}, could be written as follows:
 \begin{codeblock}
@@ -950,7 +968,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 
 \section*{Document history}
 \begin{itemize}
-\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3745R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; improved paper structure.
+\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3754R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; improved paper structure.
 \item \textbf{R3}, 2025-06-28: Removed preprocessor UB due to adoption of \cite{P2843R3} into C++26.
 \item \textbf{R2}, 2025-05-19: Complete rewrite after the WG21 meeting in Hagenberg.
 \item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.

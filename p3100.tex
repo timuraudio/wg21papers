@@ -266,20 +266,22 @@ The second question \cite{P3656R1} asks is which cases of UB are ``efficiently l
 \subsubsection{Static vs. dynamic diagnosis}
 \label{statically}
 
-A commonly asked question is ``why does the committee not simply make all the UB ill-formed instead''? The answer is that in order for that to happen, it would be necessary to determine statically --- i.e., at compile time --- whether a given operation in a C++ program would lead to UB when executed at runtime. However, whether a C++ program will have UB when executed is fundamentally a \emph{runtime} property, i.e., the answer depends on run-time values unknown at compile time (for example, the run-time value of a pointer or an integer). Therefore, in the vast majority of cases, such a compile-time determination cannot be made. In fact, in our entire list of 81 cases of UB, we cannot identify \emph{any} cases where this determination could be made unconditionally.
+A commonly asked question is ``why does the committee not simply make all the UB ill-formed instead''? The answer is that in order for that to happen, it would be necessary to determine statically --- i.e., at compile time --- whether a given operation in a C++ program would lead to UB when executed at runtime. However, whether a C++ program will have UB when executed is fundamentally a \emph{runtime} property, i.e., the answer depends on run-time values unknown at compile time (for example, the run-time value of a pointer or an integer). Therefore, in the vast majority of cases, such a compile-time determination cannot be made. In fact, in our entire list of 81 cases of UB, we cannot identify \emph{any} cases that can unconditionally be diagnosed at compile time.
 
 Of course, static analysis is still useful and widely used in the field. There are many situations where static analysis \emph{can} detect a bug that would lead to UB when executed, because the relevant values or conditions happen to be known at compile time in the particular program at hand. However, given an existing C++ program, any approach based on static analysis fundamentally has to choose between \emph{false positives} (rejecting code for which no proof can be constructed one way or another, even if that code happens to be correct) and \emph{false negatives} (accepting incorrect code that will lead to UB when executed). 
 
-Importantly, whether a pointer or reference refers to a valid object of the correct type within its lifetime at a given point in time (``memory safety''), the critical property for addressing the cases of UB in the Initialisation, Bounds, and Type and Lifetime categories, seems to be fundamentally unprovable at compile time in the general case (see \cite{Baxter2024}).
+Crucially, whether a pointer or reference refers to a valid object of the correct type within its lifetime at a given point in time (``memory safety''), the relevant property for addressing UB in the Initialisation, Bounds, and Type and Lifetime categories, seems to be fundamentally unprovable at compile time in the general case (see \cite{Baxter2024}).
 
 As we will see in Section~\ref{mitigation}, despite these fundamental limitations there are things we can (and should) do in the C++ Standard to enable static analysis to construct a proof in more cases, such as adding annotations (\ref{annotations}), subsetting the language (\ref{subsetting}), and providing replacement features (\ref{newfeatures}). However, for existing C++ programs, reliably detecting cases of UB without rejecting correct code will inevitably have to leverage \emph{run-time} detection, i.e., the insertion of additional run-time checks when compiling the program. We therefore focus on such run-time detection for the remainder of this analysis.
 
 \subsubsection{Locality of diagnosis}
 \label{locally}
 
+An important property for diagnosis of UB is whether such diagnosis (whether static or dynamic) can be performed \emph{locally}, i.e. without keeping track of additional information across the entire program that is not available within the C++ abstract machine (achievable with additional instrumentation of the kind that is implemented in sanitisers, such as ASan and UBSan) and without analysing code in other branches (which is limited by the Halting problem) or on the other side of a function call boundary (which might be located in another TU and therefore inaccessible).
 
+Most cases of UB in the Initialisation, Bounds, and Type and Lifetime categories are, in general, \emph{not} locally diagnosable. They could potentially be made locally diagnosable in the future with the introduction of novel features such as lifetime annotations \cite{P2771R1} or ``ghost data'' \cite{Lippincott2025} which are the subject of ongoing research. We discuss some of these approaches in Section~\ref{mitigation}; here, we focus on the status quo in  Standard C++.
 
-Most cases of UB in the security-critical Initialisation, Bounds, and Type and Lifetime categories are, in general, \emph{not} locally diagnosable.  In the Bounds category, 
+In the Bounds category, 
 \{expr.add.out.of.bounds\} 
 and \{expr.add.sub.diff.pointers\} 
 are partially locally diagnosable (only if the array bound is statically known). In the Type and Lifetime category,
@@ -290,7 +292,7 @@ are partially locally diagnosable (only if the array bound is statically known).
 are partially locally diagnosable (for the null pointer case).
 \{expr.mptr.oper.member.func.null\} is locally diagnosable because this case requires \emph{only} a null pointer check.
 \{basic.align.object.alignment\} is locally diagnosable by checking the alignment of storage when creating an object at run time.
-\{expr.assign.overlap\} is locally diagnosable by checking the overlap of the two address ranges. (The ranges are known because the address and \tcode{sizeof} are known at run time for both the source and the destination object.) \{class.abstract.pure.virtual\} is locally diagnosable by adding a run-time check to  the pure virtual function stub to which the base class vtable points. All other cases of UB in the Initialisation, Bounds, and Type and Lifetime categories require, to be diagnosable, additional instrumentation of the kind that is implemented in sanitisers, such as ASan and UBSan (see Section~\ref{cost} for further discussion).
+\{expr.assign.overlap\} is locally diagnosable by checking the overlap of the two address ranges. (The ranges are known because the address and \tcode{sizeof} are known at run time for both the source and the destination object.) \{class.abstract.pure.virtual\} is locally diagnosable by adding a run-time check to  the pure virtual function stub to which the base class vtable points. None of the other cases of UB in the Initialisation, Bounds, and Type and Lifetime categories are locally diagnosable.
 
 All cases of UB in the Arithmetic category are locally diagnosable since they are all cases of an arithmetic operation producing a value that is somehow inappropriate (mathematically invalid, not representable in the target type, etc.) and that value can be inspected at run time.
 
@@ -304,16 +306,34 @@ Some cases of UB in the Replacement Function category are partially or fully loc
 
 Finally, all cases of UB in the Coroutine category are not locally diagnosable since being so would require tracking run-time state information that is not currently maintained within the coroutine handle in most implementations.
 
-Overall, only 18 cases of UB (22.2\% of all cases) are unconditionally locally diagnosable.
+Overall, as shown in Figure~\ref{piechart_locally}, only 18 cases of UB (22.2\% of all cases) are unconditionally locally diagnosable at runtime, while 58 cases of UB (71.6\%) are not; these cases require instrumentation of the code in order to be diagnosed at runtime. We will discuss these requirements in more detail in Section~\ref{cost_nonlocal}.
 
-\subsubsection{Cost of diagnosis}
-\label{cost}
+\begin{figure}[b]
+    \centering
+    \begin{tikzpicture}
+        \pie[text=legend, 
+               radius=3, 
+               rotate=90,
+               change direction,
+               color={Emerald, Goldenrod, RedOrange, OrangeRed, Gray},
+               sum=auto,
+               after number = \,,   % keeps numbers tidy (adds thin space)
+               /tikz/nodes={font=\small} % tweak font size if needed
+            ]
+            {18/Checkable locally, 6/Checkable locally in some cases, 52/Checkable non-locally, 3/Not checkable in some cases, 2/Checking not required}
+    \end{tikzpicture}
+    \caption{Runtime diagnosability of explicit core language UB}
+    \label{piechart_locally}
+\end{figure}
 
-Considering locally diagnosable and not locally diagnosable cases of UB separately is useful to estimate the cost of diagnosis. In this paper, we study the theoretical, relative cost based on the current specification of the C++ language. We do not, however, measure the actual cost of diagnosis in real implementations (sanitisers, compiler options for hardening etc.) or present benchmarks in this paper; such studies are left for future work.
+\subsubsection{Cost of local diagnosis}
+\label{cost_local}
 
-For locally diagnosable cases, some kind of run-time check --- an \emph{assertion} --- could be inserted by the implementation and then evaluated at run time. The total cost of diagnosis is, therefore, equal to the cost of evaluating that check multiplied by the number of times the check needs to be evaluated.
+Considering locally checkable cases of UB separately from non-locally checkable ones is useful to estimate the cost of diagnosis. For locally diagnosable cases, some kind of run-time check --- an \emph{assertion} --- could be inserted by the implementation and then evaluated at run time. The total cost of diagnosis is, therefore, equal to the cost of evaluating that check multiplied by the number of times the check needs to be evaluated.
 
-The cheapest kind of check --- and the only one that has (almost) no overhead for the happy path --- is the ``fail if you get here'' check, equivalent to a \tcode{pre}/\tcode{post}/\tcode{contract_assert(false)}. This kind of check is sufficient to diagnose \{class.abstract.pure.virtual\}, \{stmt.return.flow.off\}, \{stmt.return.coroutine.flow.off\}, and \{dcl.attr.noreturn.eventually.returns\}.
+Note that in this paper, we study the theoretical, relative cost based on the current specification of the C++ language. We do not, however, measure the actual cost in existing tooling that implements such checks, nor do we present benchmarks in this paper; such studies are left for future work.
+
+That said, the cheapest kind of check --- and the only one that has (almost) no overhead for the happy path --- is the ``fail if you get here'' check, equivalent to a \tcode{pre}/\tcode{post}/\tcode{contract_assert(false)}. This kind of check is sufficient to diagnose \{class.abstract.pure.virtual\}, \{stmt.return.flow.off\}, \{stmt.return.coroutine.flow.off\}, and \{dcl.attr.noreturn.eventually.returns\}.
 
 A slightly more expensive but still cheap and optimiser-friendly kind of check is a null check, required to diagnose the null pointer cases  
 (\{expr.static.cast.downcast.wrong.derived.type\},
@@ -337,6 +357,9 @@ At the expensive end of the locally diagnosable UB spectrum are run-time checks 
 
 In addition to the cost of the check itself, we need to consider the frequency with which these checks would need to be done. Checks that would need to happen once when a function is called or when a function returns are likely to be acceptable in most scenarios. Extensive checks for arithmetic UB will probably be acceptable in fewer scenarios because such checks have the potential to significantly slow arithmetic operations, which are performance sensitive in many contexts. On the extreme end, if we wanted to diagnose \{intro.execution.unsequenced.modification\} via a run-time check, the check itself would be fairly inexpensive, but the compiler would have to identify all potential read operations that are not sequenced with respect to each given write operation and then insert checks to identify if those operations are actually going to reference the same address.
 
+\subsubsection{Cost of non-local diagnosis}
+\label{cost_nonlocal}
+
 For UB that is not locally diagnosable (which is most of the UB in C++), we need to consider the cost of the required additional instrumentation. To get an idea of that cost, we must nail down exactly which additional properties that are not normally known from within the C++ abstract machine would need to be tracked by such instrumentation. This tracking would need to happen at run time throughout the \emph{entire} program; checks relying on the tracked information would have to be inserted for \emph{every} run-time operation that may be affected by such UB.
 The full list is available in \hyperref[appendix]{Appendix~A}, and we provide an overview below.
 
@@ -355,7 +378,7 @@ To diagnose \emph{all} cases of UB in the memory safety categories of Initializa
 \item For all addresses that point to  functions, the type of the function
 \end{itemize}
 
-To diagnose UB in the Threading category, instrumentation would have to track, for \emph{all} memory accesses, from which threads that memory is accessed and when these accesses synchronise with each other. Doing this exhaustively is not practical; however, instrumentation that is capable of diagnosing a subset of cases exists in the form of sanitisers (TSan).
+To diagnose UB in the Threading category, instrumentation would have to track, for \emph{all} memory accesses, from which threads that memory is accessed and when these accesses synchronise with each other. Doing this exhaustively is not practically possible; however, instrumentation that is capable of diagnosing a subset of cases exists in the form of sanitisers (TSan).
 
 The non-locally-diagnosable UB in the Control Flow category concerns operations that are not allowed during construction and destruction of objects with static or thread-local storage duration (\{basic.start.main.exit.during.destruction\} and \{basic.start.term.use.after.destruction\}). To diagnose these, instrumentation would have to insert guards tracking whether such objects are currently being constructed and destroyed.  
 
@@ -373,21 +396,15 @@ For existing code that cannot be modified in-source, removing run-time UB from t
 
 For the purposes of this analysis, we need to be careful with delineating what exactly we mean by replacement behaviour. If it is possible to insert a run-time check guarding a particular case of UB (e.g., a bounds check, a null pointer check), we can specify well-defined behaviour for the case when this check fails (e.g., terminate the program, throw an exception) which guarantees that we never actually execute the operation that would have run-time UB, thus avoiding it. However, regardless of the existence of that check, there are also cases where we can give well-defined behaviour to the operation itself, such that continuing to evaluate that operation does not lead to run-time UB even in the case where there is a bug that would cause UB with the current language specification. This is precisely what we mean by giving an operation replacement behaviour.
 
-% TIMUR TODO: MOVE THIS INTO MITIGATION SECTION
-Such replacement behaviour comes in two flavours:
-
-\begin{itemize}
-\item \textbf{Refined behaviour}: we change the specification of the operation in such a way that UB is replaced by well-defined behaviour that is henceforth considered a correct use of the feature in question, i.e., it is no longer a bug to execute that operation under those conditions. An example of introducing such refined behaviour is the range-based for loop fix \cite{P2644R1} for C++23 that extends the lifetime of certain temporary objects across the duration of executing the loop, thus avoiding UB due to dangling references.
-\item \textbf{Erroneous behaviour} (EB): we change the specification of the operation in such a way that UB is replaced by well-defined behaviour, but that well-defined behaviour is still considered \emph{incorrect}, i.e., it is still a bug to execute that operation under those conditions. The purpose of introducing erroneous behaviour is not to remove the bug, but to place a limit on the program behaviour in the face of the bug and in particular to prevent the bug from creating a security vulnerability. We already approved one instance of EB for C++26:  reading a default-initialized automatic variable of arithmetic type no longer causes UB, but instead produces an erroneous value (\cite{P2795R5}).
-\end{itemize}
-
-For either type of replacement behaviour to actually happen, the compiler must be able to lay down the necessary instructions. However, in the vast majority of cases, core language UB is fundamentally \emph{not} diagnosable at compile time (see Section~\ref{statically}); i.e., whether or not the UB will occur depends on run-time parameters. Fallback behaviour \emph{cannot}, therefore, depend on knowing that an error occurred. For non-locally-diagnosable UB, fallback behaviour also cannot depend on any additional instrumentation being present.
+As we will discuss in more detail in Section~\ref{mitigation}, we can conceptually distinguish between two types of replacement behaviour --- \emph{refined} and \emph{erroneous} behaviour --- depending on whether the replacement behaviour is considered correct or incorrect (despite no longer being undefined). In any case, for either type of replacement behaviour to actually happen, the compiler must be able to lay down the necessary instructions at compile time. Simultaneously, as discussed in Section~\ref{statically}, in the vast majority of cases core language UB is fundamentally \emph{not} diagnosable at compile time, as whether or not the UB will occur depends on run-time parameters. Replacement behaviour can therefore not depend on knowing that an error occurred. For non-locally-diagnosable UB, fallback behaviour also cannot depend on any additional instrumentation being present.
 
 For this paper, we systematically identified all cases of core language UB for which either form of replacement behaviour can be meaningfully defined. This section gives an overview; the full list can be found in \hyperref[appendix]{Appendix~A}. As we will see, for most cases of UB, replacement behaviour does not exist, and if it does, it is often not cheap.
 
-For UB in the Initialization category (\{basic.indet.value\}), replacement behaviour is sometimes possible for built-in types: an operation that would currently return an indeterminate value can be specified to return \emph{some} value instead. The most meaningful option is to make it return an erroneous value. For variables with automatic storage duration, this replacement behaviour is already part of C++26 as EB via \cite{P2795R5} because for this case, the replacement behaviour is particularly cheap. The same  behaviour could also be employed for dynamically allocated variables but at greater cost (see \cite{P2723R1} Section 6 for discussion).
+For UB in the Initialization category (\{basic.indet.value\}), replacement behaviour is sometimes possible for built-in types: an operation that would currently return an indeterminate value can be specified to return \emph{some} value instead.
 
-However, producing an erroneous value (instead of, for example, the value that happened to be in memory where an object was incorrectly presumed to have been initialized) requires having a point in time where a fallback value can be unconditionally placed in memory, such as when passing the declaration of an automatic variable; there are cases where such a point cannot be determined.
+We could consider returning a specific value such as 0, or returning some unspecified value (as a form of refined behaviour). However, doing so removes the ability for tools to recognise that a program defect is present (see \cite{P2754R0}). The most meaningful option is to make it return an erroneous value (a form of erroneous behaviour). For variables with automatic storage duration, this replacement behaviour is already part of C++26 as EB via \cite{P2795R5} because for this case, the replacement behaviour is particularly cheap. The same  behaviour could also be employed for dynamically allocated variables but at greater cost (see \cite{P2723R1} Section 6 for discussion).
+
+On the other hand, producing an erroneous value (instead of, for example, the value that happened to be in memory where an object was incorrectly presumed to have been initialised) requires having a point in time where a fallback value can be unconditionally placed in memory, such as when passing the declaration of an automatic variable; there are cases where such a point cannot be determined.
 
 Further, we cannot in general define replacement behaviour for uninitialised variables of user-defined type. Even if we could zero out all the underlying storage for user-defined types (or overwrite it with some other known bit pattern), doing so does not always produce, for that type, a valid value that can be accessed without UB. (Consider a user-defined type that relies on a member pointer always being dereferenceable.) Therefore, \{basic.indet.value\} does not have replacement behaviour for the general case.
 
@@ -415,10 +432,36 @@ The replacement behaviour for UB in the Assumption category (\{dcl.attr.assume.f
 
 Finally, we can define partial replacement behaviour for two cases of UB in the Control Flow category  (\{stmt.return.flow.off\} and \{stmt.return.coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is analogous to \{basic.indet.value\}; again, no fallback behaviour exists for user-defined return types in the general case.
 
-Overall, we can define meaningful replacement behaviour for only 16 cases of UB (19.8\% of all cases). In addition, in 3 cases, this is only possible when the operation in question produces a value of built-in type; unconditional replacement behaviour exists for only 13 cases of UB (16.0\% of all cases).
+Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful replacement behaviour for only 16 cases of UB (19.8\% of all cases). In addition, in 3 cases, this is only possible when the operation in question produces a value of built-in type. Unconditional replacement behaviour exists for only 13 cases of UB (16.0\% of all cases). In all of these cases, the replacement behaviour consists of erroneous behaviour; in most cases, performing such replacement introduces significant runtime cost.
+
+\begin{figure}[t]
+    \centering
+    \begin{tikzpicture}
+        \pie[text=legend, 
+               radius=3, 
+               rotate=90,
+               change direction,
+               color={Emerald, Goldenrod, OrangeRed, Gray},
+               sum=auto,
+               after number = \,,   % keeps numbers tidy (adds thin space)
+               /tikz/nodes={font=\small} % tweak font size if needed
+            ]
+            {13/Can be replaced by EB, 3/Can be replaced by EB in some cases, 65/No meaningful replacement exists}
+    \end{tikzpicture}
+    \caption{Existence of well-defined replacement behaviour for explicit core language UB}
+    \label{piechart_replacement}
+\end{figure}
 
 \section{Mitigation strategies}
 \label{mitigation}
+
+%%%  TODO INCORPORATE THIS:
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{itemize}
+\item \textbf{Refined behaviour}: we change the specification of the operation in such a way that UB is replaced by well-defined behaviour that is henceforth considered a correct use of the feature in question, i.e., it is no longer a bug to execute that operation under those conditions. An example of introducing such refined behaviour is the range-based for loop fix \cite{P2644R1} for C++23 that extends the lifetime of certain temporary objects across the duration of executing the loop, thus avoiding UB due to dangling references.
+\item \textbf{Erroneous behaviour} (EB): we change the specification of the operation in such a way that UB is replaced by well-defined behaviour, but that well-defined behaviour is still considered \emph{incorrect}, i.e., it is still a bug to execute that operation under those conditions. The purpose of introducing erroneous behaviour is not to remove the bug, but to place a limit on the program behaviour in the face of the bug and in particular to prevent the bug from creating a security vulnerability. We already approved one instance of EB for C++26:  reading a default-initialized automatic variable of arithmetic type no longer causes UB, but instead produces an erroneous value (\cite{P2795R5}).
+\end{itemize}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \subsection{The basic tools}
 

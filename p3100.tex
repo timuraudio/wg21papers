@@ -606,6 +606,10 @@ For example, we may define a subset of the language that excludes pointer arithm
 
 Specifying Profiles in this way will enable EWG to agree on a shared understanding of what Profiles are, guide their design, and answer the many open questions regarding what they should or should not be able to do.
 
+Importantly, when designing user-facing mechanisms for selecting configuration options for the basic tools proposed in Section~\ref{tools}, we need to take care to not create a situation where different features offer the same functionality in conflicting ways.
+
+For example, when enabling and disabling runtime checks that guard against core language UB, we need to agree whether this happens via the syntax introduced by Labels (\cite{P3400R1}; see also Section~\ref{ext}) or via the syntax introduced by the Profiles framework (\cite{P3589R2}); or, if it can happen via both, we need to define one feature in terms of the other. If we follow the approach proposed here, we can define a concrete profile as essentially doing nothing else but expanding to a particular set of configuration directives defined by features such as \cite{P3400R1} that directly control the corresponding lower-level basic tool.
+
 \section{Proposed design}
 \label{design}
 

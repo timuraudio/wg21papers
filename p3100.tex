@@ -266,7 +266,13 @@ The second question \cite{P3656R1} asks is which cases of UB are ``efficiently l
 \subsubsection{Static vs. dynamic diagnosis}
 \label{statically}
 
-TODO
+A commonly asked question is ``why does the committee not simply make all the UB ill-formed instead''? The answer is that in order for that to happen, it would be necessary to determine statically --- i.e., at compile time --- whether a given operation in a C++ program would lead to UB when executed at runtime. However, whether a C++ program will have UB when executed is fundamentally a \emph{runtime} property, i.e., the answer depends on runtime values unknown at compile time (for example, the value of a pointer or an integer). Therefore, in the vast majority of cases, such a compile-time determination cannot be made. In fact, in our entire list of 81 cases of UB, we cannot identify \emph{any} cases where this determination could be made unconditionally.
+
+Of course, static analysis is still useful and widely used in the field. There are many situations where static analysis \emph{can} detect a bug that would lead to UB when executed, because the relevant values or conditions happen to be known at compile time in the particular program at hand. However, given an existing C++ program, any approach based on static analysis fundamentally has to choose between \emph{false positives} (rejecting code for which no proof can be constructed one way or another, even if that code happens to be correct) and \emph{false negatives} (accepting incorrect code that will lead to UB when executed). 
+
+Importantly, whether a pointer or reference refers to a valid object of the correct type within its lifetime at a given point in time (``memory safety''), the critical property for addressing the cases of UB in the Initialisation, Bounds, and Type and Lifetime categories, seems to be fundamentally unprovable at compile time in the general case (see \cite{Baxter2024}).
+
+As we will see in Section~\ref{mitigation}, despite these fundamental limitations there are things we can (and should) do in the C++ Standard to enable static analysis to construct a proof in more cases, such as adding annotations (\ref{annotations}), subsetting the language (\ref{subsetting}), and providing replacement features (\ref{newfeatures}). However, for existing C++ programs, reliably detecting cases of UB without rejecting correct code will inevitably have to leverage \emph{runtime} detection. We therefore focus on such runtime detection for the remainder of this analysis.
 
 \subsubsection{Locality of diagnosis}
 \label{locally}
@@ -434,38 +440,46 @@ Below we take a closer look at each tool and identify for which cases of UB that
 
 
 \subsubsection{Refined behaviour}
+\label{refined}
 
 TODO
 
 
 \subsubsection{Erroneous behaviour}
+\label{erroneous}
 
 TODO
 
 % TIMUR TODO: explain below that the assume semantic actually shifts the configurability over to the runtime check. But that doesn't need to be reflected in the diagram
 
 \subsubsection{Runtime checks}
+\label{checks}
 
 TODO
 
 \subsubsection{Feature removal}
+\label{removal}
 
 TODO
 
 \subsubsection{Language subsetting}
+\label{subsetting}
 
 TODO
 
 
 \subsubsection{Annotations}
+\label{annotations}
 
 TODO
 
 \subsubsection{New features}
+\label{newfeatures}
 
 TODO
 
 \subsection{The role of Profiles}
+\label{profiles}
 
 TODO
 

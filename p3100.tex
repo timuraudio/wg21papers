@@ -675,7 +675,7 @@ The approach suggested in those papers is to constrain explicit contract-asserti
 
 \subsection{Adding replacement behaviour}
 \label{specifyeb}
-The next part of our proposal is to introduce well-defined replacement behaviour for all 16 cases of core language UB for which such replacement behaviour exists (see Section~\ref{replacements}). We accomplish this by modifying the specification of each affected operation as follows. If the condition that would have previously made the behaviour of the operation undefined --- i.e., an implicit contract violation --- occurs, and control flow continues past that violation, then the behaviour of the operation is defined to be that replacement behaviour instead of UB.
+The next part of our proposal is to introduce well-defined replacement behaviour for all 16 cases of core language UB for which such replacement behaviour exists (see Section~\ref{replacement}). We accomplish this by modifying the specification of each affected operation as follows. If the condition that would have previously made the behaviour of the operation undefined --- i.e., an implicit contract violation --- occurs, and control flow continues past that violation, then the behaviour of the operation is defined to be that replacement behaviour instead of UB.
 
 Consider the following example:
 \begin{codeblock}

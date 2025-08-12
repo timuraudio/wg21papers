@@ -579,7 +579,7 @@ Note that combining the new features tool with the language subsetting tool is e
 \subsection{Configuration}
 \label{config}
 
-Three of the seven tools discussed above need to be \emph{configurable} by the user in order to be usable in practice: erroneous behaviour, runtime checks, and language subsetting.
+Three of the seven tools discussed above need to be \emph{configurable} by the user in order to be usable in practice: runtime checks, erroneous behaviour, and language subsetting.
 
 There is a number of reasons why any form of correctness checks at runtime need to be configurable by the user; these reasons have been discussed in detail in \cite{P2900R14} and are fundamentally the same for runtime checks implicitly inserted by the compiler as for contract assertions added by the user. In some applications, termination on failure is not an acceptable outcome even in the face of UB. More importantly, as we saw in Section~\ref{diagnose}, the majority of UB in C++ today is not locally diagnosable and require expensive sanitiser-like instrumentation to perform the checks. Even for those 18 cases of UB that are locally diagnosable and do not require additional instrumentation to insert run-time checks, in most cases the checks themselves will have a significant run-time overhead. Therefore, the checks need to be \emph{optional}: we need a mechanism to enable and disable each kind of check, and we cannot require an implementation to support all checks.
 
@@ -591,12 +591,20 @@ Similar reasons apply to erroneous behaviour: in practically all cases, its intr
 
 Finally, as already discussed in Section~\ref{subsetting}, language subsetting needs to be opt-in in order to avoid breaking existing, correct C++ programs.
 
-For all these features, we need to clearly specify the available configuration options and the mechanisms available for the user to select these options at different levels of granularity. For erroneous behaviour and runtime checks, we accomplish this via leveraging contract evaluation semantics (see Section~\ref{design}); interestingly, as we will see in Section~\ref{assume}, disabling erroneous behaviour is actually equivalent to selecting a special evaluation semantic for the associated runtime check.
+For all these features, we need to clearly specify the available configuration options and the mechanisms available for the user to select these options at different levels of granularity. For erroneous behaviour and runtime checks, we accomplish this via leveraging contract evaluation semantics (see Section~\ref{design}); interestingly, as we will see in Section~\ref{assume}, disabling erroneous behaviour is actually equivalent to selecting a special evaluation semantic for the associated runtime check. For subsetting, the design of suitable configuration mechanisms are not yet well understood; we expect future papers to make progress in this area.
 
 \subsection{The role of Profiles}
 \label{profiles}
 
-TODO
+\emph{Profiles} are another proposed feature currently in development that (among other things) aims to remove UB from C++. It is important to distinguish between concrete profiles --- collections of rules and aiming to provide a guarantee that a C++ program exhibit certain qualities --- and the \emph{Profiles framework}, a set of features to enable and disable any concrete named profile via compile-time options and in source code at various levels of granularity. Concrete profiles are being proposed in \cite{P3081R2}, \cite{P3038R0}, \cite{P3402R3}, and \cite{P3446R0}. Orthogonally to those papers, \cite{P3589R2} proposes a design for the Profiles framework.
+
+How Profiles will eventually fit into a larger, holistic strategy for removing UB from C++, such as the one we propose here, is a matter of ongoing debate, in part because there are still many open questions regarding the current Profiles-related proposals. However, we note that for the most part, Profiles seem to focus on specifying subsets of the language (Section~\ref{subsetting}), some form of replacement behaviour for UB (Section~\ref{erroneous}), or introducing runtime checks guarding against UB (Section~\ref{checks}).
+
+It therefore seems most logical to define Profiles as a higher-level feature building on top of these three basic tools (see Figure~\ref{magicslide}). Essentially, a particular profile can be completely defined as a named configuration preset for these features. 
+
+For example, we may define a subset of the language that excludes pointer arithmetics and a set of implicit run-time checks for array bounds checking. We can then define a ``bounds'' profile that enables both of these. Such profiles can be tailored to particular problem areas of the language, such as type, bounds, or arithmetic safety profiles, or to particular regulatory requirements, such as a MISRA profile.
+
+Specifying Profiles in this way will enable EWG to agree on a shared understanding of what Profiles are, guide their design, and answer the many open questions regarding what they should or should not be able to do.
 
 \section{Proposed design}
 \label{design}
@@ -640,6 +648,8 @@ pre (i < N) {
 
 Other than being an implicit precondition assertion automatically generated by the compiler, \tcode{pre (i < N)} behaves the same as an explicit precondition assertion. That is, the user has the same choice of four evaluation semantics (\emph{ignore}, \emph{observe}, \emph{enforce}, or \emph{quick-enforce}) to specify the desired behaviour depending on the tradeoffs that are most suitable for their application, and when an out-of-bounds access is detected and the semantic is \emph{observe} or \emph{enforce}, the same contract-violation handler is called that is used for explicit contract assertions.
 
+% TODO: add signed integer overflow example as in Sofia slides
+
 \subsection{Interaction with \tcode{noexcept}}
 
 Consider:
@@ -679,9 +689,6 @@ Finally, we do not propose a separate contract-violation handler for implicit co
 Now that we have a framework in place for specifying what an implicit contract assertion is and how it behaves, we can apply that specification to \emph{every} case of UB  that is --- at least in principle --- checkable at runtime, i.e., per Section~\ref{analysis}, 75 cases of UB, which is the vast majority of core language UB in C++ today.
 
 The required transformation is to change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``operation $X$ has an implicit precondition that $A$ is \tcode{true}; continuing execution past a violation of this precondition is undefined behaviour''.
-% TD: JMB, I really think that instead of repeating this "continuing execution... is UB" wording 79 times, it would be better to find a term for it. I again propose "non-continuable precondition". I am happy to use something else if you have a better idea.
-% JMB: I actually think we want to stick with what we have in the library --- a precondition violation means the operation has undefined behavior if actually evaluated.   We can call out the cases where an erroneous value is produced then by stating the fallback behavior (and in all other cases there is UB) ---  "if the precondition is violated, an erroneous value is produced", etc.
-% TD: Hm, I'm not sure I like this, it would effectively hide the fact that there is UB, or at least make it a lot less obvious in which cases there is UB and in which there isn't. Let's leave it as it is for now, and maybe we have a better idea of how to word this in a later revision.
 
 Note that we specify no restrictions on the evaluation semantics of any of these 79 newly introduced  implicit contract assertions. Since the choice of evaluation semantic is implementation-defined, each implementation can choose which evaluation semantics to offer for which one and which should be the default semantic. One possible implementation choice is to simply make all 79 cases always have the \emph{ignore} semantic, which makes all existing implementations of C++ already conforming with our proposal. Another possible choice is to say that  \emph{ignore} is the default, but other semantics are available. Yet another possible choice is to enable certain checks by default. All those choices are conforming with our proposal.
 

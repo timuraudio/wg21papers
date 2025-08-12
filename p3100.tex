@@ -680,61 +680,6 @@ void limiter(float* data, size_t size)
 \end{codeblock}
 To ensure language safety, the \emph{assume} semantic would be allowed only when the \mbox{\tcode{may_be_assumed}} label is present; further, a ``safe C++'' profile would make such a label ill-formed. Thus, contract assertions without the label would be no less ``safe'' than they are in C++26. Such a label would be a vast improvement over \tcode{[[assume]]} since it would allow for \emph{checkable} assumptions (see \cite{P2064R0} for context). At that stage, we will have achieved the integration between assertions and assumptions that we failed to achieve in the C++20 cycle, and the \tcode{[[assume]]} attribute --- a temporary solution that was introduced as a reaction to that failure --- can be deprecated.
 
-\section{Future extensions}
-\label{ext}
-
-We already briefly touched upon Labels in the previous section. In this section, we explore other exten\-sions that rely on Labels as proposed in \cite{P3400R1} and provide important additional functionality for implicit contract assertions that is not proposed in this paper.
-
-\subsection{Identifying the UB category}
-\label{idlabels}
-
-\cite{P3400R1} proposes the addition of \emph{identification labels} to contract assertions. These identification labels can be used to identify groups of contract assertions by name. For explicit contract assertions, we must introduce these identification labels manually; however, for implicit contract assertions, we can define and assign such identification labels directly in the C++ Standard (see \cite{P3400R1} Section 2.2.8). Such implicitly defined identification labels would make possible programmatically identifying, in the contract-violation handler, whether the violated implicit contract assertion  is related to an out-of-bounds issue, an arithmetic issue, and so forth; for example:
-
-\begin{codeblock}
-void handle_contract_violation(const std::contracts::contract_violation& violation)
-{
-  if (auto* bounds_label =
-      violation.getLabel<std::contracts::labels::bounds_label>()) {
-      // handle violation of assertion labelled with the bounds label
-  }
-}
-\end{codeblock} 
-
-% TD: This is actually a lot less readable than the previous `detection_mode` version:
-%
-% void handle_contract_violation(const std::contracts::contract_violation& violation)
-% {
-%   if (violation.detection_mode() == bounds) {
-%       // handle violation of assertion labelled with the bounds label
-%   }
-% }
-%
-% I understand why labels are more generic/flexible but it could be a hard sell since the end-user code tends to look ugly & verbose.
-
-Notably, the \cite{P3400R1} approach has an important advantage over using the \tcode{detection_mode} enum, as proposed in \cite{P3081R1} and in earlier versions of this paper: a single implicit contract assertion can belong to multiple groups. We identified cases of UB, such as \{expr.dynamic.cast.glvalue.lifetime\}, that are simultaneously type and lifetime issues.
-
-In addition, users (and, more importantly, libraries) can use such labels to annotate their own explicit contract assertions, enabling the same policies to guide handling of core language bounds violations and violations of higher-level functions. For example, the indexing operator of a user-defined container (such as the one shown in Section~\ref{defineicas}) can have an explicit precondition labelled to belong to the same Bounds category as bounds checks defined by the C++ Standard itself. The same identification labels can be defined for hardened preconditions in the C++ Standard Library.
-
-\subsection{Granular control of the evaluation semantic}
-\label{semantic}
-
-Another important feature enabled by Labels is the possibility to control and constrain the evaluation semantic in code. This possibility also extends to implicit contract assertions (see \cite{P3400R1} Section 2.2.8). Any possible label, such as ``always enforce'', ``never enforce'', and so on, can be applied to any group of implicit contract assertions at any granularity --- per file, per namespace, per function, per block, and so on:
-
-\begin{codeblock}
-int f(int a, int b) {
-  contract_assert implicit arithmetic |= always_enforce;
-  return a + b;
-}
-\end{codeblock}
-
-In addition to labels that specify or constrain the evaluation semantics directly, there are labels that give the user higher-level control of the evaluation semantics based on meaningful decisions, for example an ``audit'' label to identify expensive checks.
-
-Labels used in this way provide granular control when needed, allow the Standard to
-specify useful groupings of different sources of program defects, and give developers the freedom they
-need to control mitigations for those defects based on exactly the criteria needed for their environments.
-
-% TIMUR TODO: Mention Profiles conflict!
-
 \section{Proposed wording}
 \label{wording}
 
@@ -843,6 +788,65 @@ For an object with a non-trivial destructor, referring to any non-static member 
 \end{adjustwidth}
 
 Written-out wording for all 79 cases of UB checkable at runtime listed in \hyperref[appendix]{Appendix~A} can be provided in a future revision of this paper.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Future extensions}
+\label{ext}
+
+We already briefly touched upon Labels in the previous section. In this section, we explore other exten\-sions that rely on Labels as proposed in \cite{P3400R1} and provide important additional functionality for implicit contract assertions that is not proposed in this paper.
+
+\subsection{Identifying the UB category}
+\label{idlabels}
+
+\cite{P3400R1} proposes the addition of \emph{identification labels} to contract assertions. These identification labels can be used to identify groups of contract assertions by name. For explicit contract assertions, we must introduce these identification labels manually; however, for implicit contract assertions, we can define and assign such identification labels directly in the C++ Standard (see \cite{P3400R1} Section 2.2.8). Such implicitly defined identification labels would make possible programmatically identifying, in the contract-violation handler, whether the violated implicit contract assertion  is related to an out-of-bounds issue, an arithmetic issue, and so forth; for example:
+
+\begin{codeblock}
+void handle_contract_violation(const std::contracts::contract_violation& violation)
+{
+  if (auto* bounds_label =
+      violation.getLabel<std::contracts::labels::bounds_label>()) {
+      // handle violation of assertion labelled with the bounds label
+  }
+}
+\end{codeblock} 
+
+% TD: This is actually a lot less readable than the previous `detection_mode` version:
+%
+% void handle_contract_violation(const std::contracts::contract_violation& violation)
+% {
+%   if (violation.detection_mode() == bounds) {
+%       // handle violation of assertion labelled with the bounds label
+%   }
+% }
+%
+% I understand why labels are more generic/flexible but it could be a hard sell since the end-user code tends to look ugly & verbose.
+
+Notably, the \cite{P3400R1} approach has an important advantage over using the \tcode{detection_mode} enum, as proposed in \cite{P3081R1} and in earlier versions of this paper: a single implicit contract assertion can belong to multiple groups. We identified cases of UB, such as \{expr.dynamic.cast.glvalue.lifetime\}, that are simultaneously type and lifetime issues.
+
+In addition, users (and, more importantly, libraries) can use such labels to annotate their own explicit contract assertions, enabling the same policies to guide handling of core language bounds violations and violations of higher-level functions. For example, the indexing operator of a user-defined container (such as the one shown in Section~\ref{defineicas}) can have an explicit precondition labelled to belong to the same Bounds category as bounds checks defined by the C++ Standard itself. The same identification labels can be defined for hardened preconditions in the C++ Standard Library.
+
+\subsection{Granular control of the evaluation semantic}
+\label{semantic}
+
+Another important feature enabled by Labels is the possibility to control and constrain the evaluation semantic in code. This possibility also extends to implicit contract assertions (see \cite{P3400R1} Section 2.2.8). Any possible label, such as ``always enforce'', ``never enforce'', and so on, can be applied to any group of implicit contract assertions at any granularity --- per file, per namespace, per function, per block, and so on:
+
+\begin{codeblock}
+int f(int a, int b) {
+  contract_assert implicit arithmetic |= always_enforce;
+  return a + b;
+}
+\end{codeblock}
+
+In addition to labels that specify or constrain the evaluation semantics directly, there are labels that give the user higher-level control of the evaluation semantics based on meaningful decisions, for example an ``audit'' label to identify expensive checks.
+
+Labels used in this way provide granular control when needed, allow the Standard to
+specify useful groupings of different sources of program defects, and give developers the freedom they
+need to control mitigations for those defects based on exactly the criteria needed for their environments.
+
+% TIMUR TODO: Mention Profiles conflict!
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \addcontentsline{toc}{section}{Appendix: UB list}
 \section*{Appendix A: List of language UB}

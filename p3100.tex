@@ -600,7 +600,7 @@ For all these features, we need to clearly specify the available configuration o
 
 How Profiles will eventually fit into a larger, holistic strategy for removing UB from C++, such as the one we propose here, is a matter of ongoing debate, in part because there are still many open questions regarding the current Profiles-related proposals. However, we note that for the most part, Profiles seem to focus on specifying subsets of the language (Section~\ref{subsetting}), some form of replacement behaviour for UB (Section~\ref{erroneous}), or introducing runtime checks guarding against UB (Section~\ref{checks}).
 
-It therefore seems most logical to define Profiles as a higher-level feature building on top of these three basic tools (see Figure~\ref{magicslide}). Essentially, a particular profile can be completely defined as a named configuration preset for these features. 
+It therefore seems most logical to define Profiles as a higher-level feature building on top of these three basic tools (see Figure~\ref{fig_magicslide}). Essentially, a particular profile can be completely defined as a named configuration preset for these features. 
 
 For example, we may define a subset of the language that excludes pointer arithmetics and a set of implicit run-time checks for array bounds checking. We can then define a ``bounds'' profile that enables both of these. Such profiles can be tailored to particular problem areas of the language, such as type, bounds, or arithmetic safety profiles, or to particular regulatory requirements, such as a MISRA profile.
 

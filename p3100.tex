@@ -85,7 +85,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
-\title{Implicit contract assertions}
+\title{A framework for systematically addressing \\ undefined behaviour in the C++ Standard} 
 \author{ Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) 
 \\ Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net})  
 }
@@ -100,9 +100,17 @@ Audience: & EWG
 \end{tabular}
 
 \begin{abstract}
-In this paper, we enumerate all cases of core language undefined behaviour explicitly specified in C++,  group them into ten categories, classify them along a number of relevant criteria, and discuss appropriate mitigation strategies. The conditions under which such undefined behaviour will occur can, in many cases, be identified by a runtime check. We describe how such runtime checks can be systematically introduced via \emph{implicit contract assertions}, giving users complete control over what impact that undefined behaviour has on their programs. In addition to runtime checking, we introduce well-defined fallback behaviour to replace undefined behaviour wherever possible. Building on Contracts as adopted for C++26, we provide a generic framework that can be incorporated into the ongoing core language UB white paper \cite{P3656R1}, fundamentally changing the landscape of how undefined behaviour is approached in C++.
+In this paper, we enumerate all cases of core language undefined behaviour explicitly specified in the C++ Standard,  group them into ten categories, and classify them along a number of relevant criteria.
+
+We then present a holistic strategy for systematically detecting, mitigating, and ultimately eliminating such undefined behaviour from the C++ Standard. This strategy is built on top of seven basic tools: refined behaviour, erroneous behaviour, insertion of runtime checks, feature removal, language subsetting, the introduction of annotations, and the introduction of entirely new language features. We discuss which tools are applicable to which cases of core language undefined behaviour.
+
+We find that two of these tools --- erroneous behaviour and runtime checks --- are applicable to a wide range of existing cases and do not require any source changes. We describe how runtime
+checks can be systematically introduced via \emph{implicit contract assertions}, giving users complete
+control over what impact that undefined behaviour has on their programs. In addition to runtime
+checking, we replace undefined behaviour with erroneous, but well-defined behaviour that allows the program to continue execution past a violated implicit contract assertion wherever possible.
+
+Building on Contracts as adopted for C++26, we provide a generic framework for applying these two techniques across the \emph{entire} C++ language specification, fundamentally changing the landscape of how undefined behaviour is approached in C++.
 \end{abstract}
-% TIMUR TODO: REWORK ABSTRACT CONSIDERING SOFIA MAGIC SLIDE
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -126,29 +134,25 @@ In this paper, we enumerate all cases of core language undefined behaviour expli
 \section{Introduction}
 \label{intro}
 
-\subsection{Motivation and context}
-
 Eliminating or at least meaningfully reducing the amount of \emph{undefined behaviour} (UB) is an important objective for the future evolution of C++. WG21 has been continuously working in that direction. For a recent status update, see \cite{Sutter2025} and references therein; for background, see \cite{Sutter2024} and references therein.
 
 At WG21's February 2025 meeting in Hagenberg, EWG agreed on a ship vehicle for a systematic
-treatment of core language UB in C++: the pursuit of a core language UB \emph{white paper} \cite{P3656R1} in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts.
+treatment of core language UB in C++: the pursuit of a \emph{core language UB white paper} \cite{P3656R1} in the C++26 timeframe, covering erroneous behaviour (EB), Profiles, and Contracts. The proposed process involves starting with an empty white paper working draft and then iteratively get EWG approval for papers to be adopted into that working draft.
 
-The goal of this paper is to make a significant contribution to the major work items proposed by \cite{P3656R1}:  to enumerate and group all language UB in C++, to identify which tools can be used to mitigate each case, and to propose a concrete design for a framework to specify and implement such mitigation. At WG21's June 2025 meeting in Sofia, EWG reviewed revision R2 of this paper and agreed to merge it into the core language UB white paper.
+This paper directly addresses the major work items proposed by \cite{P3656R1}. At WG21's June 2025 meeting in Sofia, EWG reviewed revision R2 of this paper and approved its adoption into the core language UB white paper working draft. 
 
-The present revision of this paper ties in with \cite{P3754R0}, the presentation we gave to EWG in Sofia. In that presentation, we identified six low-level tools for removing UB from the C++ language: \emph{refined behaviour}, \emph{erroneous behaviour}, \emph{runtime checks}, \emph{language subsetting}, \emph{annotations}, and \emph{new features}. EWG approved this ``six pillar'' model and voted to make it the foundation of the core language UB white paper. This paper focuses on the first three pillars: refined behaviour, erroneous behaviour, and runtime checks. These three tools are distinguished from the other three by being applicable to \emph{legacy code}, that is, they can be used to remove UB from an existing C++ program without source changes. 
+In Section~\ref{analysis}, we identify and enumerate all core language UB explicitly specified in the current C++ working paper \cite{N5008}. We group all core language UB into ten categories. We then classify cases of UB along several relevant criteria, such as whether they are locally diagnosable, how expensive that diagnosis is, and in which cases the UB can be replaced with meaningful, well-defined behaviour.
 
-\subsection{Outline}
+In Section~\ref{mitigation}, we present a holistic strategy for systematically detecting, mitigating, and ultimately removing UB across the entire C++ programming language specification. The present revision of this paper incorporates the presentation \cite{P3754R0} we gave to EWG in Sofia outlining this strategy. It also includes an updated version of the diagram on slide 53 from that presentation (a.k.a. the ``magic slide'') visualising this strategy. EWG agreed in Sofia to use this diagram as a basis for the core language UB white paper.
 
-In Section~\ref{analysis}, we identify and enumerate all core language UB explicitly specified in the C++ Standard. We group all core language UB into ten categories. We then classify cases of UB along several relevant criteria: whether they are locally diagnosable, how expensive that diagnosis is, and for which cases we can replace the UB with meaningful, well-defined behaviour.
+The proposed strategy is composed of seven basic tools: refined behaviour, erroneous behaviour, insertion of runtime checks, feature removal, language subsetting, the introduction of annotations, and the introduction of entirely new language features. We use the results of the analysis in Section~\ref{analysis} to take a first pass at identifying which tools would be applicable to which cases of UB. We find that the conditions under which UB will occur can, in many cases, be identified by a runtime check. In addition, there is a significant number of cases where UB can be replaced by well-defined erroneous behaviour following a failed check. These two techniques are applicable to a wide range of existing cases of UB and, importantly, do not require any source changes.
 
-In Section~\ref{mitigation}, we discuss available mitigation strategies and tools. We use the results of the above analysis to take a first pass at identifying which tools would be applicable to which cases of UB. We find that the combination of introducing implicit runtime checks and introducing well-defined erroneous behaviour following a failed check covers a large amount of cases.
+In Section~\ref{design}, we present a generic framework for applying these two techniques across the entire C++ language. The proposed design has been reviewed and approved by SG21, SG23, and EWG. We describe how runtime checks can be systematically introduced via \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14} and giving users complete control over what impact that undefined behaviour has on their programs. In addition to runtime checking, we replace UB by erroneous, but well-defined behaviour that allows the program to continue execution past a violated implicit contract assertion wherever possible. We also propose an escape hatch to mitigate the runtime cost of such well-defined replacement behaviour and avoid performance regressions in existing C++ programs.
 
-In Section~\ref{design}, we present a concrete design that implements these two strategies across the entire C++ language. We systematically introduce runtime checks to C++ via  \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14}. We describe how implicit contract assertions should be specified and how to apply them to all appropriate cases of core language UB. For cases of UB where well-defined fallback behaviour exists, we discuss how specifying it allows the program to continue execution past a violated implicit contract assertion without UB. We conclude by proposing an escape hatch to mitigate the runtime cost of such fallback behaviour and avoid performance regressions.
+In Section~\ref{wording}, we propose wording for approval into the core language UB white paper \cite{P3656R1} that implements the framework presented in Section~\ref{design}.
 
-In Section~\ref{ext}, we discuss how future extensions, such as Labels \cite{P3400R1},
+Finally, in Section~\ref{ext}, we discuss how future extensions, such as Labels \cite{P3400R1},
 will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions.
-
-Finally, in Section~\ref{wording}, we propose wording for approval into the core language UB white paper \cite{P3656R1} that implements the design discussed in Section~\ref{design}.
 
 \section{Analysis}
 \label{analysis}
@@ -159,9 +163,9 @@ Finally, in Section~\ref{wording}, we propose wording for approval into the core
 
 We manually inspected all occurrences of the word ``undefined'' in the current C++ working paper \cite{N5008}. We then constructed a list of all cases of explicitly specified core language UB. Our list contains 81 cases of explicit language UB and can be found in \hyperref[appendix]{Appendix~A} of this paper. 
 
-Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ Standard's clause identifiers, which we place between [square brackets]. 
+Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ working paper's clause identifiers, which we place between [square brackets]. 
 
-There is currently an open pull request against the C++ Standard document that proposes to add these identifiers directly to the C++ Standard document alongside a new appendix to that document enumerating all cases of UB and providing explanation and code examples. This pull request and the stable identifiers used therein are fully consistent with \hyperref[appendix]{Appendix~A} of this paper. 
+There is currently an open pull request against the C++ working paper that proposes to add these identifiers directly to the C++ working paper alongside a new appendix to that document enumerating all cases of UB and providing explanation and code examples. This pull request and the stable identifiers used therein are fully consistent with \hyperref[appendix]{Appendix~A} of this paper. 
 
 Originally, we constructed our list independently from another effort to enumerate core language UB led by Shafik Yaghmour (see \cite{P1705R1}, \cite{P3075R0}). The current list in \hyperref[appendix]{Appendix~A} and in the pull request mentioned above represents a merger of the lists produced by both efforts, further increasing confidence that we in fact exhaustively covered all core language UB explicitly specified in the current C++ working paper.
 
@@ -169,26 +173,26 @@ Originally, we constructed our list independently from another effort to enumera
 
 The granularity of our enumeration --- i.e., when a piece of core language specification is considered a distinct case of UB --- is somewhat arbitrary. As a general rule, we consider a single sentence in the C++ working paper specifying that a core language operation has UB to be one such case; if such a sentence contains a bulleted list with several cases (e.g., [basic.life]/7), we consider each bullet to be a separate case.
 
-We could consider dividing up the cases of UB in different ways and with greater granularity. In particular, we could more closely align the enumeration with possible mitigation strategies, rather than with the textual appearance of the word ``undefined'' in the C++ working paper.
+We could consider dividing up the cases of UB in different ways and with greater granularity. In particular, we could more closely align the enumeration with possible mitigation strategies, rather than with the lexical appearance of the word ``undefined'' in the C++ working paper.
 
-For example, for [basic.life]/7, instead of considering each bullet to be one case of UB, we could consider each different way in which a pointer can be invalid (lifetime of the object not started yet, lifetime of the object ended already, pointer is null, etc.) to be one case of UB.
+For example, for [basic.life]/7, instead of considering each bullet to be a separate case of UB, we could consider each different way in which a pointer can be invalid (lifetime of the object not started yet, lifetime of the object ended already, pointer is null, etc.) to be a separate case of UB.
 
-As another example, we could consider flowing off the end of an assignment operator (which has a proposed mitigation, see \cite{P2973R0}), flowing off the end of a function that returns a built-in type (which could be mitigated via returning an erroneous value, see Section~\ref{fallback}), and flowing off the end of any other non-\tcode{main} function that returns a non-\tcode{void} type as three distinct cases, rather than considering flowing off the end of a function ([stmt.return]/4) as a single case.
+As another example, instead of considering flowing off the end of a function ([stmt.return]/4) as a single case of UB, we could introduce separate cases for flowing off the end of an assignment operator (which has a proposed mitigation, see \cite{P2973R0}), flowing off the end of a function that returns a built-in type (which could be mitigated via returning an erroneous value, see Section~\ref{fallback}), and flowing off the end of any other non-\tcode{main} function that returns a non-\tcode{void} type.
 
-However, such alternative strategies would make the enumeration more difficult to map to existing wording, which in turn would make it more difficult to track changes and reason about whether the enumeration is exhaustive. Further, keeping the enumeration of cases of UB separate from the enumeration of possible mitigation strategies reduces interdependencies and complexity. Instead, whenever a mitigation strategy does not fully align with a case of UB, we point this out explicitly (for example, inserting an implicit null pointer check is considered only a \emph{partial} mitigation for dereferencing an invalid pointer).
+However, such alternative approaches would make the enumeration more difficult to map to existing wording, which in turn would make it more difficult to track changes and reason about whether the enumeration is exhaustive. Further, keeping the enumeration of cases of UB separate from the enumeration of possible mitigation strategies reduces interdependencies and complexity. Instead, whenever a mitigation strategy does not fully align with a case of UB, we point this out explicitly (for example, inserting an implicit null pointer check is considered only a \emph{partial} mitigation for dereferencing an invalid pointer).
 
 \subsubsection{Scope}
 
-In this paper, we consider only explicit UB, not implicit UB --- that is, UB that exists by omission because the C++ Standard document failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core issues, and then subsequently become explicit UB that can be addressed  via the framework proposed here. Importantly, while explicit UB can be enumerated exhaustively, and we do so in \hyperref[appendix]{Appendix~A} of this paper, with implicit UB this is impossible in principle as we can never be sure we found all such wording bugs.
+In this paper, we consider only explicit UB, not implicit UB --- that is, UB that exists by omission because the C++ working paper failed to specify the behaviour of a well-formed operation. We consider all cases of implicit UB that may be discovered in the future to be wording bugs that should be addressed via Core issues, and then subsequently become explicit UB that can be addressed  via the framework proposed here. Importantly, while explicit UB can be enumerated exhaustively, and we do so in \hyperref[appendix]{Appendix~A} of this paper, enumerating all implicit UB is impossible in principle as we can never be sure we found all wording bugs in the C++ working paper.
 
 Further, in this paper we consider only \emph{runtime} UB, not compile-time or link-time issues. We therefore exclude all cases of IFNDR from our analysis: although the effects of IFNDR can manifest at runtime, whether a program is IFNDR is (unlike UB) fundamentally not a run-time property.
-We also exclude the case of infinite recursion during template instantiation, the result of which is currently specified as undefined. The current wording\footnote{[temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined.} can be interpreted to mean that such infinite recursion could cause runtime UB; however, such an interpretation makes little sense as failure during template instantiation is fundamentally a compile-time issue. We therefore consider this case a wording bug rather than an instance of UB; it is being addressed by a Core issue \cite{CWG3034}.
+We also exclude the case of infinite recursion during template instantiation. The current wording\footnote{[temp.inst]/16: There is an implementation-defined quantity that specifies the limit on the total depth of recursive instantiations ([implimits]), which could involve more than one template. The result of an infinite recursion in instantiation is undefined.} for this case can be interpreted to mean that such infinite recursion could cause runtime UB; however, this interpretation makes little sense as failure during template instantiation is fundamentally a compile-time issue. We therefore consider this case a wording bug rather than an instance of UB; it is currently being addressed by Core issue \cite{CWG3034}.
 
-Finally, we exclude \emph{library undefined behaviour} since the natural mitigation approach for it is to make use of contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) in library implementations and, where sensible, mandate such assertions through library hardening \cite{P3471R4}, both of which are out of scope for this paper. We, therefore, consider only UB that is specified in the core language part of the C++ Standard (Clauses 1--15). Further, we found one case of UB that is specified in the core language part of \cite{N5008} but actually represents a precondition on Standard Library functions;\footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
+Finally, we exclude \emph{library undefined behaviour}. The natural mitigation approach for library UB is to make use of contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}) in library implementations and, where sensible, mandate such assertions through library hardening \cite{P3471R4}, both of which are out of scope for this paper. We, therefore, consider only UB that is specified in the core language part of the C++ working paper (Clauses 1--15). Further, we found one case of UB that is specified in the core language part of \cite{N5008} but actually represents a precondition on Standard Library functions;\footnote{[basic.start.term]/6: If there is a use of a standard library object or function not permitted within signal handlers ([support.runtime]) that does not happen before ([intro.multithread]) completion of destruction of objects with static storage duration and execution of \tcode{std::atexit} registered functions ([support.start.term]), the program has undefined behavior.}
 that case is, therefore, also excluded from our list.
 
 
-\subsection{Grouping}
+\subsection{Classification}
 
 
 \subsubsection{Categories}
@@ -196,7 +200,7 @@ that case is, therefore, also excluded from our list.
 
 We found that all identified cases of core language UB can be broadly classified into ten categories:
 
-\begin{figure}[tb]
+\begin{figure}[b]
     \centering
     \begin{tikzpicture}
         \pie[text=legend, 
@@ -241,7 +245,7 @@ Remarkably, these three categories related to memory safety account for 58 cases
 
 The next two categories, Arithmetic and Threading, correspond to the common terms \emph{arithmetic safety} and \emph{thread safety}, respectively; the latter contains only one case of UB, data races.
 
-The following category, Sequencing, also contains just one case of UB: unsequenced operations, such as \mbox{\tcode{i++ + ++i}}. Grouping UB due to data races and unsequenced operations into two separate categories might seem surprising at first since they have a very similar same shape (except that one is inter-thread and the other is intra-thread), but as we will see in Section~\ref{mitigation}, these two categories actually require very different approaches to mitigation.
+The following category, Sequencing, also contains just one case of UB: unsequenced operations, such as \mbox{\tcode{i++ + ++i}}. Classifying UB due to data races and unsequenced operations into two separate categories might seem surprising at first since they have a very similar same shape (except that one is inter-thread and the other is intra-thread), but as we will see in Section~\ref{mitigation}, these two categories actually require very different approaches to mitigation.
 
 The next category, Assumptions, also contains just one case of UB: reaching an \tcode{[[assume]]} declaration whose operand would not evaluate to \tcode{true}. As we will see later, this case of UB is of a different nature than the others and warrants its own category.
 
@@ -253,12 +257,21 @@ The final three categories (Control Flow, Replacement Functions, and Coroutines)
 
 Other cases of UB are not commonly exploited by malicious attackers to our knowledge. Nevertheless, some of these cases, for example those in categories Arithmetic and Threading, are a common source of program defects that do sizeable damage to existing software.
 
-In principle, with aggressive optimising compilers any form of UB can lead to unpredictable defects and vulnerabilities. Mitigating cases of UB currently considered to be the most critical security concern will simply remove the easiest routes of attack from the table, and any UB not yet addressed may become the new major candidate for attackers to leverage for nefarious purposes.  Therefore, prioritising implementation based on current trends amongst malicious actors, though helpful, should not be used to limit the scope of our work on improving the C++ Standard (see \cite{Sutter2024}, \cite{P3500R1}, and \cite{P3578R0}).
+In principle, with aggressive optimising compilers any form of UB can lead to unpredictable defects and vulnerabilities. Mitigating cases of UB currently considered to be the most critical security concern will simply remove the easiest routes of attack from the table, and any UB not yet addressed may become the new major candidate for attackers to leverage for nefarious purposes.  Therefore, prioritising implementation based on current trends amongst malicious actors, though helpful, should not be used to limit the scope of our work on improving the C++ language specification (see \cite{Sutter2024}, \cite{P3500R1}, and \cite{P3578R0}).
 
-\subsubsection{Locality of runtime diagnosis}
+\subsection{Diagnosability} 
+
+The second question \cite{P3656R1} asks is which cases of UB are ``efficiently locally diagnosable''. In this paper, we split this question into three separate questions: whether diagnosis can happen statically or whether it needs to happen dynamically (i.e., at runtime), whether such diagnosis can be performed locally, and the runtime cost of such diagnosis (whether performed locally or not).
+
+\subsubsection{Static vs. dynamic diagnosis}
+\label{statically}
+
+TODO
+
+\subsubsection{Locality of diagnosis}
 \label{locally}
 
-The second question \cite{P3656R1} asks is which cases of UB are ``efficiently locally diagnosable''. We split this question into two separate questions: which cases of UB are locally diagnosable in principle (this subsection), and the estimated cost of that diagnosis (next subsection).
+% TIMUR TODO: Say what we actually mean by this!
 
 Most cases of UB in the security-critical Initialisation, Bounds, and Type and Lifetime categories are, in general, \emph{not} locally diagnosable.  In the Bounds category, 
 \{expr.add.out.of.bounds\} 
@@ -287,7 +300,7 @@ Finally, all cases of UB in the Coroutine category are not locally diagnosable s
 
 Overall, only 18 cases of UB (22.2\% of all cases) are unconditionally locally diagnosable.
 
-\subsubsection{Cost of runtime diagnosis}
+\subsubsection{Cost of diagnosis}
 \label{cost}
 
 Considering locally diagnosable and not locally diagnosable cases of UB separately is useful to estimate the cost of diagnosis. In this paper, we study the theoretical, relative cost based on the current specification of the C++ language. We do not, however, measure the actual cost of diagnosis in real implementations (sanitisers, compiler options for hardening etc.) or present benchmarks in this paper; such studies are left for future work.
@@ -346,26 +359,33 @@ As we know from existing sanitisers, such instrumentation is expensive enough th
 
 Given the substantial overhead of such instrumentation in both runtime cost and additional memory consumption, the cost of the actual checks themselves (whether a specific pointer is valid at a specific time, etc.) is not particularly important for non-local diagnosis because the performance penalty would be dominated by the instrumentation overhead.
 
-\subsubsection{Existence of well-defined fallback behaviour}
+% TIMUR TODO: Possibly rename this section and get rid of "fallback" terminology
+\subsection{Existence of well-defined replacement behaviour}
 \label{fallback}
 
-If we want to turn UB into well-defined behaviour, a useful question is whether any well-defined behaviour actually exists that the affected operation could be defined to have instead of UB in the presence of a bug. Here, we call such well-defined behaviour \emph{fallback behaviour}. 
+For existing code that cannot be modified in-source, removing runtime UB from the C++ language is essentially equivalent to changing the specification of operations that can have runtime UB to have some form of well-defined behaviour instead. A useful question is therefore: for which cases of UB is it possible to specify such well-defined \emph{replacement behaviour}?
 
-We could also use the term \emph{erroneous behaviour} (EB), which is conceptually the same thing. However, since the approval of \cite{P2795R5} for C++26, EB has very specific semantics. Here, we are considering the wider concept of introducing new well-defined behaviour for error cases, rather than the exact semantics that EB has in C++26, so we use a different term for now. % TIMUR TODO RETHINK THIS! COULD BE CONFUSING. Distinguish between correct and erroneous. Say we want only correct if it won't mask bugs; refer to papers with discussion that we already had for initialising.
+For the purposes of this analysis, we need to be careful with delineating what exactly we mean by replacement behaviour. If it is possible to insert a runtime check guarding a particular case of UB (e.g., a bounds check, a null pointer check), we can specify well-defined behaviour for the case when this check fails (e.g., terminate the program, throw an exception) which guarantees that we never actually execute the operation that would have runtime UB, thus avoiding it. However, regardless of the existence of that check, there are also cases where we can give well-defined behaviour to the operation itself, such that continuing to evaluate that operation does not lead to runtime UB even in the case where there is a bug that would cause UB with the current language specification. This is precisely what we mean by giving an operation replacement behaviour.
 
-Note that we are not counting program termination (even though this also well-defined behaviour) as fallback behaviour. Rather, we only consider behaviour that would allow the program to continue to be true fallback behaviour; termination is instead modelled via the \emph{enforce} and \emph{quick-enforce} semantics.
+% TIMUR TODO: MOVE THIS INTO MITIGATION SECTION
+Such replacement behaviour comes in two flavours:
 
-For fallback behaviour to happen, the compiler must supply the necessary instructions. However, in the vast majority of cases, core language UB is fundamentally \emph{not} diagnosable at compile time (see Section~\ref{locally}); i.e., whether or not the UB will occur depends on runtime parameters. Fallback behaviour \emph{cannot}, therefore, depend on knowing that an error occurred. For non-locally-diagnosable UB, fallback behaviour also cannot depend on any additional instrumentation being present.
+\begin{itemize}
+\item \textbf{Refined behaviour}: we change the specification of the operation in such a way that UB is replaced by well-defined behaviour that is henceforth considered a correct use of the feature in question, i.e., it is no longer a bug to execute that operation under those conditions. An example of introducing such refined behaviour is the range-based for loop fix \cite{P2644R1} for C++23 that extends the lifetime of certain temporary objects across the duration of executing the loop, thus avoiding UB due to dangling references.
+\item \textbf{Erroneous behaviour} (EB): we change the specification of the operation in such a way that UB is replaced by well-defined behaviour, but that well-defined behaviour is still considered \emph{incorrect}, i.e., it is still a bug to execute that operation under those conditions. The purpose of introducing erroneous behaviour is not to remove the bug, but to place a limit on the program behaviour in the face of the bug and in particular to prevent the bug from creating a security vulnerability. We already approved one instance of EB for C++26:  reading a default-initialized automatic variable of arithmetic type no longer causes UB, but instead produces an erroneous value (\cite{P2795R5}).
+\end{itemize}
 
-For this paper, we systematically identified all cases of core language UB for which such fallback behaviour exists. This section gives an overview; the full list can be found in \hyperref[appendix]{Appendix~A}. As we will see, for most cases of UB, fallback behaviour does not exist, and if it does, it is often not cheap.
+For either type of replacement behaviour to actually happen, the compiler must be able to lay down the necessary instructions. However, in the vast majority of cases, core language UB is fundamentally \emph{not} diagnosable at compile time (see Section~\ref{statically}); i.e., whether or not the UB will occur depends on runtime parameters. Fallback behaviour \emph{cannot}, therefore, depend on knowing that an error occurred. For non-locally-diagnosable UB, fallback behaviour also cannot depend on any additional instrumentation being present.
 
-For UB in the Initialization category (\{basic.indet.value\}), fallback behaviour is sometimes possible for built-in types: return an erroneous value instead. For variables with automatic storage duration, this fallback behaviour is already part of C++26 as EB via \cite{P2795R5} because for this case, the fallback behaviour is particularly cheap. The same fallback behaviour could also be employed for dynamically allocated variables but at greater cost (see \cite{P2723R1} Section 6 for discussion).
+For this paper, we systematically identified all cases of core language UB for which either form of replacement behaviour can be meaningfully defined. This section gives an overview; the full list can be found in \hyperref[appendix]{Appendix~A}. As we will see, for most cases of UB, replacement behaviour does not exist, and if it does, it is often not cheap.
 
-Producing an erroneous value (instead of, for example, the value that happened to be in memory where an object was incorrectly presumed to have been initialized) requires having a point in time where a fallback value can be unconditionally placed in memory, such as when passing the declaration of an automatic variable.
+For UB in the Initialization category (\{basic.indet.value\}), replacement behaviour is sometimes possible for built-in types: an operation that would currently return an indeterminate value can be specified to return \emph{some} value instead. The most meaningful option is to make it return an erroneous value. For variables with automatic storage duration, this replacement behaviour is already part of C++26 as EB via \cite{P2795R5} because for this case, the replacement behaviour is particularly cheap. The same  behaviour could also be employed for dynamically allocated variables but at greater cost (see \cite{P2723R1} Section 6 for discussion).
 
-Further, for user-defined types, this fallback behaviour is not applicable in general. Even if we could zero out all the underlying storage for user-defined types (or overwrite it with some other known bit pattern), doing so does not always produce, for that type, a valid value that can be accessed without UB. (Consider a user-defined type that relies on a member pointer always being dereferenceable.) Therefore, \{basic.indet.value\} does not have fallback behaviour for the general case.
+However, producing an erroneous value (instead of, for example, the value that happened to be in memory where an object was incorrectly presumed to have been initialized) requires having a point in time where a fallback value can be unconditionally placed in memory, such as when passing the declaration of an automatic variable; there are cases where such a point cannot be determined.
 
-Practically \emph{none} of the UB in the categories of Bounds and Type and Lifetime has fallback behaviour. The only exception is \{conv.lval.valid.representation\}: if the bits in the value representation of an object of built-in type are not valid for that type, the compiler could instead coerce the value into an erroneous value.\footnote{This property of \{conv.lval.valid.representation\} is a potential argument for placing this case of UB into the Arithmetic category instead of the Type and Lifetime category as we did here.} For example, in the code example given in the C++ Standard,
+Further, we cannot in general define replacement behaviour for uninitialised variables of user-defined type. Even if we could zero out all the underlying storage for user-defined types (or overwrite it with some other known bit pattern), doing so does not always produce, for that type, a valid value that can be accessed without UB. (Consider a user-defined type that relies on a member pointer always being dereferenceable.) Therefore, \{basic.indet.value\} does not have replacement behaviour for the general case.
+
+Practically \emph{none} of the UB in the categories of Bounds and Type and Lifetime have any plausible replacement behaviour. The only exception is \{conv.lval.valid.representation\}: if the bits in the value representation of an object of built-in type are not valid for that type, the compiler could instead coerce the value into an erroneous value.\footnote{This property of \{conv.lval.valid.representation\} is a potential argument for placing this case of UB into the Arithmetic category instead of the Type and Lifetime category as we did here.} For example, in the code example given in the C++ working paper,
 
 \begin{codeblock}
 bool f() {
@@ -378,22 +398,80 @@ bool f() {
 
 the UB could be replaced by well-defined behaviour by appropriately bit-masking every accessed \tcode{bool} value (and considering the result erroneous if the bit-mask operation changed the value). Similar mitigations could be put in place for other built-in types since the space of allowed bit representations for values of those types, for the targeted platform, are known to the compiler. The caveat is that such mitigations would potentially incur a significant performance overhead on many simple operations that involve built-in types.
 
-All UB in the Arithmetic category has the same possible fallback behaviour: if an arithmetic operation would produce an inappropriate value, it can be coerced into an erroneous value instead, at the cost of incurring significant performance overhead on common arithmetic operations.
+All UB in the Arithmetic category has the same possible replacement behaviour: if an arithmetic operation would produce an inappropriate value, it can be coerced into some other value instead. We could contemplate refined behaviour in the form of a concrete value (e.g., saturate or wraparound for signed integer overflow, choose the closest valid value for invalid conversions) or erroneous behaviour in the form of an erroneous value being produced. In either case, such replacement behaviour will incur significant performance overhead on common arithmetic operations.
 
 Defining fallback behaviour for UB in the Threading category (\{intro.races.data\}) is in principle possible: we could make all primitive memory accesses implicitly atomic, as in the Java memory model. The overhead incurred by such a model will heavily depend on the memory model of the underlying hardware; on weakly-ordered platforms, such as ARM,
 it will be larger than on strongly-ordered platforms such as x86. Note that while such fallback behaviour is well-defined, it still fails to prevent many real bugs that result from incorrect application of concurrency since user-defined types with multiple members can still be easily observed with inconsistent (``torn'') states if no proper synchronisation is performed.
 
-The fallback behaviour for UB in the Sequencing category (\{intro.execution.unsequenced.modifica\-tion\})
-is much more straightforward: we can simply define that the unsequenced operations happen in some unspecified order. This fallback behaviour can still have performance overhead in the form of losing  optimisation opportunities, but such overhead will likely be manageable. 
+The replacement behaviour for UB in the Sequencing category (\{intro.execution.unsequenced.modifica\-tion\}) is much more straightforward: we can define that the unsequenced operations happen in some unspecified order. This behaviour can still have performance overhead in the form of losing  optimisation opportunities, but such overhead will likely be manageable. 
 
-The fallback behaviour for UB in the Assumption category (\{dcl.attr.assume.false\}) is trivial: just ignore the assumption, instead of optimising based on it. The performance overhead is limited to losing any optimisation opportunities from placing the assumption there. Of course, this mitigation makes the assumption itself completely useless. We will discuss this case in more detail in Section~\ref{assume}.
+The replacement behaviour for UB in the Assumption category (\{dcl.attr.assume.false\}) is trivial: just ignore the assumption, instead of optimising based on it. The performance overhead is limited to losing any optimisation opportunities from placing the assumption there. Of course, this mitigation makes the assumption itself completely useless. We will discuss this case in more detail in Section~\ref{assume}.
 
-Finally, we can define partial fallback behaviour for two cases of UB in the Control Flow category  (\{stmt.return.flow.off\} and \{stmt.return.coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is analogous to \{basic.indet.value\}; again, no fallback behaviour exists for user-defined return types in the general case.
+Finally, we can define partial replacement behaviour for two cases of UB in the Control Flow category  (\{stmt.return.flow.off\} and \{stmt.return.coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is analogous to \{basic.indet.value\}; again, no fallback behaviour exists for user-defined return types in the general case.
 
-Overall, we can define meaningful well-defined fallback behaviour for only 16 cases of UB (20\% of all cases), and for 3 out of those 16 cases, this is only possible in certain cases (when the operation in question produces a value of built-in type).
+Overall, we can define meaningful replacement behaviour for only 16 cases of UB (19.8\% of all cases). In addition, in 3 cases, this is only possible when the operation in question produces a value of built-in type; unconditional replacement behaviour exists for only 13 cases of UB (16.0\% of all cases).
 
 \section{Mitigation strategies}
 \label{mitigation}
+
+\subsection{The basic tools}
+
+Considering the entire breadth of proposals to address core language UB in C++, we can identify seven basic specification tools that can be useful in some situations:
+
+\begin{itemize}
+\item Feature removal
+\item Refined behaviour
+\item Language subsetting
+\item Erroneous behaviour
+\item Runtime checks
+\item Annotations
+\item Feature addition
+\end{itemize}
+
+Below we take a closer look at each tool and identify for which cases of UB that tool might be suitable.
+
+% TD: talk about this being only within the abstract machine. Here?
+
+
+\subsubsection{Refined behaviour}
+
+TODO
+
+
+\subsubsection{Erroneous behaviour}
+
+TODO
+
+% TIMUR TODO: explain below that the assume semantic actually shifts the configurability over to the runtime check. But that doesn't need to be reflected in the diagram
+
+\subsubsection{Runtime checks}
+
+TODO
+
+\subsubsection{Feature removal}
+
+TODO
+
+\subsubsection{Language subsetting}
+
+TODO
+
+
+\subsubsection{Annotations}
+
+TODO
+
+\subsubsection{New features}
+
+TODO
+
+\subsection{The role of Profiles}
+
+TODO
+
+% TIMUR TODO: Put this somewhere here, this is from the replacement behaviour section
+%Since refined behaviour is part of the specification of correct, conforming C++ programs, it needs to be specified very precisely and applied unconditionally in order to avoid introducing language dialects. Conversely, EB only occurs in incorrect programs, and can therefore be specified more vaguely and be made configurable.
+ % OLD
 
 In this section, we attempt to systematically identify, at a very high level, candidate mitigation strategies for all cases of core language UB.
 % TIMUR TODO: This isn't really accurate anymore, we only deal with a subset here, three out of six tools
@@ -625,6 +703,8 @@ In addition to labels that specify or constrain the evaluation semantics directl
 Labels used in this way provide granular control when needed, allow the Standard to
 specify useful groupings of different sources of program defects, and give developers the freedom they
 need to control mitigations for those defects based on exactly the criteria needed for their environments.
+
+% TIMUR TODO: Mention Profiles conflict!
 
 \section{Proposed wording}
 \label{wording}
@@ -912,7 +992,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{V. Threading}} 
 \\ \hline
 
-\ubxref{intro.races.data} & \raggedright[intro.races]/17: Any such data race results in undefined behavior. & Yes & No & \raggedright Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & \raggedright Make all primitive memory accesses implicitly atomic
+\ubxref{intro.races.data} & \raggedright[intro.races]/17: Any such data race results in undefined behavior. & Partially & No & \raggedright Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & \raggedright Make all primitive memory accesses implicitly atomic
 \tabularnewline \hline
 \pagebreak
 
@@ -926,7 +1006,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{VII. Assumptions}} 
 \\ \hline
 
-\ubxref{dcl.attr.assume.false} & \raggedright[dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime undefined behavior. & No & --- & \raggedright No automatic checking strategy is possible because the predicate cannot be, in general, proven to be free of side effects; instead, the user has to change \tcode{[[assume(x)]]} to \mbox{\tcode{contract_assert<may_be_assumed>(x)}} and select an appropriate evaluation semantic & \raggedright Ignore the assumption
+\ubxref{dcl.attr.assume.false} & \raggedright[dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime undefined behavior. & No & No & \raggedright No automatic checking strategy is possible because the predicate cannot be, in general, proven to be free of side effects; instead, the user has to change \tcode{[[assume(x)]]} to \mbox{\tcode{contract_assert<may_be_assumed>(x)}} and select an appropriate evaluation semantic & \raggedright Ignore the assumption
 \tabularnewline \hline
 \pagebreak
 
@@ -952,7 +1032,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 
 \ubxref{basic.stc.alloc.dealloc.constraint} & \raggedright[basic.stc.dynamic.general]/3: If the behavior of an allocation or deallocation function does not satisfy the semantic constraints specified in [basic.stc.dynamic.allocation] and [basic.stc.dynamic.deallocation], the behavior is undefined. & \raggedright Partially: some constraints can be checked locally (e.g., allocation function does not return null); others cannot be checked at all. & Partially & \raggedright Insert checks where possible & None
 \\ \hline
-\ubxref{basic.stc.alloc.dealloc.throw} & \raggedright [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. & \raggedright Address this via \cite{P3424R0} instead & --- & --- & ---
+\ubxref{basic.stc.alloc.dealloc.throw} & \raggedright [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. &   \raggedright  Make ill-formed via \cite{P3424R0} & --- & --- &
 \\ \hline
 \ubxref{expr.new.non.allocating.null} & \raggedright[expr.new]/22: If the allocation function is a non-allocating form ([new.delete.placement]) that returns null, the behavior is undefined. & Yes & Yes & \raggedright  Insert \tcode{post(r: r)} & None
 \\ \hline
@@ -976,7 +1056,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 
 \section*{Document history}
 \begin{itemize}
-\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3754R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; improved paper structure.
+\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3754R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; added discussion of interaction with \tcode{noexcept}; improved paper structure; changed title to reflect the wider scope.
 \item \textbf{R3}, 2025-06-28: Removed preprocessor UB due to adoption of \cite{P2843R3} into C++26.
 \item \textbf{R2}, 2025-05-19: Complete rewrite after the WG21 meeting in Hagenberg.
 \item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.

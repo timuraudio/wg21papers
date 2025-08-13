@@ -151,7 +151,7 @@ In Section~\ref{design}, we present a generic framework for applying these two t
 
 In Section~\ref{wording}, we propose wording for approval into the core language UB white paper \cite{P3656R1} that implements the framework presented in Section~\ref{design}.
 
-Finally, in Section~\ref{ext}, we discuss how future extensions, such as Labels \cite{P3400R1},
+Finally, in Section~\ref{labels}, we discuss how future extensions, such as Labels \cite{P3400R1},
 will enable programmatically identifying the category of UB that has occurred and provide us with granular, in-source control of the evaluation semantics for implicit contract assertions.
 
 \section{Analysis}
@@ -394,7 +394,7 @@ The non-locally-diagnosable UB in the Control Flow category concerns operations 
 Finally, to diagnose \{dcl.fct.def. coroutine. resume.not. suspended\} and \{{dcl.fct.def.
 coroutine.destroy.not.suspended}\} in the Coroutine category, instrumentation would have to track the suspension state associated with every coroutine handle.
 
-As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available. %TODO: Add something here about the fundamental dilemma?
+As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available.
 
 Given the substantial overhead of such instrumentation in both runtime cost and additional memory consumption, the cost of the actual checks themselves (whether a specific pointer is valid at a specific time, etc.) is not particularly important for non-local diagnosis because the performance penalty would be dominated by the instrumentation overhead.
 
@@ -535,33 +535,36 @@ We are currently not aware of any other areas in the C++ Standard where this too
 
 Some cases of UB can be addressed by unconditionally changing their runtime semantics to some well-defined behaviour. We have extensively used this option in the past to gradually remove UB from the language; examples of successfully applying this tool in the C++ Standard are the introduction of implicit lifetime types in C++20 \cite{P0593R6} which gave defined behaviour to certain situations when a pointer to raw allocated memory is being cast to a pointer of object type, as well as the range-based for loop fix in C++23 \cite{P2644R1},  which extended the lifetime of certain temporary objects across the duration of executing the loop, thus avoiding UB due to dangling references. 
 
-We expect that in the C++ Standard there will be relatively few remaining situations where this tool can be used effectively. For the vast majority of UB that remains in C++ today, unconditionally refining the behaviour is either not possible with any sensible semantics or would lead to unacceptable performance degradations. Moreover, in many cases where replacement behaviour is possible, unconditionally refining the behaviour would effectively mask the bug and make it impossible for tools to distinguish it from correct usage. It is therefore preferable to replace the behaviour with erroneous behaviour instead (see next section). 
-% TODO: maybe mention GCC -fwrapv as an example of this? Also mention that we can't have conditionally refined behaviour due to language dialects?
+We expect that there are relatively few remaining situations in the C++ working paper where this tool can be used effectively. To avoid creating language dialects, refined behaviour needs to be unconditional. For example, GCC has an option \tcode{-fwrapv} which turns signed integer overflow into wraparound. We cannot make that the new behaviour of signed integer addition unconditionally for two reasons. First, the associated runtime overhead would be unacceptable for many users; and second, in many cases the result will still be incorrect but this new behaviour would mask the bug, making it more difficult for users and tools to diagnose it. We also cannot have two different language dialects where the same expression means two different things (overflow or wraparound).  In such cases, another tool is more appropriate --- erroneous behaviour (see next section).
 
 \subsubsection{Erroneous behaviour}
 \label{erroneous}
 
 Some cases of UB can be addressed by replacing it with well-defined replacement behaviour, but specifying that replacement behaviour as \emph{erroneous}, that is, well-defined but still considered incorrect. The purpose of introducing erroneous behaviour is to not remove the bug, and to leave tools with the possibility of diagnosing it, but at the same time to place a limit on the program behaviour in the face of the bug and in particular to prevent the bug from creating a security vulnerability.
 
-We introduced the concept of erroneous behaviour in C++26 and added one instance of it: producing an erroneous value (instead of exhibiting undefined behaviour) when reading a default-initialised automatic variable of arithmetic type \cite{P2795R5}. In addition, erroneous behaviour for missing return from assignment is currently being proposed in \cite{P2973R0}.
+Unlike refined behaviour, it is acceptable to specify erroneous behaviour in a way that is relatively vague (e.g., return \emph{some} erroneous value rather than return a specific value), as it represents an incorrect program that cannot be relied on. For the same reason, it makes sense to make erroneous behaviour configurable (see Section~\ref{config}). Indeed, the definition of erroneous behaviour adopted for C++26 via \cite{P2795R5} permits different possible behaviours.
 
-\cite{P2795R5} already contains a section with a preliminary list of other cases of UB which could be replaced with erroneous behaviour. In this paper, we improve upon that preliminary list by providing a concrete list in \hyperref[appendix]{Appendix~A}. For all cases identified in Section~\ref{replacement} as having well-defined replacement behaviour (13 cases unconditionally plus 3 cases for built-in types only), we propose to introduce that behaviour as erroneous. In Sections~\ref{design} and \ref{wording} of this paper, we provide a concrete specification for how to perform the necessary replacement in the C++ Standard.
+Together with that definition, we also adopted one instance of erroneous behaviour for C++26: producing an erroneous value (instead of exhibiting undefined behaviour) when reading a default-initialised automatic variable of arithmetic type \cite{P2795R5}. Beyond that one instance, \cite{P2795R5} contains a section with a tentative list of other cases of UB that could be replaced with erroneous behaviour, and \cite{P2973R0} proposes to do so for erroneous behaviour for missing return from assignment.
+
+In this paper, we go further and propose to introduce erroneous behaviour for \emph{all} cases for which we identified in Section~\ref{replacement} that some kind of plausible well-defined replacement behaviour exists --- 13 cases unconditionally plus 3 cases for built-in types only. In Sections~\ref{design} and \ref{wording} of this paper, we provide a concrete specification for how to perform the necessary replacements in the C++ working paper; the full list of proposed erroneous behaviours is provided in \hyperref[appendix]{Appendix~A}.
 
 \subsubsection{Runtime checks}
 \label{checks}
 
-As we saw in Section~\ref{diagnose}, the large majority of UB (76 cases out of 80) can in principle be diagnosed by inserting and performing a suitable runtime check. The check verifies the conditions necessary for the operation in question to have well-defined behaviour at run time. It also acts as a guard against the UB: if the check fails, the program can be terminated, thus preventing the undefined behaviour from occurring.
+As we saw in Section~\ref{diagnose}, the large majority of UB (76 cases out of 80) can in principle be diagnosed by inserting and performing a suitable runtime check. The check verifies the conditions necessary for the operation in question to have well-defined behaviour at run time. It also acts as a guard against UB: if the check fails, the program can be terminated, thus preventing the undefined behaviour from occurring.
 
 While such runtime checks invariably add runtime overhead, they are very effective at both diagnosing bugs and removing security vulnerabilities. In Sections~\ref{design} and \ref{wording} of this paper, we propose a generic framework for systematically adding runtime checks to C++ core language constructs via implicit contract assertions.
 
 Implicitly generated runtime checks are widely deployed in the field today. Checks that can be generated locally by the compiler are often provided via compiler flags, for example the \tcode{-ftrapv} flag in GCC that checks for signed integer overflow and terminates the program on failure. Checks that require additional instrumentation to perform are provided by various flavours of sanitisers such as ASan, UBSan, etc.
+
+In order to be widely deployable, runtime checks --- whether they are user-authored assertions, compiler-generated checks guarding against UB, or any other form of correctness check that is redundant in a correct program and has non-negligible overhead --- need to be configurable; this is discussed in more detail in Section~\ref{config}.
 
 \subsubsection{Language subsetting}
 \label{subsetting}
 
 While practically no C++ operation can, in the general case, be proven at compile time to exhibit UB at run time, there are a number of operations that are particularly prone to exhibiting UB at run time when not used correctly; such operations are colloquially known as ``unsafe''. Examples of such operations are C-style casts (which can silently fall back to \tcode{reinterpret_cast}) and pointer arithmetics. Compilers and linters already provide options to statically flag the usage of such features as a potential source of bugs. We could go one step further and make such constructs ill-formed, particularly if there are ``safer'' alternative features that provide equivalent functionality. 
 
-However, in such cases, we cannot make these constructs \emph{unconditionally} ill-formed, as this would break a significant number of correct C++ programs deployed in the field. Therefore, we need to use a tool different from simple removal (Section~\ref{removal}). The required tool is called \emph{language subsetting}: specifying named \emph{subsets} of the C++ language that do not contain the ``unsafe'' features and that the user can opt into. This tool can be very useful for codebases that can be modernised or are being newly written.
+However, in such cases, we cannot make these constructs \emph{unconditionally} ill-formed, as this would break a significant number of correct C++ programs deployed in the field. Therefore, we need to use a tool different from simple removal (Section~\ref{removal}). The required tool is called \emph{language subsetting}: specifying named \emph{subsets} of the C++ language that do not contain the ``unsafe'' features. This tool can be very effective for avoiding UB in codebases that can be modernised or are being newly written. However, because much of existing C++ code cannot be changed easily, subsetting needs to be opt-in. Thus, it is the third tool in our toolbox that needs to be configurable by the user (see Section~\ref{config}).
 
 While we do not propose a concrete specification for language subsetting in this paper, such a specification is being developed in \cite{P3716R0}. As described in that paper, a number of principles need to be considered for designing this tool correctly: subsetting the language should never be allowed to alter the semantics of well-formed code, subsets must always combine orthogonally, and so forth. 
 
@@ -582,43 +585,23 @@ Note that combining the new features tool with the language subsetting tool is e
 \subsection{Configuration}
 \label{config}
 
-% TODO: Talk about which configuration options should be available for each feature - consult Peter's paper and slide deck I made for him
-
 Three of the seven tools discussed above need to be \emph{configurable} by the user in order to be usable in practice: runtime checks, erroneous behaviour, and language subsetting.
 
-There are a number of reasons why any form of correctness checks at run time need to be configurable by the user; these reasons have been discussed in detail in \cite{P2900R14} and are fundamentally the same for runtime checks implicitly inserted by the compiler as for contract assertions added by the user. In some applications, termination on failure is not an acceptable outcome even in the face of UB. More importantly, as we saw in Section~\ref{diagnose}, the majority of UB in C++ today is not locally diagnosable and require expensive sanitiser-like instrumentation to perform the checks. Even for those 18 cases of UB that are locally diagnosable and do not require additional instrumentation to insert runtime checks, in most cases the checks themselves will have a significant --- and in some cases, unacceptable --- runtime overhead. Therefore, the checks need to be \emph{optional}: we need a mechanism to enable and disable each kind of check, and we cannot require an implementation to support all checks.
+Runtime checks with non-negligible overhead, in order to be widely deployable, necessarily need to be configurable in several ways; this is discussed in much detail in \cite{P2899R1} and references therein. As we saw in Section~\ref{diagnose}, the majority of UB in C++ today is not locally diagnosable and requires expensive sanitiser-like instrumentation to perform the checks. Even for those 18 cases of UB that are locally diagnosable and do not require additional instrumentation to insert runtime checks, in most cases the checks themselves will have a significant --- and in some cases, unacceptable --- runtime overhead. Since correctness checks serve no purpose in a program known to be correct --- or for use cases where correctness is not the overriding concern ---  there needs to be an option to turn the checks off to avoid the overhead. This option is offered by every assertion facility that we know of. 
 
-For example, a compiler may choose to support enabling runtime checks for arithmetic UB (they already do today for some cases; for example, GCC offers the \tcode{-ftrapv} flag, which enables checks for signed integer overflow) while not supporting any checks that require expensive instrumentation. On the other hand, a different compiler that comes with a suite of a sanitisers may choose to support some subset of those more expensive checks (and again, they already do today, just not in a standardised fashion).
+Further, the behaviour of a failed check needs to be configurable as well. In some scenarios, the most appropriate behaviour following a failed check is immediate termination; in others, termination is unacceptable even in the face of bugs. In some scenarios, it is desirable to have detailed diagnostics describing the failure; in others, the overhead of generating such diagnostics is undesirable.
 
-Defining such optional runtime checks in as many cases as possible is, therefore, useful in itself. When these checks are configurable, they cost \emph{nothing} unless they are turned on, and no implementation is actually \emph{required} to implement them, yet specifying them in the Standard has a number of advantages: it allows us to assign standard names and categories to them (see also Section~\ref{ext}); it allows for implementations of such runtime checks (including existing compiler options and sanitisers) to leverage a shared paradigm and shared terminology; and it brings those tools into the scope of the C++ Standard.
-
-Similar reasons apply to erroneous behaviour: in practically all cases, its introduction comes with non-negligible --- and in some cases, even very large --- performance overhead. Therefore, to avoid unacceptable performance regressions in existing, correct C++ code, we \emph{must} offer an escape hatch that reverts to today's ``unsafe'' semantics. We propose such an escape hatch in Section~\ref{assume}.
-% TODO: maybe mention again that this one is generic and the C++26 one is specific
+Similar reasons apply to erroneous behaviour: in practically all cases, its introduction comes with non-negligible --- and in some cases, even very large --- performance overhead. Therefore, to avoid unacceptable performance regressions in existing, correct C++ code, we \emph{must} offer an escape hatch that reverts to today's ``unsafe'' semantics. One such escape hatch is the \tcode{[[indeterminate]]} attribute for uninitialised values. Such a syntactic escape hatch is not applicable for all cases; we propose a generic escape hatch for erroneous behaviour that does not require syntax in  Section~\ref{assume}.
 
 Finally, as already discussed in Section~\ref{subsetting}, language subsetting needs to be opt-in in order to avoid breaking existing, correct C++ programs.
 
-For all these features, we need to clearly specify the available configuration options and the mechanisms available for the user to select these options at different levels of granularity. For erroneous behaviour and runtime checks, we accomplish this via leveraging contract evaluation semantics (see Section~\ref{design}). For subsetting, the design of suitable configuration mechanisms are not yet well understood; we expect future papers to make progress in this area.
-% TODO: double-check that the fact the semantic controls both tools is explained well in the design section.
+For all these features, we need to clearly specify the available configuration options and the mechanisms available for the user to select these options at different levels of granularity. For erroneous behaviour and runtime checks, we accomplish this via leveraging contract evaluation semantics (see Section~\ref{design}); in-source configuration of these evaluation semantics at arbitrary granularity can be achieved with Labels (see Section~\ref{labels}). For subsetting, the design of suitable configuration mechanisms are not yet well understood; we expect future papers to make progress in this area.
 
-\subsection{The role of Profiles}
-\label{profiles}
+Another proposed feature in this space is \emph{Profiles}. We can distinguish between individual profiles --- collections of rules that aim to provide a guarantee that a C++ program exhibit certain qualities (e.g., \cite{P3081R2}, \cite{P3038R0}, \cite{P3402R3}, and \cite{P3446R0}) --- and the \emph{Profiles framework} \cite{P3589R2}, a set of mechanisms to enable and disable a named profile at various levels of granularity.
 
-\emph{Profiles} are another proposed feature currently in development that (among other things) aims to remove UB from C++. It is important to distinguish between concrete profiles --- collections of rules that aim to provide a guarantee that a C++ program exhibit certain qualities --- and the \emph{Profiles framework}, a set of features to enable and disable any concrete named profile via compile-time options and in source code at various levels of granularity. Concrete profiles are being proposed in \cite{P3081R2}, \cite{P3038R0}, \cite{P3402R3}, and \cite{P3446R0}. Orthogonally to those papers, \cite{P3589R2} proposes a design for the Profiles framework.
+There is no consensus yet on how Profiles relate to and compose with other proposals such as the holistic strategy for removing UB from C++ proposed here. That said, most Profiles proposed so far consist of some combination of specifying subsets of the language (Section~\ref{subsetting}), defining replacement behaviour for UB (Section~\ref{erroneous}), and/or introducing runtime checks guarding against UB (Section~\ref{checks}). It therefore seems logical to define Profiles as a higher-level feature building on top of these three basic tools (see Figure~\ref{fig_magicslide}). Given that these three features are configurable, a concrete profile could be defined as being a named configuration preset for these features. 
 
-How Profiles will eventually fit into a larger, holistic strategy for removing UB from C++, such as the one we propose here, is a matter of ongoing debate, in part because there are still many open questions regarding the current Profiles-related proposals. However, we note that most Profiles seem to consist of some combination of specifying subsets of the language (Section~\ref{subsetting}), defining replacement behaviour for UB (Section~\ref{erroneous}), and/or introducing runtime checks guarding against UB (Section~\ref{checks}).
-
-It therefore seems logical to define Profiles as a higher-level feature building on top of these three basic tools (see Figure~\ref{fig_magicslide}). Given that these three tools are configurable, a particular profile can essentially be completely defined as a named configuration preset for these features. 
-
-For example, we may define a subset of the language that excludes pointer arithmetics and a set of implicit runtime checks for array bounds checking. We can then define a ``bounds'' profile that enables both of these. Such profiles can be tailored to particular problem areas of the language, such as type, bounds, or arithmetic safety profiles, or to particular regulatory requirements, such as a MISRA profile.
-
-Specifying Profiles in this way will enable EWG to agree on a shared understanding of what Profiles are, guide their design, and answer the many open questions regarding what they should or should not be able to do. % TODO: list the actual questions? Look at Josh and Peter's stuff and email exchange. Consider mentioning the "superset and subset" thing from Bjarne and why Profiles can NOT superset the language.
-
-% TODO: consider also that Profiles would *just* subset and disallow some configuration options rather than switching them
-
-Importantly, when designing user-facing mechanisms for selecting configuration options for the basic tools proposed in Section~\ref{tools}, we need to take care to not create a situation where different features offer the same functionality in conflicting ways.
-
-% TODO: consider just referencing the labels section here!
-For example, when enabling and disabling runtime checks that guard against core language UB, we need to agree whether this happens via the syntax introduced by Labels (\cite{P3400R1}; see also Section~\ref{ext}) or via the syntax introduced by the Profiles framework (\cite{P3589R2}); or, if it can happen via both, we need to define one feature in terms of the other. If we follow the approach proposed here, we can define a concrete profile as essentially doing nothing else but expanding to a particular set of configuration directives defined by features such as \cite{P3400R1} that directly control the corresponding lower-level basic tool.
+For example, we may define a language subset that excludes pointer arithmetics, and a set of implicit runtime checks for array bounds checking; further, the user may define explicit contract assertions on their own functions and declare them as bounds checks. We can then define a ``bounds'' profile whose purpose it is to allow the user to opt into all three of these features at once. Such profiles can be tailored to particular problem areas of the language, such as type, bounds, or arithmetic safety profiles, or to particular regulatory requirements, such as a MISRA profile. If we pursue such a ``multi-level'' strategy, we must make it clear which feature is responsible for providing the user-facing configuration mechanism for which tool (see also Section~\ref{labels}).
 
 \section{Proposed design}
 \label{design}
@@ -671,7 +654,7 @@ This feat can be accomplished by applying the following transformation across th
 
 Note that we specify no restrictions on the evaluation semantics of any of these 76 newly introduced  implicit contract assertions. Since the choice of evaluation semantic is implementation-defined, each implementation can choose which evaluation semantics to offer for which one and which should be the default semantic. One possible implementation choice is to simply make all 76 cases always have the \emph{ignore} semantic; it follows that all existing implementations of C++ are already conforming with this wording transformation. Another possible choice is to say that  \emph{ignore} is the default, but other semantics are available for some checks. Yet another possible choice is to enable certain checks by default, for example ones that are particularly security-relevant and/or have a particularly small runtime overhead. All those choices are conforming with our proposal.
 
-Since the choice of evaluation semantic is implementation-defined, implementations are further expected to document which semantics they support for which implicit contract assertions and which selection mechanism they offer. Once we have Labels (see Section~\ref{ext}) for each case of UB guarded by an implicit contract assertion, implementations and users can refer to each case by name, giving us a shared, portable, universally agreed upon standard framework with terminology for reasoning about runtime UB.
+Since the choice of evaluation semantic is implementation-defined, implementations are further expected to document which semantics they support for which implicit contract assertions and which selection mechanism they offer. Once we have Labels (see Section~\ref{labels}) for each case of UB guarded by an implicit contract assertion, implementations and users can refer to each case by name, giving us a shared, portable, universally agreed upon standard framework with terminology for reasoning about runtime UB.
 
 Many possible choices for the evaluation semantics of implicit contract assertions map directly to existing compiler and sanitiser options. For example, for signed integer overflow, the GCC flag \tcode{-ftrapw} is a conforming implementation of the \emph{quick-enforce} semantic; sanitisers like ASan and UBSan are conforming implementations of the \emph{enforce} semantic for those cases of UB that they identify. These tools can continue to work in the way they do; however, bringing them into the scope of the C++ Standard as proposed here has the benefit that they can now integrate with the same unified standard contract-violation handling facility, significantly increasing the ability to deploy software to production systems that is hardened against entire categories of potential bugs.
 
@@ -731,9 +714,9 @@ process is terminated or execution continues after printing the diagnostic).
 \item The GCC compiler option \tcode{-fwrapv}, which implements wraparound for signed integer addition using twos-complement representation, is a conforming implementation of the \emph{ignore} semantic,  silently executing well-defined replacement behaviour.
 \item The default behaviour in C++ today, which is to assume that signed integer addition never overflows and to optimise based on this assumption when the appropriate optimisation flags are selected by the user, is a conforming implementation of the \emph{assume} semantic.
 \end{itemize}
-Just like with all other evaluation semantics, the mechanism by which the \emph{assume} semantic is selected is implementation-defined and will, in practice, be accomplished by vendor-provided compiler flags. In addition, Labels (see Section~\ref{semantic}) will provide the ability to choose and constrain the evaluation semantic in code with arbitrary granularity.
+Just like with all other evaluation semantics, the mechanism by which the \emph{assume} semantic is selected is implementation-defined and will, in practice, be accomplished by vendor-provided compiler flags. In addition, Labels (see Section~\ref{labels_sema}) will provide the ability to choose and constrain the evaluation semantic in code with arbitrary granularity.
 
-Importantly, in light of the sustained opposition in EWG to allowing the \emph{assume} semantic for \emph{explicit} contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}), we propose that the \emph{assume} semantic is allowed for only \emph{implicit} contract assertions. Explicit contract assertions may \emph{not} be evaluated with the \emph{assume} semantic (see also Section~\ref{assumefuture}).
+Importantly, in light of the sustained opposition in EWG to allowing the \emph{assume} semantic for \emph{explicit} contract assertions (\tcode{pre}, \tcode{post}, and \tcode{contract_assert}), we propose that the \emph{assume} semantic is allowed for only \emph{implicit} contract assertions. Explicit contract assertions may \emph{not} be evaluated with the \emph{assume} semantic (see also Section~\ref{labels_assume}).
 
 This restriction is important because, for explicit contract assertions, the \emph{assume} semantic  has the potential to silently add UB to an otherwise correct program if used incorrectly. This risk does not exist for implicit contract assertions since they are generated by the compiler;  in all of those cases, the \emph{assume} semantic is merely a backwards-compatibility tool to achieve the same semantics that those operations already have in C++ today.
 
@@ -765,7 +748,7 @@ To give the user a way to programmatically distinguish explicit and implicit con
 
 Alternatively, we could define its numerical value to be \tcode{0} since that value is not yet taken; however, we prefer to avoid using \tcode{0} and thus to retain the ability to detect the case in which the enum has not been explicitly initialised with a valid value.\footnote{See also \cite{P3227R0}, which was adopted into \cite{P2900R14} and made the same argument for adding new enumerators to the enumeration \tcode{evaluation_semantic}.}
 
-No other changes to the library API for contract-violation handling are necessary. In particular, unlike earlier revisions of this paper and unlike \cite{P3081R1}, which adopted its library API from those earlier revisions, we no longer propose to add new enumerators to the enumeration \mbox{\tcode{detection_mode}} to encode the category of error (Initialization, Bounds, and so on); instead, this encoding can be accomplished more effectively and flexibly via Labels (see Section~\ref{idlabels}).
+No other changes to the library API for contract-violation handling are necessary. In particular, unlike earlier revisions of this paper and unlike \cite{P3081R1}, which adopted its library API from those earlier revisions, we no longer propose to add new enumerators to the enumeration \mbox{\tcode{detection_mode}} to encode the category of error (Initialization, Bounds, and so on); instead, this encoding can be accomplished more effectively and flexibly via Labels (see Section~\ref{labels_cat}).
 
 Further, we propose no changes to the specification of \tcode{comment()} and \tcode{location()}. C++26 non-normatively recommends that these functions return a textual representation of the expression that triggered the contract violation and the source location of the contract violation, respectively. While returning such a representation is, in principle, possible for violations of implicit contract assertions, generating a textual representation for every expression in the program that could lead to UB is likely to cause an unacceptable amount of code bloat. However, generating some other string that may help us identify the problem, such as the diagnostic message already printed by existing sanitisers, is equally conforming, as is simply returning an empty string and a default-constructed source location if no information is available or if the information cannot be made programmatically accessible in the contract-violation handler (for example,
 because it is located in a separate debug information file). 
@@ -892,12 +875,12 @@ Written-out wording for all 79 cases of UB checkable at run time listed in \hype
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Future extensions}
-\label{ext}
+\label{labels}
 
 We already briefly touched upon Labels in earlier sections of this paper. Here, we explore other exten\-sions that rely on Labels as proposed in \cite{P3400R1} and provide important additional functionality for implicit contract assertions not proposed in this paper.
 
 \subsection{Identifying the UB category}
-\label{idlabels}
+\label{labels_cat}
 
 \cite{P3400R1} proposes the addition of \emph{identification labels} to contract assertions. These identification labels can be used to identify groups of contract assertions by name. For explicit contract assertions, we must introduce these identification labels manually; however, for implicit contract assertions, we can define and assign such identification labels directly in the C++ Standard (see \cite{P3400R1} Section 2.2.8). Such implicitly defined identification labels would make possible programmatically identifying, in the contract-violation handler, whether the violated implicit contract assertion  is related to an out-of-bounds issue, an arithmetic issue, and so forth; for example:
 
@@ -927,9 +910,9 @@ Notably, the \cite{P3400R1} approach has an important advantage over using the \
 In addition, users (and, more importantly, libraries) can use such labels to annotate their own explicit contract assertions, enabling the same policies to guide handling of core language bounds violations and violations of higher-level functions. For example, the indexing operator of a user-defined container (such as the one shown in Section~\ref{defineicas}) can have an explicit precondition labelled to belong to the same Bounds category as bounds checks defined by the C++ Standard itself. The same identification labels can be defined for hardened preconditions in the C++ Standard Library.
 
 \subsection{Granular control of the evaluation semantic}
-\label{semantic}
+\label{labels_sema}
 
-Another important feature enabled by Labels is the possibility to control and constrain the evaluation semantic in code. This possibility also extends to implicit contract assertions (see \cite{P3400R1} Section 2.2.8). Any possible label, such as ``always enforce'', ``never enforce'', and so on, can be applied to any group of implicit contract assertions at any granularity --- per file, per namespace, per function, per block, and so on:
+Another important feature enabled by Labels is the possibility to control and constrain the evaluation semantic in code. This possibility also extends to implicit contract assertions (see \cite{P3400R1} Section 2.2.8). Any possible label, such as ``always enforce'', ``never enforce'', etc., can be applied to any group of implicit contract assertions at any granularity: per file, per TU, per module, per namespace, per function, or per code block:
 
 \begin{codeblock}
 int f(int a, int b) {
@@ -944,10 +927,14 @@ Labels used in this way provide granular control when needed, allow the Standard
 specify useful groupings of different sources of program defects, and give developers the freedom they
 need to control mitigations for those defects based on exactly the criteria needed for their environments.
 
-As mentioned in Section~\ref{profiles}, when specifying such control mechanisms, we need to avoid ending up in a situation where the same functionality is provided simultaneously by different features in incompatible ways. In this case, we need to agree whether controlling and constraining the evaluation semantics of implicit contract assertions happens as proposed in  \cite{P3400R1} and shown here, or by using the syntax proposed in the Profiles framework as proposed in \cite{P3589R2}, or we need to specify one feature in terms of the other. As discussed in Section~\ref{profiles}, the logical approach seems to be to define any Profiles that enable or disable runtime checks directly in terms of the implicit contract assertions proposed in this paper and the control directives proposed in \cite{P3400R1}.
+Such a control mechanism for runtime checks (or for other tools in our toolbox such as language subsetting) needs to be designed carefully and take into account the overall strategy (Figure~\ref{magicslide}). In particular, we need to make it clear which feature is responsible for providing the user-facing configuration mechanism for which tool, and avoid ending up in a situation where the same functionality is provided simultaneously by different features in incompatible ways.
+
+For granular, in-source control of the evaluation semantics of implicit contract assertions, we need to agree whether this happens via directives such as the ones proposed in  \cite{P3400R1} and shown here, or by using the syntax proposed in the Profiles framework as proposed in \cite{P3589R2}. If we want to have both, we need to specify one in terms of the other to avoid an incoherent and messy design. 
+
+If we follow the idea in Section~\ref{config} and consider Profiles to be a higher-level feature defined in terms of the seven basic tools (the low-level features), then a Profile that enables or disables runtime checks can be defined as essentially a declaration that expands to \cite{P3400R1} directives as the one shown above. Alternatively, we could design Profiles as an auditing feature rather than a configuration feature: instead of actively enabling certain configuration options, the effect of a Profile would be that the  program is ill-formed if the configuration options chosen via  \cite{P3400R1} directives or other mechanisms are not compatible with the guarantees that that Profile ensures.
 
 \subsection{Integrating assertions and assumptions}
-\label{assumefuture}
+\label{labels_assume}
 
 In Section~\ref{assume}, we introduced the \emph{assume} semantic as a backwards-compatibility escape hatch for newly introduced erroneous behaviour; as such, it can only apply to implicit contract assertions, not to explicit ones.
 
@@ -974,6 +961,33 @@ To avoid the possibility of introducing an assumption by accident, the \emph{ass
 
 Such a label would be a vast improvement over today's \tcode{[[assume]]} attribute since it would allow for \emph{checkable} assumptions (see \cite{P2064R0} for context), achieving the integration between assertions and assumptions that we failed to achieve in the C++20 cycle. The \tcode{[[assume]]} attribute --- a temporary solution that was introduced as a reaction to that failure --- could then be deprecated.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgements}
+
+Thanks to Ga\v{s}per A\v{z}man, Herb Sutter, Oliver Rosten, Andrzej Krzemie{\'n}ski, Roger Orr, Phil Nash, and Peter Bindels for their helpful feedback on previous revisions of this paper.
+
+Thanks to Lori Hughes for reviewing a previous revision this paper and providing editorial feedback. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Document history}
+\begin{itemize}
+\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3754R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; added discussion of interaction with \tcode{noexcept}; improved paper structure; changed title to reflect the wider scope.
+\item \textbf{R3}, 2025-06-28: Removed preprocessor UB due to adoption of \cite{P2843R3} into C++26.
+\item \textbf{R2}, 2025-05-19: Complete rewrite after the WG21 meeting in Hagenberg.
+\item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.
+\item \textbf{R0}, 2023-03-08: Initial version.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Remove ToC entry for bibliography
+\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1205,36 +1219,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \end{longtable}
 
 \end{landscape}
-
-\pagebreak
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\section*{Document history}
-\begin{itemize}
-\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3754R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; added discussion of interaction with \tcode{noexcept}; improved paper structure; changed title to reflect the wider scope.
-\item \textbf{R3}, 2025-06-28: Removed preprocessor UB due to adoption of \cite{P2843R3} into C++26.
-\item \textbf{R2}, 2025-05-19: Complete rewrite after the WG21 meeting in Hagenberg.
-\item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.
-\item \textbf{R0}, 2023-03-08: Initial version.
-\end{itemize}
-
-\section*{Acknowledgements}
-
-Thanks to Ga\v{s}per A\v{z}man, Herb Sutter, Oliver Rosten, Andrzej Krzemie{\'n}ski, Roger Orr, Phil Nash, and Peter Bindels for their helpful feedback on previous revisions of this paper.
-
-Thanks to Lori Hughes for reviewing this paper and providing editorial feedback. 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% Remove ToC entry for bibliography
-\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
-
-%\renewcommand{\bibname}{References}  % custom name for bibliography
-\bibliographystyle{abstract}
-\bibliography{ref}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \end{document}
 

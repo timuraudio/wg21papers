@@ -276,7 +276,7 @@ A commonly asked question is ``why does the committee not simply make all the UB
 
 Of course, static analysis is still useful and widely used in the field. There are many situations where static analysis \emph{can} detect a bug that would lead to UB when executed, because the relevant values or conditions happen to be known at compile time in the particular program at hand. However, given an existing C++ program, any approach based on static analysis fundamentally has to choose between \emph{false positives} (rejecting code for which no proof can be constructed one way or another, even if that code happens to be correct) and \emph{false negatives} (accepting incorrect code that will lead to UB when executed). 
 
-Crucially, whether a pointer or reference refers to a valid object of the correct type within its lifetime at a given point in time (``memory safety''), the relevant property for addressing UB in the Initialisation, Bounds, and Type and Lifetime categories, seems to be fundamentally unprovable at compile time in the general case (see \cite{Baxter2024}). % TODO: add references to special cases where it is diagnosable (Herb? Bjarne?)
+Crucially, whether a pointer or reference refers to a valid object of the correct type within its lifetime at a given point in time (``memory safety''), the relevant property for addressing UB in the Initialisation, Bounds, and Type and Lifetime categories, seems to be fundamentally unprovable at compile time in the general case (see \cite{Baxter2024}).
 
 As we will see in Section~\ref{strategy}, despite these fundamental limitations there are things we can (and should) do in the C++ Standard to enable static analysis to construct a proof in more cases, such as subsetting the language (\ref{subsetting}), providing replacement features (\ref{newfeatures}), and adding annotations (\ref{annotations}). However, for existing C++ programs, reliably detecting cases of UB without rejecting correct code will inevitably have to leverage \emph{runtime} detection, i.e., the insertion of additional runtime checks when compiling the program. We therefore focus on such runtime detection for the remainder of this analysis.
 
@@ -394,7 +394,7 @@ The non-locally-diagnosable UB in the Control Flow category concerns operations 
 Finally, to diagnose \{dcl.fct.def. coroutine. resume.not. suspended\} and \{{dcl.fct.def.
 coroutine.destroy.not.suspended}\} in the Coroutine category, instrumentation would have to track the suspension state associated with every coroutine handle.
 
-As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available. We discuss some of the consequences of this fundamental dilemma in Section~\ref{strategy}. % TODO: do we actually? Double-check this
+As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available. %TODO: Add something here about the fundamental dilemma?
 
 Given the substantial overhead of such instrumentation in both runtime cost and additional memory consumption, the cost of the actual checks themselves (whether a specific pointer is valid at a specific time, etc.) is not particularly important for non-local diagnosis because the performance penalty would be dominated by the instrumentation overhead.
 
@@ -621,13 +621,12 @@ For example, when enabling and disabling runtime checks that guard against core 
 \section{Proposed design}
 \label{design}
 
+In this section, we propose a framework that systematically introduces runtime checks and well-defined replacement behaviour --- two of the tools that form the strategy presented in Section~\ref{strategy} --- to the C++ Standard. Runtime checks guarding against core language UB are realised as \emph{implicit contract assertions}, leveraging the foundation laid by Contracts as adopted for C++26; in addition, replacement behaviour is added instead of UB wherever meaningfully possible. Both features are controlled and configured via the evaluation semantics introduced by \cite{P2900R14}.
+
 \subsection{Defining implicit contract assertions}
 \label{defineicas}
 
-% TODO: Move this paragraph to main section and include EB
-In this section, we propose a framework for systematically introducing runtime checks to C++ that guard against core language UB, building upon Contracts.
-
-For C++26, we adopted a foundation of Contracts functionality via \cite{P2900R14}. This initial subset contains three kinds of \emph{contract assertions}: \tcode{pre}, \tcode{post}, and \tcode{contract_assert}. Since these contract assertions are specified by the user with explicit syntax, in this paper we call them \emph{explicit} contract assertions. For example, the author of a vector-like class can add a precondition assertion to its subscript operator to guard against out-of-bounds access:
+The initial subset of Contracts functionality added to C++26 via \cite{P2900R14} contains three kinds of \emph{contract assertions}: \tcode{pre}, \tcode{post}, and \tcode{contract_assert}. Since these contract assertions are specified by the user with explicit syntax, in this paper we call them \emph{explicit} contract assertions. For example, the author of a vector-like class can add a precondition assertion to its subscript operator to guard against out-of-bounds access:
 
 \begin{codeblock}
 T& operator[] (size_t index)
@@ -1018,7 +1017,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} points to the (possibly-hypothetical) array element $i - j$ of \tcode{x} if $0 \leq i - j \leq n$. Otherwise, the behavior is undefined. & Yes & \raggedright Only if the array bound is statically known & \raggedright Track pointer provenance, insert bounds check & None
 \\ \hline
 
-\pagebreak % Manually inserted to avoid hanging multicolumn header
 \multicolumn{6}{c}{\textbf{III. Type and Lifetime}} 
 \\ \hline
 
@@ -1152,22 +1150,21 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 
 \ubxref{intro.races.data} & \raggedright[intro.races]/17: Any such data race results in undefined behavior. & Partially & No & \raggedright Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & \raggedright Make all primitive memory accesses implicitly atomic
 \tabularnewline \hline
-\pagebreak
 
+\pagebreak % MANUAL
 \multicolumn{6}{c}{\textbf{VI. Sequencing}} 
 \\ \hline
 
 \ubxref{intro.execution.unsequenced.modification} & \raggedright[conv.rank]/10:  The behavior is undefined if a side effect on a memory location ([intro.memory]) or starting or ending the lifetime of an object in a memory location is unsequenced relative to another side effect on the same memory location, starting or ending the lifetime of an object occupying storage that overlaps with the memory location, or a value computation using the value of any object in the same memory location, and the two evaluations are not potentially concurrent ([intro.multithread]). & Yes & Yes & \raggedright Identify all potential read operations that are not sequenced with respect to each given write operation; insert checks to identify if those operations are referencing the same address & \raggedright Sequence operations in some unspecified order
 \tabularnewline \hline
-%\pagebreak[3]
 
 \multicolumn{6}{c}{\textbf{VII. Assumptions}} 
 \\ \hline
 
 \ubxref{dcl.attr.assume.false} & \raggedright[dcl.attr.assume]/1: If the converted expression would evaluate to true at the point where the assumption appears, the assumption has no effect. Otherwise, evaluation of the assumption has runtime undefined behavior. & No & No & \raggedright No automatic checking strategy is possible because the predicate cannot be, in general, proven to be free of side effects; instead, the user has to change \tcode{[[assume(x)]]} to \mbox{\tcode{contract_assert<may_be_assumed>(x)}} and select an appropriate evaluation semantic & \raggedright Ignore the assumption
 \tabularnewline \hline
-\pagebreak
 
+\pagebreak % MANUAL
 \multicolumn{6}{c}{\textbf{VIII. Control Flow}} 
 \\ \hline
 
@@ -1181,7 +1178,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \\ \hline
 \ubxref{dcl.attr.noreturn.eventually.returns} & \raggedright[dcl.attr.noreturn]/2: If a function \tcode{f} is invoked where \tcode{f} was previously declared with the \tcode{noreturn} attribute and that invocation eventually returns, the behavior is runtime-undefined. & Yes & Yes & \raggedright Insert \tcode{post(false)} & None
 \\ \hline
-\pagebreak
+
 
 \multicolumn{6}{c}{\textbf{IX. Replacement Functions}} 
 \\ \hline
@@ -1192,7 +1189,6 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \\ \hline
 \ubxref{expr.new.non.allocating.null} & \raggedright[expr.new]/22: If the allocation function is a non-allocating form ([new.delete.placement]) that returns null, the behavior is undefined. & Yes & Yes & \raggedright  Insert \tcode{post(r: r)} & None
 \\ \hline
-\pagebreak
 
 \multicolumn{6}{c}{\textbf{X. Coroutines}} 
 \\ \hline

@@ -215,7 +215,7 @@ that case is, therefore, also excluded from our list.
                after number = \,,   % keeps numbers tidy (adds thin space)
                /tikz/nodes={font=\small} % tweak font size if needed
             ]
-            {1/Initialisation, 5/Bounds, 51/Type and Lifetime, 9/Arithmetic, 1/Threading, 1/Sequencing, 1/Assumptions, 6/Control Flow, 3/Replacement Functions, 2/Coroutines}
+            {1/Initialisation, 5/Bounds, 51/Type and Lifetime, 9/Arithmetic, 1/Threading, 1/Sequencing, 1/Assumptions, 5/Control Flow, 3/Replacement Functions, 3/Coroutines}
     \end{tikzpicture}
     \caption{Distribution of identified cases of explicit language UB across specified categories}
     \label{piechart_categories}
@@ -233,9 +233,9 @@ We found that all identified cases of core language UB can be classified into te
 \item \textbf{Threading} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from different threads where neither access happens before the other, i.e., a data race.
 \item \textbf{Sequencing} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other.
 \item \textbf{Assumptions} --- 1 case. Reaching an \tcode{[[assume]]} declaration whose operand would not evaluate to \tcode{true}.
-\item \textbf{Control Flow} --- 6 cases. Errors in control flow. Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
+\item \textbf{Control Flow} --- 5 cases. Errors in control flow. Examples: flowing off the end of a function; re-entering the same declaration recursively when initialising a static variable.
 \item \textbf{Replacement Functions} --- 3 cases. Executing a user-defined replacement function (\tcode{operator new}/\tcode{delete}) that fails to meet the specified requirements. Examples: returning \tcode{null} from a user-defined placement \tcode{new}; throwing an exception from a user-defined \tcode{delete}.
-\item \textbf{Coroutines} --- 2 cases. Misusing coroutine machinery. Examples: destroying a coroutine that is not suspended; invoking a resumption member function for a coroutine that is not suspended.
+\item \textbf{Coroutines} --- 3 cases. Misusing coroutine machinery. Examples: destroying a coroutine that is not suspended; failing to provide a \tcode{return_void} function for a coroutine that does not return a value.
 \end{enumerate}
 
 Figure \ref{piechart_categories} shows the distribution of the 80 identified cases of explicit core language UB across these ten basic categories. 
@@ -306,11 +306,11 @@ UB in the Threading category (\{intro.races.data\}) is not locally diagnosable, 
 
 UB in the Assumption category (\{dcl.attr.assume.false\}) is, in principle, locally diagnosable by evaluating the operand of the assumption and verifying that the resulting value, contextually converted to \tcode{bool}, equals \tcode{true}. However, if that evaluation has any side effects, such a check could alter the observable state of the program. Therefore, even if the given assumption holds and no UB occurs, the check itself might render the program invalid by altering its state. Thus, this case of UB is  meaningfully diagnosable in any automated fashion only if the operand has no side effects when evaluated. However, proving that the operand has no side effects is generally impossible to do efficiently and is outright impossible in the presence of an opaque function call.
 
-Some cases of UB in the Control Flow category are locally diagnosable. \{stmt.return.flow.off\} and \{stmt.return.coroutine.flow.off\} can be diagnosed by inserting a check at the end of every function body that does not end with a \tcode{return} or \tcode{co_return} statement. \{dcl.attr.noreturn.eventually.returns\} can be diagnosed by inserting a check into every function declared \tcode{[[noreturn]]}.
+Two cases of UB in the Control Flow category are locally diagnosable. \{stmt.return.flow.off\} can be diagnosed by inserting a check at the end of every function body that does not end with a \tcode{return} statement. \{dcl.attr.noreturn.eventually.returns\} can be diagnosed by inserting a check into every function declared \tcode{[[noreturn]]}. The remaining three cases of UB in that category are not locally diagnosable.
 
 Some cases of UB in the Replacement Function category are partially or fully locally diagnosable. In particular, some of the constraints specified in \{basic.stc.alloc.dealloc.constraint\} and \{expr.new.non.allocating.null\} are locally diagnosable, while others are not. In particular, we can check locally that a deallocation function does not exit via an exception and that an allocation function does not return null. However, checking the other constraints (locally or at all) is generally not possible.
 
-Finally, all cases of UB in the Coroutine category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations.
+Finally, one case of UB in the Coroutine category, {stmt.return.coroutine.flow.off\}, is locally diagnosable in a way analogous to \{stmt.return.flow.off\} by inserting a check at the end of a coroutine for which no \tcode{return_void} function is provided. The remaining two cases of UB in that category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations. 
 
 Overall, as shown in Figure~\ref{piechart_locally}, only 18 cases of UB (22.5\% of all cases) are unconditionally locally diagnosable at run time, while 58 cases of UB (72.5\%) are not; these cases require instrumentation of the code in order to be diagnosed at run time. We will discuss these requirements in more detail in Section~\ref{cost_nonlocal}.
 
@@ -391,7 +391,8 @@ To diagnose UB in the Threading category, instrumentation would have to track, f
 
 The non-locally-diagnosable UB in the Control Flow category concerns operations that are not allowed during construction and destruction of objects with static or thread-local storage duration (\{basic.start.main.exit.during.destruction\} and \{basic.start.term.use.after.destruction\}). To diagnose these, instrumentation would have to insert guards tracking whether such objects are currently being constructed and destroyed.  
 
-Finally, to diagnose UB in the Coroutine category, instrumentation would have to track the suspension state associated with every coroutine handle.
+Finally, to diagnose \{dcl.fct.def. coroutine. resume.not. suspended\} and \{{dcl.fct.def.
+coroutine.destroy.not.suspended}\} in the Coroutine category, instrumentation would have to track the suspension state associated with every coroutine handle.
 
 As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available. We discuss some of the consequences of this fundamental dilemma in Section~\ref{strategy}. % TODO: do we actually? Double-check this
 
@@ -449,7 +450,7 @@ The replacement behaviour for UB in the Sequencing category (\{intro.execution.u
 
 The replacement behaviour for UB in the Assumption category (\{dcl.attr.assume.false\}) is trivial: just ignore the assumption, instead of optimising based on it. The performance overhead is limited to losing any optimisation opportunities from placing the assumption there. Of course, this mitigation makes the assumption itself completely useless. We will discuss this case in more detail in Section~\ref{assume}.
 
-Finally, we can define partial replacement behaviour for two cases of UB in the Control Flow category  (\{stmt.return.flow.off\} and \{stmt.return.coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is analogous to \{basic.indet.value\}; again, no plausible replacement behaviour exists for user-defined return types in the general case.
+Finally, we can define partial replacement behaviour for one cases of UB in the Control Flow category  (\{stmt.return.flow.off\}) and an analogous case of UB in the Coroutines category (\{stmt.return.coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is effectively handled in the same way as \{basic.indet.value\}; again, no plausible replacement behaviour exists for user-defined return types in the general case.
 
 Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful replacement behaviour for only 16 cases of UB (20\% of all cases). In addition, in 3 cases, this is only possible when the operation in question produces a value of built-in type. Unconditional replacement behaviour exists for only 13 cases of UB (16.25\% of all cases). In all of these cases, the replacement behaviour consists of erroneous behaviour; in most cases, removing the UB in this manner introduces significant runtime cost.
 
@@ -1174,9 +1175,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \\ \hline
 \ubxref{basic.start.term.use.after.destruction} & \raggedright[basic.start.term]/4: If a function contains a block variable of static or thread storage duration that has been destroyed and the function is called during the destruction of an object with static or thread storage duration, the program has undefined behavior if the flow of control passes through the definition of the previously destroyed block variable. & Yes & No & \raggedright Track the lifetime of static objects & None
 \\ \hline
-\ubxref{stmt.return.flow.off} & \raggedright [stmt.return]/4: Otherwise, flowing off the end of a function that is neither \tcode{main} ([basic.start.main]) nor a coroutine ([dcl.fct.def.coroutine]) results in undefined behavior. & Yes & Yes & \raggedright Insert \mbox{\tcode{contract_assert(false)}} at end of \emph{function-body} & \raggedright Only for built-in return types: return erroneous value
-\tabularnewline \hline
-\ubxref{stmt.return.coroutine.flow.off} & \raggedright[stmt.return.coroutine]/3: If a search for the name \tcode{return_void} in the scope of the promise type finds any declarations, flowing off the end of a coroutine's \emph{function-body} is equivalent to a \mbox{\tcode{co_return}} with no operand; otherwise flowing off the end of a coroutine's \emph{function-body} results in undefined behavior. & Yes & Yes & \raggedright Insert \mbox{\tcode{contract_assert(false)}} at end of  \emph{function-body} & \raggedright Only for built-in return types: return erroneous value
+\ubxref{stmt.return.flow.off} & \raggedright [stmt.return]/4: Otherwise, flowing off the end of a function that is neither \tcode{main} ([basic.start.main]) nor a coroutine ([dcl.fct.def.coroutine]) results in undefined behavior. & Yes & Yes & \raggedright Insert \mbox{\tcode{contract_assert(false)}} at end of \emph{function-body}& \raggedright Only for built-in return types: return erroneous value
 \tabularnewline \hline
 \ubxref{stmt.dcl.local.static.init.recursive} & \raggedright[stmt.dcl]/3: If control re-enters the declaration recursively while the variable is being initialized, the behavior is undefined. & Yes & No & \raggedright Insert a recursion counter into a guard for static and thread-local object construction & None
 \\ \hline
@@ -1198,6 +1197,8 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{X. Coroutines}} 
 \\ \hline
 
+\ubxref{stmt.return.coroutine.flow.off} & \raggedright[stmt.return.coroutine]/3: If a search for the name \tcode{return_void} in the scope of the promise type finds any declarations, flowing off the end of a coroutine's \emph{function-body} is equivalent to a \mbox{\tcode{co_return}} with no operand; otherwise flowing off the end of a coroutine's \emph{function-body} results in undefined behavior. & Yes & Yes & \raggedright Insert \mbox{\tcode{contract_assert(false)}} at end of  \emph{function-body} if no \tcode{return_void} function is provided& \raggedright Only for built-in return types: return erroneous value
+\tabularnewline \hline
 \ubxref{dcl.fct.def.coroutine.resume.not.suspended} & \raggedright[dcl.fct.def.coroutine]/9: Invoking a resumption member function for a coroutine that is not suspended results in undefined behavior. & Yes & No & \raggedright Track the suspension state associated with every coroutine handle & None
 \\ \hline
 \ubxref{dcl.fct.def.coroutine.destroy.not.suspended} & \raggedright[dcl.fct.def.coroutine/12: If \tcode{destroy} is called for a coroutine that is not suspended, the program has undefined behavior. & Yes & No & \raggedright Track the suspension state associated with every coroutine handle & None

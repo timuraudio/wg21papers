@@ -450,7 +450,8 @@ The replacement behaviour for UB in the Sequencing category (\{intro.execution.u
 
 The replacement behaviour for UB in the Assumption category (\{dcl.attr.assume.false\}) is trivial: just ignore the assumption, instead of optimising based on it. The performance overhead is limited to losing any optimisation opportunities from placing the assumption there. Of course, this mitigation makes the assumption itself completely useless. We will discuss this case in more detail in Section~\ref{assume}.
 
-Finally, we can define partial replacement behaviour for one cases of UB in the Control Flow category  (\{stmt.return.flow.off\}) and an analogous case of UB in the Coroutines category (\{stmt.return.coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is effectively handled in the same way as \{basic.indet.value\}; again, no plausible replacement behaviour exists for user-defined return types in the general case.
+Finally, we can define partial replacement behaviour for one cases of UB in the Control Flow category  (\{stmt.return.flow.off\}) and an analogous case of UB in the Coroutines category (\{stmt.return.
+coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is effectively handled in the same way as \{basic.indet.value\}; again, no plausible replacement behaviour exists for user-defined return types in the general case.
 
 Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful replacement behaviour for only 16 cases of UB (20\% of all cases). In addition, in 3 cases, this is only possible when the operation in question produces a value of built-in type. Unconditional replacement behaviour exists for only 13 cases of UB (16.25\% of all cases). In all of these cases, the replacement behaviour consists of erroneous behaviour; in most cases, removing the UB in this manner introduces significant runtime cost.
 
@@ -502,9 +503,7 @@ The proposed strategy is composed of seven basic tools that are orthogonal to ea
 
 Three of these tools (refined behaviour, erroneous behaviour, and runtime checks) have the interesting property that they are applicable even in cases where the source code cannot be modified for whatever reason, and thus can be used to remove UB from existing legacy C++ programs.
 
-Further, in order to be usable effectively in practice, three of these tools (erroneous behaviour, runtime checks, and language subsetting) need to be configurable by the user, either via compiler options or directly in source. This design space is discussed in more detail in Section~\ref{config}.
-
-Finally, several of the available tools overlap in scope with \emph{Profiles}, another proposed feature currently in development. A discussion of how Profiles might fit into our proposed strategy can be found in Section~\ref{profiles}.
+Further, in order to be usable effectively in practice, three of these tools (erroneous behaviour, runtime checks, and language subsetting) need to be configurable by the user, either via compiler options or directly in source. This design space is discussed in more detail in Section~\ref{config}. \emph{Profiles}, another proposed feature currently in development, could be used to group together particularly useful configuration presets across different tools in order to provide a desirable set of guarantees.
 
 \subsection{Scope}
 
@@ -652,7 +651,7 @@ Having specified precisely what an implicit contract assertion is and how it beh
 
 This feat can be accomplished by applying the following transformation across the entire C++ Standard: change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``operation $X$ has an implicit precondition that $A$ is \tcode{true}; continuing execution past a violation of this precondition is undefined behaviour''.
 
-Note that the choice of evaluation semantic is implementation-defined; therefore, there are no restrictions on the evaluation semantics of any of these 76 newly introduced  implicit contract assertions beyond the requirement that an implementation document which semantics they support for which implicit contract assertions and which selection mechanism they offer. These options, as well as the question which one should be the default, depends on the particular case. 
+Note that the choice of evaluation semantic is implementation-defined; therefore, there are no restrictions on the evaluation semantics of any of these 76 newly introduced  implicit contract assertions beyond the requirement that an implementation document which semantics they support for which implicit contract assertions and which selection mechanism they offer. These options, and the choice of the default, depend on the particular case. 
 
 Note that no implementation is actually \emph{required} to implement these checks: a valid implementation choice is to make all 76 cases always have the \emph{ignore} semantic. It follows that all existing implementations of C++ are already conforming with this wording transformation. 
 

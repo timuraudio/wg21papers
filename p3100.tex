@@ -102,7 +102,7 @@ Audience: & EWG
 \begin{abstract}
 In this paper, we enumerate all cases of core language undefined behaviour explicitly specified in the C++ Standard,  group them into ten categories, and classify them along a number of relevant criteria.
 
-We then present a holistic strategy for systematically detecting, mitigating, and ultimately eliminating such undefined behaviour from the C++ Standard. This strategy is built on top of seven basic tools: refined behaviour, erroneous behaviour, insertion of run-time checks, feature removal, language subsetting, the introduction of annotations, and the introduction of entirely new language features. We discuss which tools are applicable to which cases of core language undefined behaviour.
+We then present a holistic strategy for systematically detecting, mitigating, and ultimately eliminating such undefined behaviour from the C++ Standard. This strategy is built on top of seven basic tools: feature removal, refined behaviour, erroneous behaviour, insertion of run-time checks, language subsetting, the introduction of annotations, and the introduction of entirely new language features. We discuss which tools are applicable to which cases of core language undefined behaviour.
 
 We find that two of these tools --- erroneous behaviour and run-time checks --- are applicable to a wide range of existing cases and do not require any source changes. We describe how run-time
 checks can be systematically introduced via \emph{implicit contract assertions}, giving users complete
@@ -145,7 +145,7 @@ In Section~\ref{analysis}, we identify and enumerate all core language UB explic
 
 In Section~\ref{strategy}, we present a holistic strategy for systematically detecting, mitigating, and ultimately removing UB across the entire C++ programming language specification. The present revision of this paper incorporates the presentation \cite{P3754R0} we gave to EWG in Sofia outlining this strategy. It also includes an updated version of the diagram on slide 53 from that presentation (a.k.a. the ``magic slide'') visualising this strategy. EWG reached consensus in Sofia to use this diagram as a basis for the core language UB white paper.
 
-The proposed strategy is composed of seven basic tools: refined behaviour, erroneous behaviour, insertion of run-time checks, feature removal, language subsetting, the introduction of annotations, and the introduction of entirely new language features. We use the results of the analysis in Section~\ref{analysis} to take a first pass at identifying which tools would be applicable to which cases of UB. We find that the conditions under which UB will occur can, in many cases, be identified by a run-time check. In addition, there is a significant number of cases where UB can be replaced by well-defined erroneous behaviour following a failed check. These two techniques are applicable to a wide range of existing cases of UB and, importantly, do not require any source changes.
+The proposed strategy is composed of seven basic tools: feature removal, refined behaviour, erroneous behaviour, insertion of run-time checks, language subsetting, the introduction of annotations, and the introduction of entirely new language features. We use the results of the analysis in Section~\ref{analysis} to take a first pass at identifying which tools would be applicable to which cases of UB. We find that the conditions under which UB will occur can, in many cases, be identified by a run-time check. In addition, there is a significant number of cases where UB can be replaced by well-defined erroneous behaviour following a failed check. These two techniques are applicable to a wide range of existing cases of UB and, importantly, do not require any source changes.
 
 In Section~\ref{design}, we present a generic framework for applying these two techniques across the entire C++ language. The proposed design has been reviewed and approved by SG21, SG23, and EWG. We describe how run-time checks can be systematically introduced via \emph{implicit contract assertions}, building on the basic framework of Contracts adopted for C++26 via \cite{P2900R14} and giving users complete control over what impact that undefined behaviour has on their programs. In addition to run-time checking, we replace UB by erroneous, but well-defined behaviour that allows the program to continue execution past a violated implicit contract assertion wherever possible. We also propose an escape hatch to mitigate the run-time cost of such well-defined replacement behaviour and avoid performance regressions in existing C++ programs.
 
@@ -171,7 +171,7 @@ Originally, we constructed our list independently from another effort to enumera
 
 \subsubsection{Granularity}
 
-The granularity of our enumeration --- i.e., when a piece of core language specification is considered a distinct case of UB --- is somewhat arbitrary. As a general rule, we consider a single sentence in the C++ working paper specifying that a core language operation has UB to be one such case; if such a sentence contains a bulleted list with several cases (e.g., [basic.life]/7), we consider each bullet to be a separate case.
+The granularity of our enumeration --- i.e., when a piece of core language specification is considered a distinct case of UB --- is somewhat arbitrary. As a general rule, we consider a single sentence in the C++ working paper that specifies a condition under which a core language operation has UB to be one case of UB; if such a sentence contains a bulleted list where each item specifies such a condition (e.g., [basic.life]/7), we consider each item to be a separate case of UB.
 
 We could consider dividing up the cases of UB in different ways and with greater granularity. In particular, we could more closely align the enumeration with possible mitigation strategies, rather than with the lexical appearance of the word ``undefined'' in the C++ working paper.
 
@@ -201,10 +201,9 @@ that case is, therefore, also excluded from our list.
 \subsubsection{Categories}
 \label{categories}
 
-We found that all identified cases of core language UB can be broadly classified into ten categories:
-
-\vspace{5mm} % added manually to create enough space between text and piechart
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 \begin{figure}[b]
+    \vspace{5mm}
     \centering
     \begin{tikzpicture}
         \pie[text=legend, 
@@ -221,7 +220,9 @@ We found that all identified cases of core language UB can be broadly classified
     \caption{Distribution of identified cases of explicit language UB across specified categories}
     \label{piechart_categories}
 \end{figure}
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+We found that all identified cases of core language UB can be classified into ten basic categories:
 
  \renewcommand{\labelenumi}{\Roman{enumi}.}
 \begin{enumerate}
@@ -237,7 +238,7 @@ We found that all identified cases of core language UB can be broadly classified
 \item \textbf{Coroutines} --- 2 cases. Misusing coroutine machinery. Examples: destroying a coroutine that is not suspended; invoking a resumption member function for a coroutine that is not suspended.
 \end{enumerate}
 
-Figure \ref{piechart_categories} shows the distribution of the 80 identified cases of explicit core language UB across the 10 identified categories. 
+Figure \ref{piechart_categories} shows the distribution of the 80 identified cases of explicit core language UB across these ten basic categories. 
 
 
 
@@ -259,7 +260,7 @@ The final three categories (Control Flow, Replacement Functions, and Coroutines)
 
 \cite{P3656R1} asks which cases of UB are security related. The paper suggests having security experts indicate which cases of UB have security impact and use ``always'', ``never'', and ``sometimes'' tags. We are not security experts, so we do not attempt to do this here. However, we note that cases of UB commonly associated with security vulnerabilities (see, for example, the CWE list at \url{https://cwe.mitre.org/}) fall into the Initialisation, Bounds, and Type and Lifetime categories. 
 
-Other cases of UB are not commonly exploited by malicious attackers to our knowledge. Nevertheless, some of these cases, for example those in categories Arithmetic and Threading, are a common source of program defects that do sizeable damage to existing software.
+UB in other categories is not commonly exploited by malicious attackers to our knowledge. Nevertheless, some of these cases, for example those in categories Arithmetic and Threading, are a common source of program defects that do sizeable damage to existing software.
 
 In principle, with aggressive optimising compilers any form of UB can lead to unpredictable defects and vulnerabilities. Mitigating cases of UB currently considered to be the most critical security concern will simply remove the easiest routes of attack from the table, and any UB not yet addressed may become the new major candidate for attackers to leverage for nefarious purposes.  Therefore, prioritising implementation based on current trends amongst malicious actors, though helpful, should not be used to limit the scope of our work on improving the C++ language specification (see \cite{Sutter2024}, \cite{P3500R1}, and \cite{P3578R0}).
 
@@ -275,9 +276,9 @@ A commonly asked question is ``why does the committee not simply make all the UB
 
 Of course, static analysis is still useful and widely used in the field. There are many situations where static analysis \emph{can} detect a bug that would lead to UB when executed, because the relevant values or conditions happen to be known at compile time in the particular program at hand. However, given an existing C++ program, any approach based on static analysis fundamentally has to choose between \emph{false positives} (rejecting code for which no proof can be constructed one way or another, even if that code happens to be correct) and \emph{false negatives} (accepting incorrect code that will lead to UB when executed). 
 
-Crucially, whether a pointer or reference refers to a valid object of the correct type within its lifetime at a given point in time (``memory safety''), the relevant property for addressing UB in the Initialisation, Bounds, and Type and Lifetime categories, seems to be fundamentally unprovable at compile time in the general case (see \cite{Baxter2024}).
+Crucially, whether a pointer or reference refers to a valid object of the correct type within its lifetime at a given point in time (``memory safety''), the relevant property for addressing UB in the Initialisation, Bounds, and Type and Lifetime categories, seems to be fundamentally unprovable at compile time in the general case (see \cite{Baxter2024}). % TODO: add references to special cases where it is diagnosable (Herb? Bjarne?)
 
-As we will see in Section~\ref{strategy}, despite these fundamental limitations there are things we can (and should) do in the C++ Standard to enable static analysis to construct a proof in more cases, such as adding annotations (\ref{annotations}), subsetting the language (\ref{subsetting}), and providing replacement features (\ref{newfeatures}). However, for existing C++ programs, reliably detecting cases of UB without rejecting correct code will inevitably have to leverage \emph{run-time} detection, i.e., the insertion of additional run-time checks when compiling the program. We therefore focus on such run-time detection for the remainder of this analysis.
+As we will see in Section~\ref{strategy}, despite these fundamental limitations there are things we can (and should) do in the C++ Standard to enable static analysis to construct a proof in more cases, such as subsetting the language (\ref{subsetting}), providing replacement features (\ref{newfeatures}), and adding annotations (\ref{annotations}). However, for existing C++ programs, reliably detecting cases of UB without rejecting correct code will inevitably have to leverage \emph{run-time} detection, i.e., the insertion of additional run-time checks when compiling the program. We therefore focus on such run-time detection for the remainder of this analysis.
 
 \subsubsection{Locality of diagnosis}
 \label{locally}
@@ -369,7 +370,7 @@ In addition to the cost of the check itself, we need to consider the frequency w
 \label{cost_nonlocal}
 
 For UB that is not locally diagnosable (which is most of the UB in C++), we need to consider the cost of the required additional instrumentation. To get an idea of that cost, we must nail down exactly which additional properties that are not normally known from within the C++ abstract machine would need to be tracked by such instrumentation. This tracking would need to happen at run time throughout the \emph{entire} program; checks relying on the tracked information would have to be inserted for \emph{every} run-time operation that may be affected by such UB.
-The full list is available in \hyperref[appendix]{Appendix~A}, and we provide an overview below.
+The full list is available in \hyperref[appendix]{Appendix~A}; we provide an overview below.
 
 To diagnose \emph{all} cases of UB in the memory safety categories of Initialization, Bounds, and Type and Lifetime, instrumentation would have to track all the following properties:
 
@@ -392,22 +393,20 @@ The non-locally-diagnosable UB in the Control Flow category concerns operations 
 
 Finally, to diagnose UB in the Coroutine category, instrumentation would have to track the suspension state associated with every coroutine handle.
 
-As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available. We discuss some of the consequences of this fundamental dilemma in Section~\ref{strategy}.
+As we know from existing sanitisers, such instrumentation is expensive enough that it is almost never affordable in production. If we were to add instrumentation covering \emph{all} of the above, we would remove vast swathes of UB from the language, but performance would worsen by an order of magnitude, unless special hardware-acceleration or some other radically new technology for these checks becomes available. We discuss some of the consequences of this fundamental dilemma in Section~\ref{strategy}. % TODO: do we actually? Double-check this
 
 Given the substantial overhead of such instrumentation in both run-time cost and additional memory consumption, the cost of the actual checks themselves (whether a specific pointer is valid at a specific time, etc.) is not particularly important for non-local diagnosis because the performance penalty would be dominated by the instrumentation overhead.
 
-\subsection{Existence of well-defined replacement behaviour}
+\subsection{Existence of replacement behaviour}
 \label{replacement}
 
 
-For existing code that cannot be modified in-source, removing run-time UB from the C++ language is essentially equivalent to changing the specification of operations that can have run-time UB to have some form of well-defined behaviour instead. A useful question is therefore: for which cases of UB is it possible to specify such well-defined \emph{replacement behaviour}?
+For existing code that cannot be modified in-source, removing run-time UB requires redefining 
+the semantics of the affected C++ operations, for the cases where UB would occur today, to have well-defined behaviour instead. A useful question is therefore: for which cases of UB is it actually possible to  specify such well-defined \emph{replacement behaviour} in a meaningful way?
 
-For the purposes of this analysis, we need to be careful with delineating what exactly we mean by replacement behaviour. If it is possible to insert a run-time check guarding a particular case of UB (e.g., a bounds check, a null pointer check), we can specify well-defined behaviour for the case when this check fails (e.g., terminate the program, throw an exception) which guarantees that we never actually execute the operation that would have run-time UB, thus avoiding it. However, regardless of the existence of that check, there are also cases where we can give well-defined behaviour to the operation itself, such that continuing to evaluate that operation does not lead to run-time UB even in the case where there is a bug that would cause UB with the current language specification. This is precisely what we mean by giving an operation replacement behaviour.
+For the purposes of this analysis, we need to be careful with delineating what exactly we mean by replacement behaviour. If it is possible to insert a run-time check guarding a particular case of UB (e.g., a bounds check, a null pointer check), we can specify well-defined behaviour for the case when this check fails (e.g., terminate the program, throw an exception) which guarantees that we never actually execute the operation that would have run-time UB, thus avoiding it. However, that does not mean giving well-defined behaviour to the operation \emph{itself}. What we mean by replacement behaviour is that, regardless of the existence of the check, continuing execution and evaluating the operation no longer leads to runtime UB \emph{even if the check failed, or would have failed}.
 
 As we will discuss in more detail in Section~\ref{strategy}, we can conceptually distinguish between two types of replacement behaviour --- \emph{refined} and \emph{erroneous} behaviour --- depending on whether the replacement behaviour is considered correct or incorrect (despite no longer being undefined). In any case, for either type of replacement behaviour to actually happen, the compiler must be able to lay down the necessary instructions at compile time. Simultaneously, as discussed in Section~\ref{statically}, in the vast majority of cases core language UB is fundamentally \emph{not} diagnosable at compile time, as whether or not the UB will occur depends on run-time parameters. Replacement behaviour can therefore not depend on knowing that an error occurred. For non-locally-diagnosable UB, replacement behaviour also cannot depend on any additional instrumentation being present.
-
-
-
 
 For this paper, we systematically identified all cases of core language UB for which either form of replacement behaviour can be meaningfully defined. This section gives an overview; the full list can be found in \hyperref[appendix]{Appendix~A}. As we will see, for most cases of UB, replacement behaviour does not exist, and if it does, it is often not cheap.
 
@@ -498,9 +497,10 @@ The outline of this strategy is illustrated in Figure~\ref{fig_magicslide}, an u
 
 \subsection{Overview}
 
-The proposed strategy is composed of seven basic tools that are orthogonal to each other: refined behaviour, erroneous behaviour, insertion of run-time checks, feature removal, language subsetting, the introduction of annotations, and the introduction of entirely new language features. In section~\ref{tools}, we describe each tool and discuss which cases of UB identified in this paper it can be applied to.
+% TODO: double-check when to use "runtime", "run time", and "run-time"
+The proposed strategy is composed of seven basic tools that are orthogonal to each other: feature removal, refined behaviour, erroneous behaviour, insertion of run-time checks, language subsetting, the introduction of annotations, and the introduction of entirely new language features. In section~\ref{tools}, we describe each tool and discuss which cases of UB identified in this paper it can be applied to.
 
-Three of these tools (refined behaviour, erroneous behaviour, and run-time checks) have the interesting property that they are usable without any source changes and can thus be used to remove UB from existing legacy C++ programs whose source code cannot be changed for whatever reason.
+Three of these tools (refined behaviour, erroneous behaviour, and run-time checks) have the interesting property that they are applicable even in cases where the source code cannot be modified for whatever reason, and thus can be used to remove UB from existing legacy C++ programs.
 
 Further, in order to be usable effectively in practice, three of these tools (erroneous behaviour, run-time checks, and language subsetting) need to be configurable by the user, either via compiler options or directly in source. This design space is discussed in more detail in Section~\ref{config}.
 
@@ -508,7 +508,7 @@ Finally, several of the available tools overlap in scope with \emph{Profiles}, a
 
 \subsection{Scope}
 
-Our proposed strategy for removal of explicit core language UB focuses on tools that can be portably specified within the C++ Abstract Machine. We therefore do not consider, in this paper, efforts that operate largely outside of the C++ Abstract Machine framework. One noteworthy effort that falls into the latter category is  \cite{P3627R0}, which proposes a profile for preventing remote code execution (RCE) by employing implementation-defined techniques such as stack isolation and address space layout randomisation (ASLR).
+Our proposed strategy for removal of explicit core language UB focuses on tools that can be portably specified within the C++ abstract machine. We therefore do not consider, in this paper, efforts that operate largely outside of the C++ abstract machine and the specification tools afforded by the C++ Standard. One noteworthy effort that falls into the latter category is  \cite{P3627R0}, which proposes a profile for preventing remote code execution (RCE) by employing implementation-defined techniques such as stack isolation and address space layout randomisation (ASLR).
 
 Further, as discussed in \cite{P3700R0}, making C++ ``safe''\footnote{In this paper, we avoid unqualified uses of the terms ``safe'' and ``safety'' because of their ambiguity. As discussed in \cite{P3376R0}, \cite{P3500R1}, and \cite{P3578R0}, it is critically important to distinguish between conflicting usages of those terms, such as functional safety, language safety, memory safety, etc.} consists of more than mitigating explicit core language UB. We already touched upon implicit UB and language UB in Section~\ref{enum_scope}. Beyond those, there are many other classes of bugs unrelated to UB that can compromise the functional safety, security, and correctness of a C++ program. Such bugs include resource leaks, termination errors, and logic errors. 
 
@@ -524,7 +524,7 @@ The first and most blunt tool in our toolbox is to make a C++ operation that wou
 
 However, we generally do not consider it acceptable to break an existing, \emph{correct} program by using this tool (or any of the other proposed tools). If we want to strictly follow this principle, usage of the removal tool would have to be restricted to cases where we can determine at compile time that the given operation will definitely have UB when executed.\footnote{One could argue that even then, the program is not necessarily incorrect unless that operation actually ends up being executed during runtime. This is not something a C++ compiler can reason about unless the operation in question is either lexically inside \tcode{main} or is provably being called from \tcode{main}.} As discussed above in Section~\ref{statically}, there is not a single case of UB in our list where such a determination can generally be made.
 
-A slightly more aggressive approach would be to unconditionally remove a feature if we can determine at compile time that it always \emph{either} exhibits UB \emph{or} does nothing useful. This approach is being proposed in \cite{P3424R0} for the case of having a deallocation function (i.e., a user-defined \tcode{delete} operator) that is not declared \tcode{noexcept}. Since exiting a deallocation function via an exception is UB, a deallocation function that is not declared \tcode{noexcept} either exhibits UB (if an exception ends up being thrown from it) or does nothing useful (if no such exception is ever being thrown). Therefore, the paper proposes to deprecate deallocation functions with an explicit non-throwing \emph{noexcept-specifier} and making deallocation functions with a potentially-throwing \emph{noexcept-specifier} ill-formed.
+A slightly more aggressive approach is to unconditionally remove a feature if we can determine at compile time that it always \emph{either} causes UB \emph{or} does nothing useful. This approach is being proposed in \cite{P3424R0} for the case of having a deallocation function (i.e., a user-defined \tcode{delete} operator) that is not declared \tcode{noexcept}. Since exiting a deallocation function via an exception is UB, a throwing or potentially-throwing exception specification on a deallocation function always either causes UB (if an exception ends up being thrown from it) or does nothing useful (if no such exception is ever being thrown). Therefore, the paper proposes to deprecate deallocation functions with an explicit non-throwing \emph{noexcept-specifier} and making deallocation functions with a potentially-throwing \emph{noexcept-specifier} ill-formed.
 
 We are currently not aware of any other areas in the C++ Standard where this tool could be successfully applied, but it is worth keeping it in our toolbox in case such areas will be discovered in the future.
 
@@ -534,6 +534,7 @@ We are currently not aware of any other areas in the C++ Standard where this too
 Some cases of UB can be addressed by unconditionally changing their runtime semantics to some well-defined behaviour. We have extensively used this option in the past to gradually remove UB from the language; examples of successfully applying this tool in the C++ Standard are the introduction of implicit lifetime types in C++20 \cite{P0593R6} which gave defined behaviour to certain situations when a pointer to raw allocated memory is being cast to a pointer of object type, as well as the range-based for loop fix in C++23 \cite{P2644R1},  which extended the lifetime of certain temporary objects across the duration of executing the loop, thus avoiding UB due to dangling references. 
 
 We expect that in the C++ Standard there will be relatively few remaining situations where this tool can be used effectively. For the vast majority of UB that remains in C++ today, unconditionally refining the behaviour is either not possible with any sensible semantics or would lead to unacceptable performance degradations. Moreover, in many cases where replacement behaviour is possible, unconditionally refining the behaviour would effectively mask the bug and make it impossible for tools to distinguish it from correct usage. It is therefore preferable to replace the behaviour with erroneous behaviour instead (see next section). 
+% TODO: maybe mention GCC -fwrapv as an example of this? Also mention that we can't have conditionally refined behaviour due to language dialects?
 
 \subsubsection{Erroneous behaviour}
 \label{erroneous}
@@ -560,7 +561,7 @@ While practically no C++ operation can, in the general case, be proven at compil
 
 However, in such cases, we cannot make these constructs \emph{unconditionally} ill-formed, as this would break a significant number of correct C++ programs deployed in the field. Therefore, we need to use a tool different from simple removal (Section~\ref{removal}). The required tool is called \emph{language subsetting}: specifying named \emph{subsets} of the C++ language that do not contain the ``unsafe'' features and that the user can opt into. This tool can be very useful for codebases that can be modernised or are being newly written.
 
-While we do not propose a concrete specification for language subsetting in this paper, such a specification is being developed in \cite{P3716R0}. A number of principles need to be considered for designing this tool correctly: subsetting the language should never be allowed to alter the semantics of well-formed code, subsets must always combine orthogonally, and so forth. 
+While we do not propose a concrete specification for language subsetting in this paper, such a specification is being developed in \cite{P3716R0}. As described in that paper, a number of principles need to be considered for designing this tool correctly: subsetting the language should never be allowed to alter the semantics of well-formed code, subsets must always combine orthogonally, and so forth. 
 
 \subsubsection{Annotations}
 \label{annotations}
@@ -579,19 +580,23 @@ Note that combining the new features tool with the language subsetting tool is e
 \subsection{Configuration}
 \label{config}
 
+% TODO: Talk about which configuration options should be available for each feature - consult Peter's paper and slide deck I made for him
+
 Three of the seven tools discussed above need to be \emph{configurable} by the user in order to be usable in practice: runtime checks, erroneous behaviour, and language subsetting.
 
-There is a number of reasons why any form of correctness checks at runtime need to be configurable by the user; these reasons have been discussed in detail in \cite{P2900R14} and are fundamentally the same for runtime checks implicitly inserted by the compiler as for contract assertions added by the user. In some applications, termination on failure is not an acceptable outcome even in the face of UB. More importantly, as we saw in Section~\ref{diagnose}, the majority of UB in C++ today is not locally diagnosable and require expensive sanitiser-like instrumentation to perform the checks. Even for those 18 cases of UB that are locally diagnosable and do not require additional instrumentation to insert run-time checks, in most cases the checks themselves will have a significant run-time overhead. Therefore, the checks need to be \emph{optional}: we need a mechanism to enable and disable each kind of check, and we cannot require an implementation to support all checks.
+There is a number of reasons why any form of correctness checks at runtime need to be configurable by the user; these reasons have been discussed in detail in \cite{P2900R14} and are fundamentally the same for runtime checks implicitly inserted by the compiler as for contract assertions added by the user. In some applications, termination on failure is not an acceptable outcome even in the face of UB. More importantly, as we saw in Section~\ref{diagnose}, the majority of UB in C++ today is not locally diagnosable and require expensive sanitiser-like instrumentation to perform the checks. Even for those 18 cases of UB that are locally diagnosable and do not require additional instrumentation to insert run-time checks, in most cases the checks themselves will have a significant --- and in some cases, unacceptable --- run-time overhead. Therefore, the checks need to be \emph{optional}: we need a mechanism to enable and disable each kind of check, and we cannot require an implementation to support all checks.
 
 For example, a compiler may choose to support enabling run-time checks for arithmetic UB (they already do today for some cases; for example, GCC offers the \tcode{-ftrapv} flag, which enables checks for signed integer overflow) while not supporting any checks that require expensive instrumentation. On the other hand, a different compiler that comes with a suite of a sanitisers may choose to support some subset of those more expensive checks (and again, they already do today, just not in a standardised fashion).
 
 Defining such optional run-time checks in as many cases as possible is, therefore, useful in itself. When these checks are configurable, they cost \emph{nothing} unless they are turned on, and no implementation is actually \emph{required} to implement them, yet specifying them in the Standard has a number of advantages: it allows us to assign standard names and categories to them (see also Section~\ref{ext}); it allows for implementations of such run-time checks (including existing compiler options and sanitisers) to leverage a shared paradigm and shared terminology; and it brings those tools into the scope of the C++ Standard.
 
 Similar reasons apply to erroneous behaviour: in practically all cases, its introduction comes with non-negligible --- and in some cases, even very large --- performance overhead. Therefore, to avoid unacceptable performance regressions in existing, correct C++ code, we \emph{must} offer an escape hatch that reverts to today's ``unsafe'' semantics. We propose such an escape hatch in Section~\ref{assume}.
+% TODO: maybe mention again that this one is generic and the C++26 one is specific
 
 Finally, as already discussed in Section~\ref{subsetting}, language subsetting needs to be opt-in in order to avoid breaking existing, correct C++ programs.
 
-For all these features, we need to clearly specify the available configuration options and the mechanisms available for the user to select these options at different levels of granularity. For erroneous behaviour and runtime checks, we accomplish this via leveraging contract evaluation semantics (see Section~\ref{design}); interestingly, as we will see in Section~\ref{assume}, disabling erroneous behaviour is actually equivalent to selecting a special evaluation semantic for the associated runtime check. For subsetting, the design of suitable configuration mechanisms are not yet well understood; we expect future papers to make progress in this area.
+For all these features, we need to clearly specify the available configuration options and the mechanisms available for the user to select these options at different levels of granularity. For erroneous behaviour and runtime checks, we accomplish this via leveraging contract evaluation semantics (see Section~\ref{design}). For subsetting, the design of suitable configuration mechanisms are not yet well understood; we expect future papers to make progress in this area.
+% TODO: double-check that the fact the semantic controls both tools is explained well in the design section.
 
 \subsection{The role of Profiles}
 \label{profiles}
@@ -604,10 +609,11 @@ It therefore seems logical to define Profiles as a higher-level feature building
 
 For example, we may define a subset of the language that excludes pointer arithmetics and a set of implicit run-time checks for array bounds checking. We can then define a ``bounds'' profile that enables both of these. Such profiles can be tailored to particular problem areas of the language, such as type, bounds, or arithmetic safety profiles, or to particular regulatory requirements, such as a MISRA profile.
 
-Specifying Profiles in this way will enable EWG to agree on a shared understanding of what Profiles are, guide their design, and answer the many open questions regarding what they should or should not be able to do.
+Specifying Profiles in this way will enable EWG to agree on a shared understanding of what Profiles are, guide their design, and answer the many open questions regarding what they should or should not be able to do. % TODO: list the actual questions? Look at Josh and Peter's stuff and email exchange. Consider mentioning the "superset and subset" thing from Bjarne and why Profiles can NOT superset the language.
 
 Importantly, when designing user-facing mechanisms for selecting configuration options for the basic tools proposed in Section~\ref{tools}, we need to take care to not create a situation where different features offer the same functionality in conflicting ways.
 
+% TODO: consider just referencing the labels section here!
 For example, when enabling and disabling runtime checks that guard against core language UB, we need to agree whether this happens via the syntax introduced by Labels (\cite{P3400R1}; see also Section~\ref{ext}) or via the syntax introduced by the Profiles framework (\cite{P3589R2}); or, if it can happen via both, we need to define one feature in terms of the other. If we follow the approach proposed here, we can define a concrete profile as essentially doing nothing else but expanding to a particular set of configuration directives defined by features such as \cite{P3400R1} that directly control the corresponding lower-level basic tool.
 
 \section{Proposed design}
@@ -616,6 +622,7 @@ For example, when enabling and disabling runtime checks that guard against core 
 \subsection{Defining implicit contract assertions}
 \label{defineicas}
 
+% TODO: Move this paragraph to main section and include EB
 In this section, we propose a framework for systematically introducing run-time checks to C++ that guard against core language UB, building upon Contracts.
 
 For C++26, we adopted a foundation of Contracts functionality via \cite{P2900R14}. This initial subset contains three kinds of \emph{contract assertions}: \tcode{pre}, \tcode{post}, and \tcode{contract_assert}. Since these contract assertions are specified by the user with explicit syntax, in this paper we call them \emph{explicit} contract assertions. For example, the author of a vector-like class can add a precondition assertion to its subscript operator to guard against out-of-bounds access:
@@ -655,7 +662,7 @@ Other than being an implicit precondition assertion automatically generated by t
 \subsection{Applying implicit contract assertions}
 \label{applyicas}
 
-Having specified precisely what an implicit contract assertion is and how it behaves, we can now apply that specification to \emph{every} case of UB  that is --- at least in principle --- checkable at runtime, i.e., per Section~\ref{analysis}, 76 cases of UB (95\% of all identified cases of explicit core language UB in C++ today).
+Having specified precisely what an implicit contract assertion is and how it behaves, we can now apply that specification to \emph{every} case of UB  that is --- at least in principle --- checkable at runtime. As we saw in Section~\ref{analysis}, this is the case 76 cases of UB, or 95\% of all identified cases of explicit core language UB in C++ today).
 
 To accomplish this, we need to apply the following transformation across the entire C++ Standard: change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``operation $X$ has an implicit precondition that $A$ is \tcode{true}; continuing execution past a violation of this precondition is undefined behaviour''.
 
@@ -673,7 +680,7 @@ Finally, applying implicit contract assertions throughout the language in the pr
 
 The approach suggested in those papers is to constrain explicit contract-assertion predicates to expressions that can be statically proven to have no UB. However, this approach does not seem to be specifiable, implementable, or usable in practice (see  \cite{P3376R0}, \cite{P3386R0}, and \cite{P3499R1}) and has thus been rejected by WG21. What \emph{does} work is to specify a framework for mitigating UB across the entire language, as proposed here. Once we have this framework, it will then automatically also apply to the evaluation of explicit contract assertions.
 
-\subsection{Adding replacement behaviour}
+\subsection{Defining replacement behaviour}
 \label{specifyeb}
 The next part of our proposal is to introduce well-defined replacement behaviour for all 16 cases of core language UB for which such replacement behaviour exists (see Section~\ref{replacement}). We accomplish this by modifying the specification of each affected operation as follows. If the condition that would have previously made the behaviour of the operation undefined --- i.e., an implicit contract violation --- occurs, and control flow continues past that violation, then the behaviour of the operation is defined to be that replacement behaviour instead of UB.
 
@@ -696,6 +703,7 @@ The fact that this implicit function body always has well-defined behaviour is t
 
 The required transformation is to change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``operation $X$ has an implicit precondition that $A$ is \tcode{true}; if this precondition is violated, the behaviour is \emph{<replacement behaviour>}''. In all 16 cases identified in this paper, this replacement behaviour will be some form of erroneous behaviour. For data races, the erroneous behaviour consists of performing all primitive memory accesses atomically in some unspecified order; for unsequenced operations, it consists of performing the operations in question in sone unspecified order; for assumptions, it consists of ignoring the assumption; for all remaining cases, it consists of returning an erroneous value (which is only possible in cases where the operation in question returns a value of built-in type).
 
+% TODO: this paragraph seems to belong to the next section?
 As discussed in Section~\ref{replacement}, if we make this change and do nothing further, it would introduce significant --- and in many cases, unacceptable --- performance regressions to existing code. Therefore, we must offer an escape hatch that reverts to today's semantics for cases in which a violation of the implicit precondition leads to undefined behaviour.
 
 \subsection{Providing an escape hatch}
@@ -724,6 +732,7 @@ Importantly, in light of the sustained opposition in WG21 to allowing the \emph{
 
 This restriction is important because, for explicit contract assertions, the \emph{assume} semantic  has the potential to introduce UB to an otherwise correct program if we wrote a buggy contract predicate. On the other hand, this risk does not exist for implicit contract assertions since they are generated by the compiler; for error cases that cause UB, the \emph{assume} semantic is merely a tool to achieve the same semantics those error cases already have in C++ today.
 
+% TODO: This might be better in the future extensions chapter
 Once we get Labels, as proposed in \cite{P3400R1}, we can introduce an explicit label that would allow the \emph{assume} semantic to apply to an explicit contract assertion as well. For example, the limiter example from the \tcode{[[assume]]} paper, \cite{P1774R8}, could be written as follows:
 \begin{codeblock}
 void limiter(float* data, size_t size)
@@ -782,7 +791,7 @@ and \emph{assertion-statements} ([stmt.contract.assert]). \added{\emph{Implicit}
 Each contract assertion has a predicate, which is an expression of type \tcode{bool}. 
 \begin{note}
 \removed{The value of the predicate is used to identify program states that are expected.}
-\added{If it is determined during program execution that the predicate has a value other than \tcode{true},
+\added{If it is determined during program execution that the predicate does not evaluate to \tcode{true},
 a contract violation occurs. A contract violation is always the consequence of incorrect
 program code.}
 \end{note}
@@ -946,11 +955,11 @@ All wording is taken from the current C++ working paper \cite{N5008}. Each row c
 \renewcommand\arraystretch{1.5}%
 \begin{longtable}{|p{2.4cm}|p{6.5cm}|p{1.9cm}|p{1.9cm}|p{6.7cm}|p{2.5cm}|}
 \hline
-{\bfseries Identifier} & {\bfseries Wording} & {\bfseries Checkable at runtime} & {\bfseries Locally checkable} & {\bfseries Checking strategy} & {\bfseries\raggedright Replacement\\ behaviour}
+{\bfseries Identifier} & {\bfseries Wording} & {\bfseries Runtime-checkable} & {\bfseries Locally checkable} & {\bfseries Checking strategy} & {\bfseries\raggedright Replacement\\ behaviour}
 \tabularnewline \hline
 \endfirsthead
 \hline
-{\bfseries Identifier} & {\bfseries Wording} & {\bfseries Checkable at runtime} & {\bfseries Locally checkable} & {\bfseries Checking strategy} & {\bfseries\raggedright Replacement\\ behaviour}
+{\bfseries Identifier} & {\bfseries Wording} & {\bfseries Runtime-checkable} & {\bfseries Locally checkable} & {\bfseries Checking strategy} & {\bfseries\raggedright Replacement\\ behaviour}
 \tabularnewline \hline
 \endhead
 

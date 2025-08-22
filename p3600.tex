@@ -59,24 +59,28 @@
 \begin{document}
 \title{Contract assertions on virtual functions: \\ a principled design approach}
 \author{
-Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) 
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+John Lakos \small(\href{mailto:jlakos@bloomberg.net}{jlakos@bloomberg.net}) 
+% TD: TODO: get Ville on board?
 }
 \date{}
 \maketitle
 
 \begin{tabular}{ll}
 Document \#: & D3600R0 \\
-Date: &2025-05-21 \\
+Date: &2025-08-22 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
 
 \begin{abstract}
-TODO
+In this paper, we present a comprehensive analysis of the design space for supporting function contract assertions (\tcode{pre} and \tcode{post}) on virtual functions in C++. We begin by identifying the desirable properties that such a language feature should exhibit. We then survey existing and proposed approaches and introduce a framework for classifying them according to a small number of key design decisions. For each decision, we examine its impact on the extent to which the desirable properties can be achieved. We find that no design achieving all desirable properties is possible. We identify three candidate designs that realise different, meaningful subsets of these properties. We distill the choice between these candidate designs down to a small number of binary design decisions between concrete tradeoffs. We conclude with a recommendation for a concrete candidate design that seems to offer the best set of tradeoffs overall.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\pagebreak
 \tableofcontents*
 \pagebreak
 
@@ -95,73 +99,449 @@ TODO
 
 \section{Introduction}
 
-Virtual functions, runtime polymorphism, and dynamic dispatch are widely used in C++. 
+\subsection{Motivation and context}
 
-\section{Methodology}
+Contract assertions (\cite{P2900R14}) are a major new facility in C++26. A key feature of this facility are \emph{function contract assertions}, spelled with \tcode{pre} and \tcode{post}. This feature allows expressing
+% TD: I omitted the "the" from this sentence here because they only allow expressing a subset of the full set of preconditions and postconditions, so saying "the preconditions and postconditions" would be technically incorrect, however explaining why that is the case (or even saying something like "a subset of" here) feels like a distraction.
+preconditions and postconditions of a function directly in C++ code, and optionally checking those conditions at runtime to identify and mitigate program defects, in a configurable and scalable fashion. 
 
-TODO
+Unlike assertion statements (\tcode{contract_assert}) or pre-C++26 macro-based assertions, function contract assertions are a part of the function's \emph{declaration} and are thus readily found by humans, compilers, IDEs, and static analysis tools without having to inspect the function's definition. 
+
+However, a major limitation of the initial feature set in C++26 is that \tcode{pre} and \tcode{post} cannot be placed on a \emph{virtual} function; doing so renders the program ill-formed. This limitation exists due to ongoing disagreements in WG21 regarding the desired semantics for \tcode{pre} and \tcode{post} on virtual functions that could not be resolved in the C++26 timeframe.
+
+At the same time, virtual functions are widely used in C++ today; many popular libraries and frameworks rely on runtime polymorphism as a key aspect of their design. Therefore, to ensure a successful adoption of contract assertions across the C++ ecosystem, we must add meaningful and user-friendly support for \tcode{pre} and \tcode{post} on virtual functions (as pointed out in \cite{P3173R0}).
+
+In this paper, we consider everything we have learned since the adoption of \cite{P2900R14} for C++26 and undertake a new attempt at resolving the existing disagreements and finding a consensus design for this feature that suits the needs of the C++ community.
+
+\subsection{Prior art}
+
+\subsubsection{Other programming languages}
+
+The popular programming languages, such as C\#, Java, and Python, offer assertions only as a library feature,\footnote{For C\# and Java, there exist language extensions that implement function contract assertions: Microsoft Code Contracts and the Java Modeling Language (JML), respectively. Neither of these facilities enjoys significant use today. Microsoft Code Contracts is officially deprecated. JML had some influence in the 2000s but is nowadays restricted to academic contexts; the tooling for it is somewhat arcane and difficult to come by.} and as such do not offer true function contract assertions\footnote{To aid understanding, throughout this paper we use the terminology of the C++ Standard (such as overriding function, overridden function, function contract assertion, etc.) for analogous concepts in other programming languages, even though in many cases the users of those languages would choose different terminology.} that could meaningfully integrate with the  dynamic dispatch mechanisms in those languages. However, there is a small number of programming languages that offer both true function contract assertions and dynamic dispatch as a language feature: Eiffel, D, and Ada. In these languages, function contract assertions and virtual functions can be composed in a meaningful way.
+
+Eiffel, released in 1986, was the first programming language that allowed placing precondition and postcondition assertions on function declarations. In Eiffel, such assertions are spelled with \tcode{requires} and \tcode{ensures}, respectively. Eiffel was developed in conjunction with the ``Design by Contracts'' paradigm by Bertrand Meyer. Its design closely follows that paradigm.
+
+In particular, Eiffel by construction enforces the constraint that in an overriding function, preconditions can only be widened and postconditions can only be narrowed. This is achieved by using a conjunction (via OR) of the precondition assertions and a disjunction (via AND) of the postcondition assertions of the overriding function and all functions in the inheritance hierarchy overridden by it.
+
+The D programming language, released in 2001, offered function contract assertions from its inception. Precondition and postcondition assertions are spelled with \tcode{in} and \tcode{out} blocks, respectively. For virtual functions, D's design follows the Eiffel paradigm of OR-ing precondition assertions and AND-ing postcondition assertions across an inheritance hierarchy. However, there are also some notable differences in the detail.
+
+The Ada programming language added the feature in Ada 2012. Ada seems to be the only language with true function contract assertions that enjoys a significant degree of active use in production code today (albeit it is still a niche language, primarily used in safety-critical and mission-critical industries such as aerospace, defence, transportation, and medical systems).
+
+Ada's design for function contract assertions on virtual functions is particularly complex. The default syntax, \tcode{Pre} and \tcode{Post} respectively, corresponds to so-called \emph{specific} precondition and postcondition assertions. However, adding the \tcode{Class} attribute turns them into so-called  \emph{class-wide} precondition and postcondition assertions, \tcode{Pre\textquotesingle Class} and \tcode{Post\textquotesingle Class} respectively, with entirely different and rather unique semantics. Any given function can have both flavours of function contract assertions attached to it.
+
+A more detailed discussion of these historic designs, and how they could be applied to C++, can be found in Section~\ref{designs} of this paper.
+
+The ability to express the contract of a function also exists in the academic research languages Dafny and Spec\#. However, the contract facilities in these languages are designed for static correctness proofs rather than runtime checking. Thus, they are very different in nature from the contract facility in C++26. The same is true for the experimental contracts facility in Kotlin. There also exists an experimental contracts facility for Rust that is realised via procedural macros; however, it does not seem to be integrated with Rust's mechanism for dynamic dispatch (trait objects). All these designs are therefore not directly relevant for the purposes of this paper.
+
+\subsubsection{C++ proposals}
+
+The first proposal for adding a contracts facility to C++ (\cite{N1613}) was directly inspired by the D language and therefore proposed the same design as realised in D: precondition and postcondition blocks that are OR-ed and AND-ed, respectively, across an inheritance hierarchy. This proposal was revised a few times (the last revision being \cite{N1962}) but ultimately did not succeed.
+
+The second proposal for a contracts facility (first revision \cite{N3604}, last revision \cite{N4378}) proposed contract assertions as a library feature and therefore did not have function contract assertions that could interact with dynamic dispatch. This proposal, too, did not succeed.
+
+Following the abandonment of the second proposal, many different design options were explored in various papers. \cite{N4110} and \cite{P0147R0} argued in favour of the principle that preconditions should not be strengthened and postconditions should not be weakened. On the other hand, \cite{P0247R0} argued that inheriting checks on virtual functions, or requiring that checks on base class virtual interfaces match overriders ``does not work'', and that allowing an overriding function to both widen and narrow the preconditions of the overridden function might make sense because not everyone will want to call a function through the same interface.
+
+\cite{N4415} and \cite{P0287R0} proposed that an overriding function should automatically inherit the
+sequence of function contract assertions from the overridden function. This sequence can be
+optionally repeated or omitted; if it is repeated, it must be ODR-identical. \cite{P0380R0} made this rule even more restrictive by requiring that the sequence be repeated on every overriding function; however, this restriction was rolled back again in \cite{P0380R1}. Either way, overriding functions were constrained to always have the same sequence of function contract assertions as the overridden function --- a deliberately more conservative design than in previous proposals or in Eiffel, D, and Ada. This constraint was retained throughout C++2a Contracts (\cite{P0542R5}), which were adopted for the C++20 Working Draft and then removed again (\cite{P1823R0}).
+
+After the failure of C++2a Contracts and the establishment of SG21, proposals continued to flip-flop between these two designs: \cite{P2388R4} made repeating the sequence on an overriding function optional, and \cite{P2521R5} made it mandatory again. \cite{P2954R0} added yet another variation: repeating the function contract assertion sequence on an overriding function was neither optional nor required but actually ill-formed; the sequence was always inherited implicitly. This design was approved by SG21.
+
+However, after more investigation, implicit inheritance of the contract was found to be problematic (see \cite{P2932R3} Section 3.4). SG21 decided that, given the many concerns and disagreements over how function contract assertions should work on virtual functions, consensus on a comprehensive
+solution could be deferred to a future extension, and virtual function support was thus removed
+entirely from the proposal. This design was forwarded to EWG and LEWG.
+
+However, in \cite{P3173R0}, a major compiler vendor stated that, given the importance and persuasive use of virtual functions in C++, a contracts facility that fails to support efficient use with virtual functions is inadequate for standardisation. It seemed unlikely at that point that EWG would adopt a contracts facility without support for virtual functions.
+
+This led to the development of a new design for virtual function support in \cite{P3097R0} that resolved the known issues of previous designs. This design removed contract inheritance and introduced the notion of caller-facing and callee-facing function contract assertions. A counterproposal with yet another new design based on contract inheritance was made in \cite{P3169R0}. SG21 carefully considered all design options known at the time and forwarded the design in \cite{P3097R0} to EWG. This design was approved by EWG and incorporated into the C++26 proposal.
+
+However, following this decision, concerns were raised in \cite{P3506R0} and in \cite{P3573R0} that the caller/callee model from \cite{P3097R0} that had been approved by EWG was a departure from the established model; that it had insufficient deployment and usage experience in the field; and that it was too complex. A rebuttal paper \cite{P3506R0} argued that the caller/callee model should be retained for C++26. EWG did not manage to resolve this disagreement in the C++26 timeframe and instead decided to ship contract assertions in C++26 without support for virtual functions.
+
+A more detailed history of function contract assertions on virtual functions in C++, including poll results and references to all relevant papers, can be found in \cite{P2899R1} Section 3.3.2.
+
+\subsection{Methodology}
+
+The goal of this paper is to identify the design for supporting \tcode{pre} and \tcode{post} on virtual functions that best satisfies the needs of the C++ community. To achieve this goal, we conduct an analysis of the available design space that is as exhaustive and as objective as possible. Our analysis follows the method for finding consensus on technical design questions developed in \cite{P3684R0}. This method is itself an evolution and adaptation of the Principled Design method developed in \cite{P3004R0} and \cite{P3005R0}.
+
+We begin by identifying the desirable properties that such a design should exhibit (Section~\ref{properties}). We describe each property as precisely as possible and provide motivation for each one, along with use cases and code examples.
+
+We then identify all design options for this language feature known to us, including all variations that have been shipped in other programming languages or proposed for C++. To aid in navigating this design space, we introduce a framework for classifying all possible designs according to a small number of key design decisions.
+
+We proceed by constructing an \emph{evolution graph}, i.e., determining which design options can be obtained by future evolution of other, more conservative design options (Section~\ref{evolution}). Such an evolution graph is useful in the case where the committee fails to get consensus on a decision between two different design options. In this case, we can fall back to the maximal common ancestor of both options in the evolution graph.
+
+With this thorough mapping of the available design space, we conduct an analysis of how well each available design option satisfies the identified desirable properties (Section~\ref{matrix}). We visualise this analysis with a so-called \emph{conformance matrix}. 
+
+In the final part of our analysis, we use the conformance matrix to identify the most promising candidate designs (Section~\ref{tree}). We distill the choice between these candidate designs down to a small number of binary design decisions between concrete tradeoffs (``do we prefer satisfying property A or property B?'') that can be polled in EWG.
+
+We conclude with a recommendation for a concrete candidate design that seems to offer the best set of tradeoffs overall (Section~\ref{conclusion}).
+
+
+\subsection{Terminology}
+
+When discussing possible designs for supporting function contract assertions (\tcode{pre} and \tcode{post}) on virtual functions, and desirable properties of such designs, we often need to refer to different sets of assertions within an inheritance hierarchy that involves overridden and overriding functions. To avoid ambiguity, it is important to be precise about which set of assertions we are referring to at any given time.
+
+We distinguish between the following three sets of function contract assertions, which may or may not be identical depending on the design being considered:
+
+\begin{itemize}
+\item The function contract assertions of a function,
+\item The function contract assertions specified on a function declaration,
+\item The function contract assertions that apply to a function call.
+\end{itemize}
+
+The function contract assertions that apply to a function call are further divided into  \emph{caller-facing} and \emph{callee-facing} function contract assertions.
+
+In C++, we can distinguish between \emph{direct} and \emph{indirect} function calls. Indirect function calls are function calls in which it is not known at the call site which concrete function will end up being executed. Indirect function calls include calls through a pointer to function or pointer to member function, as well as virtual function calls (i.e., function calls that perform dynamic dispatch). Note that a fully qualified call to a virtual function does not perform dynamic dispatch and is therefore a direct call.
+
+The function contract assertions of a function are the function contract assertions that will be evaluated when that function is called directly.
+% TD: TODO: add a property that indirect calls where static and dynamic type are equal should have the same set of function contract assertions as direct calls.
+
+The function contract assertions specified on a function declaration are those that are syntactically specified via \emph{precondition specifier}s and \emph{postcondition specifier}s on the first declaration of \emph{that} function. Note that it depends on the design whether this set is identical to the function contract assertions of that function. In particular, in a design where function contract assertions are silently inherited from the overridden function, this is not the case.
+
+Finally, the function contract assertions that apply to a function call are those that are evaluated when that function call is being executed. The caller-facing function contract assertions of a function call are those that are known at the call site. The callee-facing function contract assertions of a function call are those that are known at the site of the function body being executed.
+% TD: Josh, do we need to tweak this definition to be more precise for cases like devirtualisation?
+
+For a direct function call, the caller-facing and callee-facing function contract assertions are the same set of assertions. However, for an \emph{indirect} function call, the caller-facing and callee-facing function contract assertions may or may not be the same set of assertions. 
+
+For a function call through a pointer to function or pointer to member function, the caller-facing function contract assertions are always an empty set (as a pointer to function cannot have function contract assertions in C++26), while the callee-facing contract assertions are those of the function pointed to by the pointer.
+
+Importantly for this paper, for a \emph{virtual function call}, the caller-facing function contract assertions are those of the statically called function, while the callee-facing contract assertions are those of the final overrider, i.e., the function that ends up being selected by dynamic dispatch. These two functions may or may not be identical, depending on the dynamic type of the object and on the chosen language design. One possible design would be to allow an overridden and an overriding function to have different sets of function contract assertions; another would be to somehow enforce that they are always the same.
+
+Figure~\ref{fig_callercallee} illustrates the concept of caller-facing and callee-facing function contract assertions. Note that the existence of caller-facing and callee-facing function contract assertions is not a property of any particular design for supporting \tcode{pre} and \tcode{post} on virtual functions, but a direct consequence of how indirect virtual function calls work in C++.
+% TD: Josh, do we need to clarify that this has nothing to do with TUs? I know why you think it doesn't (TUs are an implementation detail), and yet Lisa has "caller TU" and "callee TU" on her slides with that diagram.
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+\begin{figure}[b]
+\begin{center}
+\includegraphics[scale=0.29]{images/D2900R9-callercallee}
+\end{center}
+\caption{Caller-facing and callee-facing function contract assertions in an indirect function call.}
+\label{fig_callercallee}
+\end{figure}
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 \section{Desirable properties}
+\label{properties}
+
+\subsection{General approach and selection criteria}
+
+In this section, we identify the desirable properties that a design for supporting \tcode{pre} and \tcode{post} on virtual functions should exhibit. We take into account all relevant properties that were articulated by members of WG21 (whether formally in papers or informally during meetings or on the committee mailing lists). Each requirement is given a short unique identifier to easily refer to it later in the paper, for example \tcode{ImplExp} for implementation experience. 
+
+We follow the consensus-building method developed in \cite{P3684R0}; thus, we focus on data and objectively verifiable information rather than opinions, and do our best to avoid bias and value judgments. In particular, we do not attempt to rank the listed properties by priority, relevance, or otherwise.
+
+Some of the listed properties were originally articulated as ``design principles that must be adhered to'',  ``important use cases'', ``necessary conditions for successfully deploying the feature'', etc. For the purpose of this analysis, we carefully avoid such characterisations and instead treat all properties equally. For properties that are describing a use case, we avoid any claims of how ``common'' such a use case is unless there is data to back up such a claim.
+
+We describe each desirable property as precisely as possible and provide motivation for it. Where applicable, we include concrete code examples; we strive to provide realistic use cases rather than ``toy code'' whenever possible. In a number of cases, it may be controversial whether the motivation is sound, the use case is plausible, and the given property is actually desirable. In these cases, we strive to adopt a neutral position and limit ourselves to describing the property and its motivation.
+
+We only include properties for which we can objectively and unambiguously answer the question ``does a given design exhibit this property'' with one of the following three options: \emph{Yes}, \emph{No}, and \emph{Partially}. We therefore deliberately exclude properties that are vague, subjective, and/or cannot be measured directly, such as teachability or intuitiveness. We also do not include properties that could in principle be measured, but for which no concrete, measurable criterion has been proposed.
+
+For example, \cite{P3573R0} mentions the concern that \tcode{pre} and \tcode{post} on virtual functions ``have not been tried at scale''. However, the paper does not specify a measurable criterion for what would constitute sufficient ``scale''. We are happy to include this property in a future revision of this paper if the authors can provide a measurable criterion (e.g., a particular number of lines of deployed code that they consider sufficient deployment experience). Similarly, \cite{P3506R0} listed as a concern that the design proposed in \cite{P3097R0} was ``too complex''; however, since the author did not provide an objective criterion for measuring the complexity of any possible design, we exclude this concern from our analysis.
+
+Importantly, we are not suggesting that properties like teachability or complexity are not relevant for language design; quite the opposite. However, since we cannot objectively measure them, it will be up to each member of WG21 to decide how to weigh these more subjective properties against the objective ones presented in this paper when considering a concrete feature design for inclusion in Standard C++.
+
+\subsection{List of requirements}
+
+\subsubsection{\tcode{ImplExp} --- Implementation experience}
+
+The proposed design should be implemented \emph{completely} in at least one major C++ compiler front-end such as GCC, Clang, MSVC, or EDG. We do not require that the implementation has been upstreamed into the main branch of that compiler and shipped to users; an implementation on a dev branch is sufficient. However, we do require that the implementation is freely available to users in some form, for example by publishing the source code of the implementation or by making the branch in question available on Compiler Explorer.
+
+If only an incomplete implementation of the design is available, or if the implementation is feature-complete but has significant unresolved issues, we consider the property having been met only partially. Similarly, if an implementation of an analogous design is available for a different programming language, we consider  the property having been met only partially, as programming languages such as Eiffel, D, and Ada are sufficiently different from C++ that proof of implementability in one language does not necessarily constitute proof of implementability in another.
+
+\subsubsection{\tcode{ImplNoConc} --- Absence of implementers' concerns}
+
+% TD: TODO: This seems a bit too subjective. Maybe we should remove this property?
+For proposed designs that do not yet have a complete implementation in any major C++ compiler, we consider this property satisfied if, upon consulting trusted compiler engineers from \emph{at least two} different major C++ compilers, all of the consulted implementers confirm that they do not see any major specification or implementation concerns with the proposed design. 
+
+Unlike actual implementation experience, absence of implementers' concerns does not constitute proof of implementability and is therefore a weaker property. Nevertheless, WG21 has used this property on many occasions in the past when evaluating proposed language designs.
+
+
+\subsubsection{\tcode{CallerPre} --- Check caller-facing \tcode{pre}}
+
+When a virtual function specifies precondition assertions, they should be evaluated whenever \emph{that} function is being called. These evaluations should be performed regardless of which function ends up being selected by dynamic dispatch and which (if any) precondition assertions are specified by overriding functions.
+
+Consider: %TD: TODO can we find a less "toy" example?
+\begin{codeblock}
+struct Car {
+  virtual void drive(float speedMph)
+    pre (speedMph < 100); // don't exceed the speed limit!
+};
+\end{codeblock}
+To satisfy this property, a design for supporting \tcode{pre} and \tcode{post} on virtual functions must ensure that whenever the statically called function is \tcode{Car::drive}, passing a speed of 100 Mph or over will be treated as a contract violation. Designs where an overriding function inherits the precondition assertions from the overridden function will satisfy this property by construction. Designs where an overriding function could widen the precondition assertions from the overridden function must ensure that the precondition assertions of the overridden function still apply whenever the overridden function is the statically called function.
+
+To illustrate, consider a class deriving from \tcode{Car}:
+
+\begin{codeblock}
+struct FastCar : Car {
+  void drive(float speed_mph) override
+    /* ... */;
+};
+\end{codeblock}
+
+Regardless of whether any precondition assertions are specified in /* ... */, or what their semantics are, the precondition assertion \mbox{\tcode{pre (speedMph < 100)}} must still apply whenever \tcode{Car::drive} is the statically called function. The following program must cause a contract violation:
+
+\begin{codeblock}
+int main() {
+  FastCar myFastCar;
+  testCar(myFastCar);
+}
+
+void testCar(Car& car) {
+  car.drive(90); // OK
+  car.drive(120); // this is too fast for a \tcode{Car}!
+}
+\end{codeblock}
+
+The rationale for this property is that the call \mbox{\tcode{car.drive(120)}} is an incorrect use of the \tcode{Car} interface and therefore constitutes a bug that should be diagnosed. Even if the dynamic type of the object referenced by \tcode{car} is \tcode{FastCar}, and even if \tcode{FastCar::drive} can handle speeds over 100 Mph just fine, that dynamic type is not known at the call site and can change in the future. The call site must therefore work correctly for any type of \tcode{Car}, whether it happens to be a \tcode{FastCar} or not.
+
+To fully satisfy this property, a design would have to ensure the above behaviour by default. We could also consider a design where the above behaviour is not the default, but can be enabled via opt-in syntax to mark a precondition in the base class as an ``interface precondition''. We consider such designs to only \emph{partially} satisfy this property as it seems likely a developer could accidentally forget to use the opt-in syntax.  A design that only evaluates callee-side postconditions does not satisfy this property at all.
+
+\subsubsection{\tcode{CallerPost} --- Check caller-facing \tcode{post}}
+
+When a virtual function specifies precondition assertions, they should be evaluated whenever a call to \emph{that} function returns to the call-site. These evaluations should be performed regardless of which function ends up being selected by dynamic dispatch and which (if any) postcondition assertions are specified by overriding functions. This property is analogous to \tcode{ChkCallerPre}, but for postcondition assertions.
+
+Consider a base class for a number generator that always returns nonnegative floating point numbers:
+
+\begin{codeblock}
+struct SampleGenerator {
+  virtual float getSample() 
+     post (r: r >= 0) = 0;
+};
+\end{codeblock}
+
+Such a base class can for example be useful as an input node in some kind of signal processing graph operating in the domain of positive numbers. We can imagine many different implementations of such a node, for example a \mbox{\tcode{RandomSampleGenerator}} that returns random nonnegative floating point numbers, or perhaps a \mbox{\tcode{ConstantSampleGenerator}} that always returns the same nonnegative floating point number.
+
+Regardless of how \tcode{getSample} is declared (or defined) in such derived classes, the postcondition assertion \mbox{\tcode{post (r: r >= 0)}} must always apply whenever \mbox{\tcode{SampleGenerator::getSample}} is the statically called function. 
+
+The rationale for this property is that the code following the function call may rely on the postcondition established by \tcode{getSample()}:
+% TD: TODO: Formulate this in a way that makes it clear the bug caught would be a substitution failure bug
+
+\begin{codeblock}
+float f(SampleGenerator& gen) {
+   // The dynamic type of \tcode{gen} is unknown here!
+   float x = gen.getSample();
+   return std::sqrt(x);  // only works for x >= 0!
+}
+\end{codeblock}
+
+Therefore, the following program must cause a contract violation independent of whether any postcondition assertions are specified in /* ... */, or what their semantics are:
+
+\begin{codeblock}
+struct BadGenerator : SampleGenerator {
+  float getSample() override /* ... */ {
+    return -1;
+  }
+};
+
+int main() {
+  BadGenerator badGen;
+  float x = f(badGen);
+}
+\end{codeblock}
+
+Again, to fully satisfy this property, a design would have to ensure the above behaviour by default; a design that requires opt-in syntax to mark a postcondition in the base class as an ``interface postcondition''  to achieve the above behaviour only partially satisfies it, while a design that only evaluates callee-side postconditions does not satisfy it at all.
+
+
+\subsubsection{\tcode{CalleePre} --- Check callee-facing \tcode{pre}}
+
+When a virtual function specifies precondition assertions, these precondition assertions should be evaluated whenever that that function ends up being selected by dynamic dispatch and its function body executed, regardless of the statically called function and any precondition assertions specified there.
+
+% TD: TODO: flesh out
+
+\subsubsection{\tcode{CalleePost} --- Check callee-facing \tcode{post}}
+
+When a virtual function specifies postcondition assertions, these postcondition assertions should be evaluated whenever its function body finishes executing and returns to the caller, regardless of whether that function was called through a virtual function call, the statically called function was a different function, and any postcondition assertions specified on that other function.
+
+% TD: TODO: flesh out
+
+\subsubsection{\tcode{Inherit} --- Inherit \tcode{pre} and \tcode{post}}
+
+%TD: I moved this up
+
+When a virtual function specifies function contract assertions, and is then overridden by another virtual function in a derived class, the overriding function should \emph{inherit} the function contract assertions of the overridden function.
+
+More specifically, the function contract assertions of the overridden function (as specified in the base class) should be evaluated whenever the overriding function (in the derived class) is called, regardless of how that call happens.
+
+Note that \tcode{Inherit} is a stronger property than the conjunction of the previous four properties (\tcode{CallerPre}, \tcode{CallerPost}, \tcode{CalleePre}, and \tcode{CalleePost}), because to satisfy this property the function contract assertions of the overridden function must be evaluated even if the overriding function is called directly.
+
+As an example, consider \tcode{QIODevice}, the base interface class of all I/O devices in the Qt framework.\footnote{Documentation available here: \url{https://doc.qt.io/qt-6/qiodevice.html}} This class has a number of virtual functions such as \tcode{readData} which take a raw data pointer to read bytes from. In a future version of Qt, one might want to add a precondition assertion to check that this pointer is not null:
+\begin{codeblock}
+class QIODevice {
+public:
+  virtual qint64 readData(char* data, qint64 maxSize)
+    pre (data != nullptr) = 0;
+// ...
+};
+\end{codeblock}
+Now, if a user inherits from \tcode{QIODevice} and overrides \tcode{readData}, the intent is that the same null pointer check will apply to their function, without them having to specify any function contract assertions. Specifically, in the following program,
+\begin{codeblock}
+class MyIODevice : public QIODevice {
+public:
+  qint64 readData(char* data, qint64 maxSize) override {
+    // my implementation...
+  }
+  // ...
+};
+
+int main() {
+  char* data = nullptr;
+  qint64 size = 0;
+  
+  MyIODevice device;
+  device.readData(data, size);
+}
+\end{codeblock}
+the last line of \tcode{main} should trigger a contract violation when checks are enabled, even though the derived class \tcode{MyIODevice} is used directly rather than through the base class interface \tcode{QIODevice}. 
+
+The rationale for this property is that in any reasonable implementation of \tcode{QIODevice}, this precondition check is useful to detect bugs that would otherwise lead to program failure; at the same time, it would be far too easy for non-expert authors of derived classes to forget to consider that they want and need that precondition check on their own implementation.
+
+The above example is focused on precondition assertions, but the same argument can be extended to postcondition assertions as well. Consider a base class for different algorithms that choose one number out of a non-empty set of numbers:
+\begin{codeblock}
+struct NumberPicker {
+  virtual int pick(const Array<int>& numbers)
+    pre (!numbers.empty())
+    post (r: numbers.contains(r)) = 0;
+};
+\end{codeblock}
+Now consider different implementations of this base class:
+\begin{codeblock}
+struct FirstNumberPicker : NumberPicker {
+  int pick(const Array<int>& numbers) override {
+    return numbers[0];
+  }
+};
+
+struct RandomNumberPicker : NumberPicker {
+  int pick(const Array<int>& numbers) override {
+    return numbers[rand() % numbers.size()];
+  }
+};
+\end{codeblock}
+We expect that any correct implementation of  \tcode{NumberPicker} will satisfy both the precondition and postcondition assertions of \tcode{NumberPicker::pick}. Therefore we would like those assertions to be checked even in cases in which the derived class interface is used directly, for example in a statically polymorphic context:
+\begin{codeblock}
+template <typename T>
+int pickNumber(T& picker, const Array<int>& numbers) {
+  return picker.pickNumber();
+}
+
+int rollDice() {
+  return pickNumber(RandomNumberPicker(), {1, 2, 3, 4, 5, 6});
+}
+\end{codeblock}
+In the above case, if the implementation of \tcode{RandomNumberPicker::pick} fails to satisfy the postcondition assertion of \tcode{NumberPicker::pick}, we expect to get a contract violation.
+
+% TD: PROBLEM: there is a qualitative difference between fully satisfying the property via opt-in syntax, and only being able to satisfy it in some cases (like repeating the contract). I don't think "partially" is a good way of describing opt-in syntax. Maybe doing it by opt-in and doing it by default are two different properties? Is "this is the only way to do it" yet another property? Do all properties come in triads?
+
+% TD: Mention Ville's static polymorphism thing?
+
+% TD: Mention the rest of Ville's argument
+
+
+% TD: TODO: This is actually a great example for ENFORCING the contract!
+% TD: consider moving AutoInherit to the front here!
+
+
+% TD: cite P3616R0
+
+
+% show code
+% whether explicit or implicit
+% from base class or from derived class (John Lakos' thing from CppOnSea!)
+% note that repeating the contract doesn't work because private variables
+% specify exactly what this means - in scope of base class
+
+
+
+\subsubsection{\tcode{ForceInherit} --- Enforce inheritance \tcode{pre} and \tcode{post} on overriding function}
+
+% This is from the base class, not always everywhere
 
 TODO
 
-\section{Known solutions}
+\subsubsection{\tcode{MeyerDbC} --- Enforce Bertrand Meyer's ``Design by Contract'' paradigm}
 
 TODO
 
-\subsection{Default behaviour}
+\subsubsection{\tcode{FailFast} --- Allow immediate failure on contract violation}
+
+TODO
+% TD: Note: maybe move this?
+
+\subsubsection{\tcode{ClassIndep} --- Use \tcode{pre} and \tcode{post} independent of overridden function}
 
 TODO
 
-\subsubsection{Inherit contract by default}
+\subsubsection{\tcode{NarrowPre} --- Enable narrowing of preconditions in overridden function}
 
 TODO
 
-\subsubsection{Check interface contract only}
+\subsubsection{\tcode{NoRemoteBreak} --- Avoid remote code breakage}
 
 TODO
 
-\subsubsection{Check implementation contract only}
+\subsubsection{\tcode{WidenPre} --- Enable widening of preconditions in overridden function}
 
 TODO
 
-\subsubsection{Check interface and implementation contract}
+\subsubsection{\tcode{WidenPreMult} --- Override multiple functions with incompatible preconditions}
 
 TODO
 
-\subsubsection{No virtual function contracts}
+
+
+\subsubsection{\tcode{NarrowPost} --- Enable narrowing of postconditions}
 
 TODO
 
-\subsection{Opt-in behaviour}
+\subsubsection{\tcode{WidenPostOut} --- Enable widening of postconditions outside of base contract}
 
 TODO
 
-\subsubsection{Inherit via opt-in on base class side}
+\subsubsection{\tcode{WidenPostMult} --- Override multiple functions with incompatible postconditions}
 
 TODO
 
-\subsubsection{Inherit via opt-in on derived class side}
+\subsubsection{\tcode{WidenPost} --- Enable widening of postcondition assertions}
 
 TODO
 
-\subsubsection{Prevent inheritance via opt-in}
+
+\subsubsection{\tcode{CallerOnlyPre} --- Allow \tcode{pre} to be checked only when caller-facing}
 
 TODO
 
-\subsubsection{Warn on inheritance}
+\subsubsection{\tcode{CallerOnlyPost} --- Allow \tcode{post} to be checked only when caller-facing}
 
 TODO
 
-\subsubsection{Opt into interface checks}
+\subsubsection{\tcode{CalleeOnlyPre} --- Allow \tcode{pre} to be checked only when callee-facing}
 
 TODO
 
-\subsubsection{Opt into inheritance checks}
+\subsubsection{\tcode{CalleeOnlyPost} --- Allow \tcode{post} to be checked only when callee-facing}
+
+TODO
+
+\section{Known designs}
+\label{designs}
+
+TODO
+
+\section{Evolution graph}
+\label{evolution}
 
 TODO
 
 \section{Conformance matrix}
+\label{matrix}
+
+TODO
+
+\section{Decision tree}
+\label{tree}
+
+TODO
+
+\section{Conclusion}
+\label{conclusion}
 
 TODO
 

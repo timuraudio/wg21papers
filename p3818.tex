@@ -32,9 +32,9 @@ For C++26, we propose to remove the member function \tcode{evaluation_exception}
 
 \section{The status quo}
 
-In the current C++26 working draft \cite{N5014}, the standard library API for contract-violation handling contains the type \tcode{std::contracts::contract_violation}. When the program has a user-defined contract-violation handler, and a contract violation occurs, the implementation constructs an object of this type and passes a reference to it into the handler.
+In the current C++26 working draft \cite{N5014}, the standard library API for contract-violation handling contains the type \tcode{std::contracts::contract_violation}. When the program has a user-defined contract-violation handler, and a contract violation occurs, the implementation constructs an object of this type and passes a reference to it into the contract-violation handler.
 
-The  \tcode{std::contracts::contract_violation} type  provides access  to information about the violation in the handler, such as the source location of the violated assertion and the failure mode (did the contract predicate evaluate to \tcode{false}, or did evaluation of the predicate exit via an exception?) via a set of \tcode{const} member functions.
+The  \tcode{std::contracts::contract_violation} type  provides access  to information about the violation, such as the source location of the violated assertion and the failure mode (did the contract predicate evaluate to \tcode{false}, or did evaluation of the predicate exit via an exception?) via a set of \tcode{const} member functions.
 
 One of these member functions is \tcode{evaluation_exception}, introduced in \cite{P3227R1}. It is specified as follows:
 
@@ -44,7 +44,7 @@ exception_ptr evaluation_exception() const noexcept;
 
 If the contract violation occurred because evaluation of the predicate exited via an exception, this function returns an \tcode{exception_ptr} to that exception; otherwise, it returns a null pointer.
 
-The functionality offered by \tcode{evaluation_exception} is available through other means. To obtain an \mbox{\tcode{exception_ptr}} to the exception thrown during the contract check, we can query \mbox{\tcode{detection_mode()}} and then call \tcode{std::current_exception()}:
+The functionality offered by \tcode{evaluation_exception} is also available through other means. To determine whether evaluation of the predicate exited via an exception, we can query \mbox{\tcode{detection_mode()}}. If it did, we can then call \tcode{std::current_exception()} to obtain  an \mbox{\tcode{exception_ptr}} to that exception:
 \begin{codeblock}
 void handle_contract_violation (const contract_violation& cv) {
   if (cv.detection_mode() == detection_mode::evaluation_exception) {
@@ -65,7 +65,7 @@ void handle_contract_violation (const contract_violation& cv) {
 }
 \end{codeblock}
 
-However, these techniques are more verbose and require more care to use. For example, the contract violation may not have occurred because of an exception being thrown, but it may have occurred within the \tcode{catch} clause for some other exception. In this case, if the user accesses the current exception in the contract-violation handler but forgets to query \tcode{detection_mode()}, they will instead get that  other exception. Further, even if an exception was thrown during the contract check, if inside the contract-violation handler another exception is being thrown and handled, the current exception will be that other exception:
+However, these techniques are more verbose and require more care to use. For example, it is possible that no exception was thrown during the contract check, but the contract violation occurred within the \tcode{catch} clause for some other exception. In this case, if the user accesses the current exception in the contract-violation handler but forgets to query \tcode{detection_mode()}, they will instead get that  other exception. Further, if an exception was thrown during the contract check, but then inside the contract-violation handler another exception is being thrown and handled, the current exception will be that other exception:
 
 \begin{codeblock}
 void handle_contract_violation (const contract_violation& cv) {
@@ -73,7 +73,7 @@ void handle_contract_violation (const contract_violation& cv) {
   try {
     // ...
     throw X;
-  } catch (../) {
+  } catch (...) {
       if (cv.detection_mode() == detection_mode::evaluation_exception) {
       auto evaluation_exception_ptr = std::current_exception();
       // \tcode{evaluation_exception_ptr} is now \tcode{X},
@@ -86,17 +86,17 @@ The member function \tcode{evaluation_exception} was intended to give the user a
 
 \section{The problem}
 
-For the member function \tcode{evaluation_exception} to work correctly in all cases (including the above case of another exception being thrown and caught in the contract-violation handler), the implementation effectively needs to ``capture'' the exception object thrown during a contract check. Since the adoption of \cite{P2900R14} for C++26, we have learned that on some platforms, implementing this behaviour requires copying the exception object at the point when the \tcode{contract_violation} object is being created, i.e., before the contract-violation handler is called.
+For the member function \tcode{evaluation_exception} to work correctly in all cases (including when another exception is being thrown and caught in the contract-violation handler), the implementation effectively needs to ``capture'' the exception object thrown during a contract check. Since the adoption of \cite{P2900R14} for C++26, we have learned that on some platforms, implementing this behaviour requires copying the exception object at the point when the \tcode{contract_violation} object is being created, i.e., before the contract-violation handler is called.
 
 However, requiring implementations to perform such a copy is problematic as it can lead to user code being executed after a contract violation has been detected but before the associated contract-violation handler is called. This, in turn, may pose a security risk (see also \cite{P3417R1}).
 
-When a contract violation has been detected, the program may be in an invalid state, for example a corrupted stack. The contract-violation handler is user code, but it is user code that is expected to be run in such circumstances, and can be written to be robust against such circumstances. On the other hand, the copy constructor of an arbitrary exception type will typically not be written with such robustness in mind. For example, it could walk the stack (one might want to save the stack trace at the time when the exception object was created or copied). This opens up a security vulnerability: an attacker could corrupt the stack and then use the exception copy constructor to jump to an arbitrary place and execute arbitrary code.
+When a contract violation has been detected, the program may be in an invalid state, for example a corrupted stack. The contract-violation handler is user code, but it is user code that is expected to be run in such circumstances, and can be written to be robust against them. On the other hand, the copy constructor of an arbitrary exception type will typically not be written with such robustness in mind. For example, it could walk the stack (one might want to save the stack trace at the time when the exception object was created or copied). This opens up a security vulnerability: an attacker could corrupt the stack and then use the exception copy constructor to jump to an arbitrary place and execute arbitrary code.
 
 On platforms implementing the Itanium ABI (GCC, Clang), there is a known implementation strategy for   \tcode{evaluation_exception} that avoids such a copy of the exception object. However, for the Microsoft ABI, we were unfortunately so far unable to confirm the existence of such an implementation strategy. We also do not currently understand the implications for platforms beyond the major three.
 
 \section{Proposal}
 
-The contract-violation handling mechanism in the C++26 working draft (adopted via \cite{P2811R7}) was carefully designed to avoid potential security risks. To this end, we consciously avoided executing user-defined code or mandating any operations that might be overly non-trivial after a contract violation has occurred but before the call to the contract-violation handler.
+The contract-violation handling mechanism in the C++26 working draft (originally proposed in \cite{P2811R7}) was carefully designed to avoid potential security risks. To this end, we consciously avoided executing user-defined code or mandating any operations that might be overly non-trivial after a contract violation has occurred but before the call to the contract-violation handler.
 
 Unless and until we can be sure that \tcode{evaluation_exception} is implementable on all relevant platforms without violating this design principle, we should not ship it in a C++ Standard. We therefore propose to remove the member function \tcode{evaluation_exception} entirely before shipping C++26. This function can easily be added back in future versions of C++ when we have a better understanding of the potential security risks.
 

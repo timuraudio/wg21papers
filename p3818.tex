@@ -23,7 +23,7 @@ Audience: & EWG
 \end{tabular}
 
 \begin{abstract}
-For C++26, we propose to remove the member function \tcode{evaluation_exception} from the type \tcode{std::contracts::contract_violation}. On some platforms, implementations of this function may need to perform a a copy of the exception object thrown during a contract check. This in turn can lead to user code being executed after a contract violation has been detected but before the associated contract-violation handler is called, which may pose a security risk.  This function can easily be added back in future versions of C++ when we have a better understanding of the risk. In the meantime, alternative techniques to access an exception thrown from a contract check are readily available.
+For C++26, we propose to remove the member function \tcode{evaluation_exception} from the type \tcode{std::contracts::contract_violation}. On some platforms, implementations of this function may need to perform a copy of the exception object thrown during a contract check. This in turn can lead to user code being executed after a contract violation has been detected but before the associated contract-violation handler is called, which may pose a security risk.  This function can easily be added back in future versions of C++ when we have a better understanding of the risk. In the meantime, alternative techniques to access an exception thrown from a contract check are readily available.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -102,7 +102,7 @@ Modify the header \tcode{<contracts>} synopsis ([contracts.syn]) as follows:
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \tcode{class contract_violation \{} \\
 \phantom{\tcode{xx}} \emph{// no user-accessible constructor} \\
-public: \\
+\tcode{public:} \\
 \phantom{\tcode{xx}} \tcode{contract_violation(const contract_violation\&) = delete;} \\
 \phantom{\tcode{xx}} \tcode{contract_violation\& operator=(const contract_violation\&) = delete;}  \\
 \\

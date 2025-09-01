@@ -36,7 +36,7 @@ In the current C++26 working draft \cite{N5014}, the standard library API for co
 
 The  \tcode{std::contracts::contract_violation} type  provides access  to information about the violation in the handler, such as the source location of the violated assertion and the failure mode (did the contract predicate evaluate to \tcode{false}, or did evaluation of the predicate exit via an exception?) via a set of \tcode{const} member functions.
 
-One of these functions is \tcode{evaluation_exception}, specified as follows:
+One of these member functions is \tcode{evaluation_exception}, introduced in \cite{P3227R1}. It is specified as follows:
 
 \begin{codeblock}
 exception_ptr evaluation_exception() const noexcept;
@@ -44,7 +44,7 @@ exception_ptr evaluation_exception() const noexcept;
 
 If the contract violation occurred because evaluation of the predicate exited via an exception, this function returns an \tcode{exception_ptr} to that exception; otherwise, it returns a null pointer.
 
-Alternatively, an \tcode{exception_ptr} to that exception can also be retrieved by using the member function \tcode{detection_mode} and the pre-existing facility \tcode{std::current_exception} as follows:
+The functionality offered by \tcode{evaluation_exception} is available through other means. To obtain an \mbox{\tcode{exception_ptr}} to the exception thrown during the contract check, we can query \mbox{\tcode{detection_mode()}} and then call \tcode{std::current_exception()}:
 \begin{codeblock}
 void handle_contract_violation (const contract_violation& cv) {
   if (cv.detection_mode() == detection_mode::evaluation_exception) {
@@ -52,7 +52,7 @@ void handle_contract_violation (const contract_violation& cv) {
     // handle
 }
 \end{codeblock}
-Further, if the type of the exception is known, it can be re-thrown and caught in the contract-violation handler by using a Lippincott function:
+Further, if the type of the exception is known, we can re-throw the current exception in the contract-violation handler and immediately catch it (this technique is called a Lippincott function):
 
 \begin{codeblock}
 void handle_contract_violation (const contract_violation& cv) {
@@ -65,17 +65,28 @@ void handle_contract_violation (const contract_violation& cv) {
 }
 \end{codeblock}
 
-However, these techniques are somewhat verbose and may give an unexpected result, as there are cases where the current exception inside the contract-violation handler is not actually the exception thrown during the contract check, but an unrelated different exception.
+However, these techniques are more verbose and require more care to use. For example, the contract violation may not have occurred because of an exception being thrown, but it may have occurred within the \tcode{catch} clause for some other exception. In this case, if the user accesses the current exception in the contract-violation handler but forgets to query \tcode{detection_mode()}, they will instead get that  other exception. Further, even if an exception was thrown during the contract check, if inside the contract-violation handler another exception is being thrown and handled, the current exception will be that other exception:
 
-In particular, if no exception was thrown during the contract check, but the contract violation itself occurred within the \tcode{catch} clause for some other exception, the current exception in the contract-violation handler will be that other exception. Further, regardless of whether an exception was thrown during the  contract check, if inside the contract-violation handler another exception is being thrown and handled, the current exception will be that other exception.
+\begin{codeblock}
+void handle_contract_violation (const contract_violation& cv) {
+  // ...
+  try {
+    // ...
+    throw X;
+  } catch (../) {
+      if (cv.detection_mode() == detection_mode::evaluation_exception) {
+      auto evaluation_exception_ptr = std::current_exception();
+      // \tcode{evaluation_exception_ptr} is now \tcode{X},
+      // not whatever was thrown by the contract check!
+  }
+}
+\end{codeblock}
 
-The member function \tcode{evaluation_exception} was added via \cite{P3227R1} to avoid the above caveats and give the user a simple way to retrieve an exception thrown during the contract check without having to worry about accidentally getting a pointer to some other exception. 
+The member function \tcode{evaluation_exception} was intended to give the user a simple and reliable way to access the exception thrown during the contract check without having to worry about cases such as the above.
 
 \section{The problem}
 
-For the function \tcode{evaluation_exception} to work correctly, the implementation effectively needs to ``capture'' the exception object thrown during a contract check so it becomes available in a user-defined contract-violation handler, regardless of any other exception that may be the currently handled exception at that point.
-
-Since the adoption of \cite{P2900R14} for C++26, we have learned that on some platforms, implementing this behaviour requires copying the exception object at the point when the \tcode{contract_violation} object is being created, i.e., before the contract-violation handler is called.
+For the member function \tcode{evaluation_exception} to work correctly in all cases (including the above case of another exception being thrown and caught in the contract-violation handler), the implementation effectively needs to ``capture'' the exception object thrown during a contract check. Since the adoption of \cite{P2900R14} for C++26, we have learned that on some platforms, implementing this behaviour requires copying the exception object at the point when the \tcode{contract_violation} object is being created, i.e., before the contract-violation handler is called.
 
 However, requiring implementations to perform such a copy is problematic as it can lead to user code being executed after a contract violation has been detected but before the associated contract-violation handler is called. This, in turn, may pose a security risk (see also \cite{P3417R1}).
 
@@ -120,6 +131,8 @@ Modify the header \tcode{<contracts>} synopsis ([contracts.syn]) as follows:
 \tcode{\};}
 \end{adjustwidth}
 
+\pagebreak % MANUAL, TO AVOID HANGING PARAGRAPH
+
 Remove the following paragraph from [support.contract.violation]:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
@@ -133,7 +146,6 @@ copy of that exception; otherwise, a null \tcode{exception}_\tcode{ptr} object.}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\pagebreak
 \renewcommand{\bibname}{References}  % custom name for bibliography
 \bibliographystyle{abstract}
 \bibliography{ref}

@@ -36,7 +36,7 @@ In the current C++26 working draft \cite{N5014}, the standard library API for co
 
 The  \tcode{std::contracts::contract_violation} type  provides access  to information about the violation, such as the source location of the violated assertion and the failure mode (did the contract predicate evaluate to \tcode{false}, or did evaluation of the predicate exit via an exception?) via a set of \tcode{const} member functions.
 
-One of these member functions is \tcode{evaluation_exception}, introduced in \cite{P3227R1}. It is specified as follows:
+One of these member functions is \tcode{evaluation_exception}. It is specified as follows:
 
 \begin{codeblock}
 exception_ptr evaluation_exception() const noexcept;
@@ -44,7 +44,7 @@ exception_ptr evaluation_exception() const noexcept;
 
 If the contract violation occurred because evaluation of the predicate exited via an exception, this function returns an \tcode{exception_ptr} to that exception; otherwise, it returns a null pointer.
 
-The functionality offered by \tcode{evaluation_exception} is also available through other means. To determine whether evaluation of the predicate exited via an exception, we can query \mbox{\tcode{detection_mode()}}. If it did, we can then call \tcode{std::current_exception()} to obtain  an \mbox{\tcode{exception_ptr}} to that exception:
+The functionality offered by \tcode{evaluation_exception} is also available through other means. To determine whether evaluation of the predicate exited via an exception, we can check whether a call to the member function \mbox{\tcode{detection_mode}} returns the enum value \tcode{evaluation_exception}. If it does, we can call \tcode{std::current_exception} to obtain  an \mbox{\tcode{exception_ptr}} to that exception:
 \begin{codeblock}
 void handle_contract_violation (const contract_violation& cv) {
   if (cv.detection_mode() == detection_mode::evaluation_exception) {
@@ -52,7 +52,7 @@ void handle_contract_violation (const contract_violation& cv) {
     // handle
 }
 \end{codeblock}
-Further, if the type of the exception is known, we can re-throw the current exception in the contract-violation handler and immediately catch it (this technique is called a Lippincott function):
+Further, to handle exceptions of a particular type, we can re-throw the current exception in the contract-violation handler and immediately catch it (this technique is called a Lippincott function):
 
 \begin{codeblock}
 void handle_contract_violation (const contract_violation& cv) {
@@ -65,7 +65,12 @@ void handle_contract_violation (const contract_violation& cv) {
 }
 \end{codeblock}
 
-However, these techniques are more verbose and require more care to use. For example, it is possible that no exception was thrown during the contract check, but the contract violation occurred within the \tcode{catch} clause for some other exception. In this case, if the user accesses the current exception in the contract-violation handler but forgets to query \tcode{detection_mode()}, they will instead get that  other exception. Further, if an exception was thrown during the contract check, but then inside the contract-violation handler another exception is being thrown and handled, the current exception will be that other exception:
+However, these techniques are more verbose and require more care to use. If no exception was thrown during the contract check, but the user forgets to query \tcode{detection_mode()}, they will either fail (if no exception is currently being handled), or worse get an exception that is currently being handled but that was not the cause of the contract violation (this is possible if the contract violation occurred within a \tcode{catch} clause handling some other exception). 
+The member function \mbox{\tcode{evaluation_exception}} was intended to give the user a simple and direct way to access the exception thrown during the contract check without having to worry about such cases.
+
+\section{The problem}
+
+When originally proposed in \cite{P3227R1}, there was an assumption that \tcode{evaluation_acception} would  essentially be syntactic sugar for the simple logic above --- check \tcode{detection_mode()} and invoke \tcode{std::current_exception} if that mode is \tcode{evaluation_exception}. However, a problem arises when an exception is thrown within a contract-violation handler and \tcode{evaluation_exception} is then invoked within the \tcode{catch} clause handling that internal exception:
 
 \begin{codeblock}
 void handle_contract_violation (const contract_violation& cv) {
@@ -82,23 +87,19 @@ void handle_contract_violation (const contract_violation& cv) {
 }
 \end{codeblock}
 
-The member function \tcode{evaluation_exception} was intended to give the user a simple and reliable way to access the exception thrown during the contract check without having to worry about cases such as the above.
+In order to always return the exception associated with the contract violation, even inside such a \tcode{catch} clause within the contract-violation handler, the implementation must do extra work to preserve access to that exception before invoking the contract-violation handler. In particular, since the adoption of \cite{P2900R14} for C++26 we have learned that on some platforms, this requires \emph{copying} the exception object before invoking the contract-violation handler. 
 
-\section{The problem}
-
-For the member function \tcode{evaluation_exception} to work correctly in all cases (including when another exception is being thrown and caught in the contract-violation handler), the implementation effectively needs to ``capture'' the exception object thrown during a contract check. Since the adoption of \cite{P2900R14} for C++26, we have learned that on some platforms, implementing this behaviour requires copying the exception object at the point when the \tcode{contract_violation} object is being created, i.e., before the contract-violation handler is called.
-
-However, requiring implementations to perform such a copy is problematic as it can lead to user code being executed after a contract violation has been detected but before the associated contract-violation handler is called. This, in turn, may pose a security risk (see also \cite{P3417R1}).
+Requiring implementations to perform such a copy is problematic as it can lead to \emph{user code} being executed after a contract violation has been detected but before the associated contract-violation handler is called. This, in turn, may pose a security risk (see also \cite{P3417R1}).
 
 When a contract violation has been detected, the program may be in an invalid state, for example a corrupted stack. The contract-violation handler is user code, but it is user code that is expected to be run in such circumstances, and can be written to be robust against them. On the other hand, the copy constructor of an arbitrary exception type will typically not be written with such robustness in mind. For example, it could walk the stack (one might want to save the stack trace at the time when the exception object was created or copied). This opens up a security vulnerability: an attacker could corrupt the stack and then use the exception copy constructor to jump to an arbitrary place and execute arbitrary code.
 
-On platforms implementing the Itanium ABI (GCC, Clang), there is a known implementation strategy for   \tcode{evaluation_exception} that avoids such a copy of the exception object. However, for the Microsoft ABI, we were unfortunately so far unable to confirm the existence of such an implementation strategy. We also do not currently understand the implications for platforms beyond the major three.
+On platforms implementing the Itanium ABI (GCC, Clang), there is a known implementation strategy for   \tcode{evaluation_exception} that avoids such a copy of the exception object. However, for the Microsoft ABI, we were unfortunately so far unable to confirm the existence of such an implementation strategy. In the general case, the C++ exception API does not yet expose a way to implement this feature without potentially making a copy. Thus, implementing this function would put a new requirement on all future exception-handling implementations.
 
 \section{Proposal}
 
 The contract-violation handling mechanism in the C++26 working draft (originally proposed in \cite{P2811R7}) was carefully designed to avoid potential security risks. To this end, we consciously avoided executing user-defined code or mandating any operations that might be overly non-trivial after a contract violation has occurred but before the call to the contract-violation handler.
 
-Unless and until we can be sure that \tcode{evaluation_exception} is implementable on all relevant platforms without violating this design principle, we should not ship it in a C++ Standard. We therefore propose to remove the member function \tcode{evaluation_exception} entirely before shipping C++26. This function can easily be added back in future versions of C++ when we have a better understanding of the potential security risks.
+Unless and until we can be sure that \tcode{evaluation_exception} is implementable on all platforms without violating this design principle, we should not ship it in a C++ Standard. We therefore propose to remove the member function \tcode{evaluation_exception} entirely before shipping C++26. This function can easily be added back in future versions of C++ when we have a better understanding of the potential security risks.
 
 In the meantime, users can access an exception thrown from a contract check through other means, such as by using \tcode{std::current_exception()} and Lippincott functions. As discussed above, these techniques have known gotchas, but they can be used correctly and efficiently and do not come with security concerns. On some platforms, accessing the exception may still incur a copy, but that copy happens inside the user-defined contract-violation handler, where the user has full control over it.
 
@@ -130,8 +131,6 @@ Modify the header \tcode{<contracts>} synopsis ([contracts.syn]) as follows:
 \phantom{\tcode{xx}} \tcode{evaluation_semantic semantic() const noexcept;} \\
 \tcode{\};}
 \end{adjustwidth}
-
-\pagebreak % MANUAL, TO AVOID HANGING PARAGRAPH
 
 Remove the following paragraph from [support.contract.violation]:
 

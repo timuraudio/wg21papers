@@ -6,7 +6,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{document}
-\title{Remove \tcode{contract_violation::evaluation_exception} \\ from C++26}
+\title{Remove \tcode{evaluation_exception} from \\ contract-violation handling for C++26}
 \author{
   Peter Bindels \small(\href{mailto:dascandy@gmail.com}{dascandy@gmail.com}) \\
   Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
@@ -23,63 +23,116 @@ Audience: & EWG
 \end{tabular}
 
 \begin{abstract}
-TODO
+For C++26, we propose to remove the member function \tcode{evaluation_exception} from the type \tcode{std::contracts::contract_violation}. On some platforms, implementations of this function may need to perform a a copy of the exception object thrown during a contract check. This in turn can lead to user code being executed after a contract violation has been detected but before the associated contract-violation handler is called, which may pose a security risk.  This function can easily be added back in future versions of C++ when we have a better understanding of the risk. In the meantime, alternative techniques to access an exception thrown from a contract check are readily available.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\section{Synopsis}
+\section{The status quo}
 
-The current contract_violation object comes with a function to retrieve the exception by \tcode{exception_ptr}, in case a contract was violated by the check itself throwing an exception. The function is specified as follows:
+In the current C++26 working draft \cite{N5014}, the standard library API for contract-violation handling contains the type \tcode{std::contracts::contract_violation}. When the program has a user-defined contract-violation handler, and a contract violation occurs, the implementation constructs an object of this type and passes a reference to it into the handler.
+
+The  \tcode{std::contracts::contract_violation} type  provides access  to information about the violation in the handler, such as the source location of the violated assertion and the failure mode (did the contract predicate evaluate to \tcode{false}, or did evaluation of the predicate exit via an exception?) via a set of \tcode{const} member functions.
+
+One of these functions is \tcode{evaluation_exception}, specified as follows:
 
 \begin{codeblock}
 exception_ptr evaluation_exception() const noexcept;
 \end{codeblock}
 
-The function was added from the point of view of not being able to correctly retrieve the exception in the contract violation handler otherwise, as other exceptions may be propagating there, which makes \tcode{std::exception_ptr::current()} return the then-current exception, and not the contract-violating exception. The function needs core language wording to be filled with the appropriate exception at the start of the contract violation handler, which we have since learned will on some platforms be forced to make a copy of the exception.
+If the contract violation occurred because evaluation of the predicate exited via an exception, this function returns an \tcode{exception_ptr} to that exception; otherwise, it returns a null pointer.
 
-We have since learned that the exception is available without a copy on all platforms (as far as we know), by using a Lippincott function style:
+Alternatively, an \tcode{exception_ptr} to that exception can also be retrieved by using the member function \tcode{detection_mode} and the pre-existing facility \tcode{std::current_exception} as follows:
+\begin{codeblock}
+void handle_contract_violation (const contract_violation& cv) {
+  if (cv.detection_mode() == detection_mode::evaluation_exception) {
+    auto evaluation_exception_ptr = std::current_exception();
+    // handle
+}
+\end{codeblock}
+Further, if the type of the exception is known, it can be re-thrown and caught in the contract-violation handler by using a Lippincott function:
 
 \begin{codeblock}
-void my_contract_violation_handler(contract_violation& cv) {
-  if (cv.detection_mode() == contracts::detection_mode::evaluation_exception) {
+void handle_contract_violation (const contract_violation& cv) {
+  if (cv.detection_mode() == detection_mode::evaluation_exception) {
     try {
       throw;
     } catch (std::exception& e) {
-      HandleExceptionContractViolation(cv, e); // ... handle in whatever way the user wants to
+      // handle 
     }
-  } else {
-    HandleRegularContractViolation(cv);
-  }
 }
 \end{codeblock}
 
-This code is not awfully complicated to write, and only needs to be written for contract violation handlers, which are typically at most one location in a program.
+However, these techniques are somewhat verbose and may give an unexpected result, as there are cases where the current exception inside the contract-violation handler is not actually the exception thrown during the contract check, but an unrelated different exception.
 
-Furthermore, if the construct for the Lippincott function is not used, std::exception_ptr::current() can still be used at the start of the function to accomplish exactly what the function currently specified would accomplish:
+In particular, if no exception was thrown during the contract check, but the contract violation itself occurred within the \tcode{catch} clause for some other exception, the current exception in the contract-violation handler will be that other exception. Further, regardless of whether an exception was thrown during the  contract check, if inside the contract-violation handler another exception is being thrown and handled, the current exception will be that other exception.
 
-\begin{codeblock}
-void my_contract_violation_handler(contract_violation& cv) {
-  if (cv.detection_mode() == contracts::detection_mode::evaluation_exception) {
-    HandleExceptionContractViolation(cv, std::exception_ptr::current()); // ... handle in whatever way the user wants to
-  } else {
-    HandleRegularContractViolation(cv);
-  }
-}
-\end{codeblock}
+The member function \tcode{evaluation_exception} was added via \cite{P3227R1} to avoid the above caveats and give the user a simple way to retrieve an exception thrown during the contract check without having to worry about accidentally getting a pointer to some other exception. 
 
-which would on some platforms cause a copy, but at the choice of the user.
+\section{The problem}
 
-The \tcode{exception_ptr evaluation_exception() const noexcept;} function adds no value, and pessimizes in some cases. We should remove it before shipping C++26.
+For the function \tcode{evaluation_exception} to work correctly, the implementation effectively needs to ``capture'' the exception object thrown during a contract check so it becomes available in a user-defined contract-violation handler, regardless of any other exception that may be the currently handled exception at that point.
+
+Since the adoption of \cite{P2900R14} for C++26, we have learned that on some platforms, implementing this behaviour requires copying the exception object at the point when the \tcode{contract_violation} object is being created, i.e., before the contract-violation handler is called.
+
+However, requiring implementations to perform such a copy is problematic as it can lead to user code being executed after a contract violation has been detected but before the associated contract-violation handler is called. This, in turn, may pose a security risk (see also \cite{P3417R1}).
+
+When a contract violation has been detected, the program may be in an invalid state, for example a corrupted stack. The contract-violation handler is user code, but it is user code that is expected to be run in such circumstances, and can be written to be robust against such circumstances. On the other hand, the copy constructor of an arbitrary exception type will typically not be written with such robustness in mind. For example, it could walk the stack (one might want to save the stack trace at the time when the exception object was created or copied). This opens up a security vulnerability: an attacker could corrupt the stack and then use the exception copy constructor to jump to an arbitrary place and execute arbitrary code.
+
+On platforms implementing the Itanium ABI (GCC, Clang), there is a known implementation strategy for   \tcode{evaluation_exception} that avoids such a copy of the exception object. However, for the Microsoft ABI, we were unfortunately so far unable to confirm the existence of such an implementation strategy. We also do not currently understand the implications for platforms beyond the major three.
+
+\section{Proposal}
+
+The contract-violation handling mechanism in the C++26 working draft (adopted via \cite{P2811R7}) was carefully designed to avoid potential security risks. To this end, we consciously avoided executing user-defined code or mandating any operations that might be overly non-trivial after a contract violation has occurred but before the call to the contract-violation handler.
+
+Unless and until we can be sure that \tcode{evaluation_exception} is implementable on all relevant platforms without violating this design principle, we should not ship it in a C++ Standard. We therefore propose to remove the member function \tcode{evaluation_exception} entirely before shipping C++26. This function can easily be added back in future versions of C++ when we have a better understanding of the potential security risks.
+
+In the meantime, users can access an exception thrown from a contract check through other means, such as by using \tcode{std::current_exception()} and Lippincott functions. As discussed above, these techniques have known gotchas, but they can be used correctly and efficiently and do not come with security concerns. On some platforms, accessing the exception may still incur a copy, but that copy happens inside the user-defined contract-violation handler, where the user has full control over it.
 
 \section{Wording}
 
-From the contract_violation struct definition, remove the line
+% TODO: LaTeX issues:
+% I don't know how to \remove{...} within a codeblock environment so instead I use tcode and horrible hacks with \phantom to create the indentations
+% Also, when you have a \tcode inside a \removed, having an underscore inside the \tcode leads to the underscore and everything past it to no longer be rendered in codefont, so I am using more horrible hacks to at least have all the non-underscore characters still in codefont...
 
+The proposed wording is relative to \cite{N5014}. 
+
+Modify the header \tcode{<contracts>} synopsis ([contracts.syn]) as follows:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
+\tcode{class contract_violation \{} \\
+\phantom{\tcode{xx}} \emph{// no user-accessible constructor} \\
+public: \\
+\phantom{\tcode{xx}} \tcode{contract_violation(const contract_violation\&) = delete;} \\
+\phantom{\tcode{xx}} \tcode{contract_violation\& operator=(const contract_violation\&) = delete;}  \\
+\\
+\phantom{\tcode{xx}} \emph{/* see below */} \tcode{\~contract_violation();} \\
+\\
+\phantom{\tcode{xx}} \tcode{const char* comment() const noexcept}; \\
+\phantom{\tcode{xx}} \tcode{detection}_\tcode{mode detection}_\tcode{mode() const noexcept;} \\
+\phantom{\tcode{xx}} \removed{\tcode{exception}_\tcode{ptr evaluation}_\tcode{exception() const noexcept;}} \\
+\phantom{\tcode{xx}} \tcode{bool is_terminating() const noexcept;} \\
+\phantom{\tcode{xx}} \tcode{assertion_kind kind() const noexcept;} \\
+\phantom{\tcode{xx}} \tcode{source_location location() const noexcept;} \\
+\phantom{\tcode{xx}} \tcode{evaluation_semantic semantic() const noexcept;} \\
+\tcode{\};}
+\end{adjustwidth}
+
+Remove the following paragraph from [support.contract.violation]:
+
+\begin{adjustwidth}{0.5cm}{0.5cm}
 \removed{\tcode{exception_}}\removed{\tcode{ptr evaluation_}}\removed{\tcode{exception() const noexcept;}}
+
+\removed{\emph{Returns}:  If the contract violation occurred because the evaluation of the predicate
+exited via an exception, an \tcode{exception}_\tcode{ptr} object that refers to that exception or a
+copy of that exception; otherwise, a null \tcode{exception}_\tcode{ptr} object.}
+\end{adjustwidth}
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%\renewcommand{\bibname}{References}  % custom name for bibliography
+\pagebreak
+\renewcommand{\bibname}{References}  % custom name for bibliography
 \bibliographystyle{abstract}
 \bibliography{ref}
 

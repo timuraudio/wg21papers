@@ -165,7 +165,7 @@ A more detailed history of function contract assertions on virtual functions in 
 
 The goals of this paper are twofold: to identify the design for supporting \tcode{pre} and \tcode{post} on virtual functions that best satisfies the needs of the C++ community, and to facilitate establishing consensus in WG21 in favour of such a design. To achieve these goals, we analyse the available design space as exhaustively and objectively as possible. Our analysis follows the method for finding consensus on technical design questions developed in \cite{P3684R0}. This method is an evolution and adaptation of the Principled Design method developed in \cite{P3004R0} and \cite{P3005R0}.
 
-We begin by identifying the desirable properties that a design for this language feature should exhibit (Section~\ref{properties}). We take into account all relevant properties that were articulated by members of WG21. We describe each property as precisely as possible, along with motivation, use cases, and code examples. To minimise bias, we treat all properties equally and do not attempt to rank them by importance or other criteria.
+We begin by identifying the desirable properties that a design for this language feature should exhibit (Section~\ref{properties}). We take into account all relevant properties that were articulated by members of WG21. We describe each property as precisely as possible, along with motivation for and against, use cases, and code examples. To minimise bias, we treat all properties equally and do not attempt to rank them by importance or other criteria.
 
 We then identify all known design options for this feature (Section~\ref{designs}), including all variations that have been shipped in other programming languages or proposed for C++ at some point. As a tool for efficiently navigating this design space, we introduce a framework for classifying all possible designs according to a small set of key design decisions, as well as a scheme to refer to each possible design with an unambiguous identifier that encodes this set of decisions.
 
@@ -187,13 +187,13 @@ In the final part of our analysis, we use the conformance matrix to identify the
 
 In this section, we identify the desirable properties that a design for supporting \tcode{pre} and \tcode{post} on virtual functions should exhibit. We take into account all relevant properties that were articulated by members of WG21 (whether formally in papers or informally during meetings or on the committee mailing lists).
 
-We describe each desirable property as precisely as possible and provide known motivation for supporting it. Where applicable, we include concrete code examples; we strive to provide realistic use cases rather than ``toy code'' whenever possible. Each property is given a short unique identifier to easily refer to it later in the paper, for example \tcode{ImplExp} for implementation experience.
+We describe each desirable property as precisely as possible and provide known motivation for and against supporting it. Where applicable, we include concrete code examples; we strive to provide realistic use cases rather than ``toy code'' whenever possible. Each property is given a short unique identifier to easily refer to it later in the paper, for example \tcode{ImplExp} for implementation experience.
 
 We follow the consensus-building method developed in \cite{P3684R0}; thus, we focus on data and objectively verifiable information rather than opinions, and do our best to minimise cognitive bias and value judgments when describing the desirable properties. In particular, we do not attempt to rank the listed properties by priority, relevance, or otherwise. However, we do point out cases where two or more properties are at odds with each other.
 
 Some of the listed properties were originally articulated as ``design principles that must be adhered to'',  ``very important use cases'', ``necessary conditions for successfully deploying the feature'', etc. For the purpose of this analysis, we carefully avoid such characterisations and instead treat all properties equally. For properties that are describing a use case, we avoid any claims of how common (or contrived) it is due to lack of data from real-world code bases backing up such claims.
 
-In a number of cases, it may be controversial whether the motivation is sound, the use case is plausible, and the property in question is actually desirable. In these cases, we strive to adopt a neutral position and limit ourselves to describing the property and the motivation for supporting it, as far as it has been articulated to us by proponents of the given property.
+In a number of cases, it may be controversial whether the motivation is sound, the use case is plausible, and the property in question is actually desirable. In these cases, we strive to adopt a neutral position and limit ourselves to describing the property and the known arguments for and against supporting it.
 
 We only include properties for which we can objectively and unambiguously answer the question ``does a given language design exhibit this property?''. We therefore deliberately exclude properties that are vague, subjective, and/or cannot be measured directly, such as teachability or intuitiveness of a particular design. We also do not include properties that could in principle be measured, but for which no concrete, measurable criterion has been proposed.
 
@@ -225,11 +225,22 @@ Importantly, we are not suggesting that properties like teachability or complexi
 
 The following properties describe potentially desirable design constraints on the behaviour of \tcode{pre} and \tcode{post} on virtual functions.
 
+%-------------------------------------------------------------------------------
+
 \prop{FullQualEq}{Equivalence of virtual and fully qualified direct calls}
 
 % TD: Josh, I included this property anyway because it's a nice easy way to start the list of properties: surely this is one that we can all agree on. Also, it's important to JL.
 
+\emph{Description:}
+
 In a virtual function call, when the statically called function and the function chosen by dynamic dispatch are the same function, the effect of such a call should be equivalent to a fully qualified (i.e., non-virtual) call to that function. In particular, the same function contract assertions should be evaluated in both cases.
+
+\emph{Motivation:}
+
+This equivalence exists in C++ today: the observable behaviour will always be identical in both cases. It would be arguably surprising to users if adding \tcode{pre} and \tcode{post} to virtual functions would break this equivalence.
+% TD: TODO: Is there better or more principled motivation for this property? Asked JL
+
+\emph{Example:}
 
 Consider the following simple inheritance hierarchy:
 
@@ -242,7 +253,7 @@ struct Derived : Base {
   void f() override /* ... */;
 };
 \end{codeblock}
-No matter which (if any) function contract assertions are specified in \textit{/* ... */}, both of the following function calls should evaluate the same function contract assertions when executed:
+Regardless of which (if any) function contract assertions are specified in \textit{/* ... */}, both of the following function calls should evaluate the same function contract assertions when executed:
 
 \begin{codeblock}
 int main() {
@@ -251,17 +262,22 @@ int main() {
   d.D::f();  // (2)
 }
 \end{codeblock}
-In C++ today, the observable behaviour of the two calls above is identical in all cases as long as \tcode{Derived} is the dynamic type of \tcode{d}. It would be arguably very surprising to users if a design for \tcode{pre} and \tcode{post} on virtual functions would break that equivalence.
 
-% TD: TODO: Is there better motivation for this property? Asked JL
+%-------------------------------------------------------------------------------
 
 \prop{VacuousTrue}{Vacuousness of \tcode{pre(true)} and \tcode{post(true)}}
 
+\emph{Description:}
+
 On the declaration of a virtual function, \tcode{pre(true)} and \tcode{pre(false)} should always be vacuous, i.e., they should be equivalent to not specifying any precondition or postcondition assertion at all on that declaration. Whether or not \tcode{pre(true)} and \tcode{pre(false)} are present should not change which function contract assertions will be evaluated; in particular, adding \tcode{pre(true)} or \tcode{pre(false)} to a function declaration should not cause other, non-vacuous contract assertions to no longer be evaluated.
 
-This design constraint is consistent with the vacuousness of \tcode{pre(true)} and \tcode{post(true)} on non-virtual functions, as well as the vacuousness of \tcode{assert(true)}, \mbox{\tcode{contract_assert(true)}}, \mbox{\tcode{static_assert(true)}}, \tcode{requires(true)}, \tcode{if(true)}, etc. in C++ today. Further, if we could not rely on this constraint being satisfied, it could lead to surprising behaviour in cases where the presence of function contract assertions is conditional.
+\emph{Motivation:}
 
-Consider, for example, a function that takes a file path as a parameter. On Windows, there is historically a strict limit on the length of such paths; however, this limit does not exist on other platforms. We could make the contract predicate platform-dependent:
+This design constraint is consistent with the vacuousness of \tcode{pre(true)} and \tcode{post(true)} on non-virtual functions, as well as the vacuousness of \tcode{assert(true)}, \mbox{\tcode{contract_assert(true)}}, \mbox{\tcode{static_assert(true)}}, \tcode{requires(true)}, etc. in C++ today. Further, if we could not rely on this constraint being satisfied, this could lead to surprising behaviour in cases where the presence of a function contract assertion is conditional.
+
+\emph{Example:}
+
+Consider a function that takes a file path as a parameter. On Windows, there is historically a strict limit on the length of such paths; however, this limit does not exist on other platforms. We could make the contract predicate platform-dependent:
 
 \begin{codeblock}
 #ifdef _WIN32
@@ -296,7 +312,21 @@ Both programming styles seem reasonable in cross-platform code. It would arguabl
 
 \prop{SubstPr}{Substitution principle}
 
+\emph{Description:}
+
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should follow the \emph{substitution principle}, which stipulates that objects of a base class should be replaceable with objects of a derived class without affecting the correctness of the program.
+
+% TD: TODO: this description is too vague. It isn't explaining how this principle should relate specifically to contract assertions.
+
+\emph{Motivation:}
+
+The substitution principle is a well-established paradigm in object-oriented programming. It ensures that derived classes remain true to the behaviour and expectations of their base classes, allowing the user to use them interchangeably without introducing bugs. Applying this principle to the design of \tcode{pre} and \tcode{post} on virtual functions seems appropriate in situations where external clients will depend on contracts, such as when designing public APIs, libraries, and frameworks.
+
+\emph{Countermotivation:}
+
+While the substitution principle has its merits, there are use cases where full substitutability between base and derived class is a non-goal, particularly in a multi-paradigm language like C++ that does not always follow canonical object-oriented design. Such use cases are described in \propref{NarrowPre} and \propref{WidenPostIn}. A language design that requires \tcode{pre} and \tcode{post} to obey the substitution principle would make the addition of function contract assertions to a codebase difficult or impossible in these situations.
+
+\emph{Example:}
 
 Consider the following correct program:
 \begin{codeblock}
@@ -344,19 +374,23 @@ struct Derived3 {
 \end{codeblock}
 In this example, \tcode{Derived3::f} operates on a wider domain than \tcode{Base::f} as it is possible to pass a negative integer. In this case,  \tcode{Derived3::f} does \emph{not} satisfy the postcondition of \tcode{Base::f} as the return value will be greater than the value passed in. However, \tcode{Base} is still substitutable by \tcode{Derived3} because \tcode{Derived3::f} will always satisfy the postcondition of \tcode{Base::f} when given a nonnegative integer.
 
-The substitution principle is a well-established paradigm in object-oriented programming. It ensures that derived classes remain true to the behaviour and expectations of their base classes, allowing the user to use them interchangeably without introducing bugs. Applying this principle to the design of \tcode{pre} and \tcode{post} on virtual functions seems appropriate in situations where external clients will depend on contracts, such as when designing public APIs, libraries, and frameworks.
-
-However, there are also use cases where unconditional substitutability between base and derived class is a non-goal. A design that requires \tcode{pre} and \tcode{post} to obey the substitution principle would make the addition of function contract assertions to a codebase difficult or impossible in such situations. Such use cases are described in properties \propref{NarrowPre} and \propref{WidenPostIn}. This is one instance where different properties listed in this paper  cannot be satisfied simultaneously.
-
 \prop{MeyerDbC}{Bertrand Meyer's ``Design by Contract'' paradigm}
+
+\emph{Description:}
 
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should follow Bertrand Meyer's Design by Contract (DbC) paradigm, which stipulates that in an overriding function, preconditions can only be widened and postconditions can only be narrowed, but not vice versa.
 
+\emph{Motivation:}
+
 Following the DbC paradigm when  specifying the semantics of \tcode{pre} and \tcode{post} on virtual functions is a well-known approach to enforcing the substitution principle, and is existing practice in the Eiffel and D programming languages with decades of implementation and usage experience.
 
-However, the DbC paradigm is not isomorphic with the substitution principle. Any design that satisfies \propref{MeyerDbC} also satisfies \propref{SubstPr}, but not vice versa, because \propref{MeyerDbC} imposes additional constraints. In particular, a function that has wider postconditions than the function it overrides if and only if is called \emph{outside} of the overridden function's preconditions satisfies \propref{SubstPr}, but does not satisfy \propref{MeyerDbC}. An example for such a function is \tcode{Derived3::f} in \propref{SubstPr} above.
+\emph{Countermotivation:} 
 
-Concrete use cases that are not compatible with \propref{MeyerDbC} --- beyond those that are already not compatible with \propref{SubstPr} --- are described in properties \propref{WidenPostOut} and \propref{WidenPostMult}. Therefore, this is another instance where different properties listed in this paper cannot be satisfied simultaneously.
+The DbC paradigm is not isomorphic with the substitution principle but actually imposes additional constraints. In particular, a function that has wider postconditions than the function it overrides if and only if is called \emph{outside} of the overridden function's preconditions satisfies \propref{SubstPr}, but does not satisfy \propref{MeyerDbC}. An example for such a function is \tcode{Derived3::f} in \propref{SubstPr} above.
+
+Concrete use cases that are not compatible with \propref{MeyerDbC} --- beyond those that are already not compatible with \propref{SubstPr} --- are described in properties \propref{WidenPostOut} and \propref{WidenPostMult}. Therefore, this is another instance where different properties listed in this paper cannot be satisfied simultaneously. % TD: TODO: rephrase this as actual countermotivation
+
+% TD: TODO: do we even need an example here? 
 
 \subsubsection{Single inheritance use cases}
 

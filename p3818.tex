@@ -23,7 +23,7 @@ Audience: & EWG
 \end{tabular}
 
 \begin{abstract}
-For C++26, we propose to remove the member function \tcode{evaluation_exception} from the type \tcode{std::contracts::contract_violation}. On some platforms, implementations of this function may need to perform a copy of the exception object thrown during a contract check. This in turn can lead to user code being executed after a contract violation has been detected but before the associated contract-violation handler is called, which may pose a security risk.  This function can easily be added back in future versions of C++ when we have a better understanding of the risk. In the meantime, alternative techniques to access an exception thrown from a contract check are readily available.
+For C++26, we propose to remove the member function \tcode{evaluation_exception} from the type \tcode{std::contracts::contract_violation}. On some platforms, an implementation of this function may require user code execution after a contract violation but before the contract-violation handler, which may pose a security risk. We can add this function back in future versions of C++ if it can be shown that the security risk is fully avoidable. In the meantime, the functionality it offers is available through other means.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

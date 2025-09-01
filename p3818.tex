@@ -1,0 +1,89 @@
+\input{wg21common}
+
+% Footnotes at bottom of page:
+ \usepackage[bottom]{footmisc} 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+\title{Remove \tcode{contract_violation::evaluation_exception} \\ from C++26}
+\author{
+  Peter Bindels \small(\href{mailto:dascandy@gmail.com}{dascandy@gmail.com}) \\
+  Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
+  Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
+}
+\date{}
+\maketitle
+
+\begin{tabular}{ll}
+Document \#: & D3818R0 \\
+Date: &2025-09-01 \\
+Project: & Programming Language C++ \\
+Audience: & EWG
+\end{tabular}
+
+\begin{abstract}
+TODO
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Synopsis}
+
+The current contract_violation object comes with a function to retrieve the exception by \tcode{exception_ptr}, in case a contract was violated by the check itself throwing an exception. The function is specified as follows:
+
+\begin{codeblock}
+exception_ptr evaluation_exception() const noexcept;
+\end{codeblock}
+
+The function was added from the point of view of not being able to correctly retrieve the exception in the contract violation handler otherwise, as other exceptions may be propagating there, which makes \tcode{std::exception_ptr::current()} return the then-current exception, and not the contract-violating exception. The function needs core language wording to be filled with the appropriate exception at the start of the contract violation handler, which we have since learned will on some platforms be forced to make a copy of the exception.
+
+We have since learned that the exception is available without a copy on all platforms (as far as we know), by using a Lippincott function style:
+
+\begin{codeblock}
+void my_contract_violation_handler(contract_violation& cv) {
+  if (cv.detection_mode() == contracts::detection_mode::evaluation_exception) {
+    try {
+      throw;
+    } catch (std::exception& e) {
+      HandleExceptionContractViolation(cv, e); // ... handle in whatever way the user wants to
+    }
+  } else {
+    HandleRegularContractViolation(cv);
+  }
+}
+\end{codeblock}
+
+This code is not awfully complicated to write, and only needs to be written for contract violation handlers, which are typically at most one location in a program.
+
+Furthermore, if the construct for the Lippincott function is not used, std::exception_ptr::current() can still be used at the start of the function to accomplish exactly what the function currently specified would accomplish:
+
+\begin{codeblock}
+void my_contract_violation_handler(contract_violation& cv) {
+  if (cv.detection_mode() == contracts::detection_mode::evaluation_exception) {
+    HandleExceptionContractViolation(cv, std::exception_ptr::current()); // ... handle in whatever way the user wants to
+  } else {
+    HandleRegularContractViolation(cv);
+  }
+}
+\end{codeblock}
+
+which would on some platforms cause a copy, but at the choice of the user.
+
+The \tcode{exception_ptr evaluation_exception() const noexcept;} function adds no value, and pessimizes in some cases. We should remove it before shipping C++26.
+
+\section{Wording}
+
+From the contract_violation struct definition, remove the line
+
+\removed{\tcode{exception_}}\removed{\tcode{ptr evaluation_}}\removed{\tcode{exception() const noexcept;}}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\renewcommand{\bibname}{References}  % custom name for bibliography
+\bibliographystyle{abstract}
+\bibliography{ref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\end{document}

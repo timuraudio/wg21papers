@@ -21,7 +21,7 @@
 Document \#: & P3819R0 \\
 Date: &2025-09-01 \\
 Project: & Programming Language C++ \\
-Audience: & EWG
+Audience: & LEWG, LWG
 \end{tabular}
 
 \begin{abstract}
@@ -70,7 +70,7 @@ The member function \mbox{\tcode{evaluation_exception}} was intended to give the
 
 \section{The problem}
 
-When originally proposed in \cite{P3227R1}, there was an assumption that \tcode{evaluation_acception} would  essentially be syntactic sugar for the simple logic above --- check \tcode{detection_mode()} and invoke \tcode{std::current_exception} if that mode is \tcode{evaluation_exception}. However, a problem arises when an exception is thrown within a contract-violation handler and \tcode{evaluation_exception} is then invoked within the \tcode{catch} clause handling that internal exception:
+When originally proposed in \cite{P3227R1}, there was an assumption that \tcode{evaluation_exception} would  essentially be syntactic sugar for the simple logic above --- check \tcode{detection_mode()} and invoke \tcode{std::current_exception} if that mode is \tcode{evaluation_exception}. However, a problem arises when an exception is thrown within a contract-violation handler and \tcode{evaluation_exception} is then invoked within the \tcode{catch} clause handling that internal exception:
 
 \begin{codeblock}
 void handle_contract_violation (const contract_violation& cv) {

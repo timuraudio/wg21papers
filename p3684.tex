@@ -31,7 +31,7 @@ We propose a small adjustment to the specification of erroneous behaviour in C++
 
 \section{Motivation and context}
 
-C++26 introduces the concept of \emph{erroneous behaviour}, that is, behaviour that is known to be incorrect yet is not undefined. It also introduces one concrete instance of erroneous behaviour: in C++26, the behaviour of reading a default-initialised variable of automatic storage duration and scalar type is now erroneous rather than undefined. This replacement of undefined behaviour is designed to mitigate existing (and actively exploited) security vulnerabilities.
+C++26 introduces the concept of \emph{erroneous behaviour}, that is, behaviour that is known to be incorrect yet is not undefined. It also introduces one concrete instance of erroneous behaviour: in C++26, reading a default-initialised variable of automatic storage duration and scalar type now produces an erroneous value instead of an indeterminate value; where using an indeterminate value has undefined behavior, use of an erroneous values instead has erroneous behaviour. This replacement of undefined behaviour is designed to mitigate existing (and actively exploited) security vulnerabilities.
 
 Beyond that one instance of erroneous behaviour, \cite{P2795R5} contains a section with a tentative list of other cases of undefined behaviour that could be replaced with erroneous behaviour in the future. \cite{P2973R0} proposes to do so concretely for the case of missing return from assignment. \cite{P3100R4} goes further and proposes to replace undefined behaviour with erroneous behaviour systematically across the entire C++ Standard for all cases in which plausible replacement behaviour exists; the paper identifies 16 such cases.
 
@@ -47,7 +47,7 @@ If the execution contains an operation specified as having erroneous behaviour, 
 \end{adjustwidth} 
 With this specification, a program effectively enters an ``erroneous state'' once any erroneous behaviour happens, and may be unceremoniously terminated at any arbitrary point after that.  The expectation is that it will be either reasonably soon or never, but the specification gives significantly more implementation freedom, making it much harder to reason about the behaviour of the program.
 
-At the time of writing, two flavours of \cite{P2795R5} implementations exist. Clang and GCC offer the flag \mbox{\tcode{-ftrivial-auto-var-init}}, which initialises default-initialised variables of automatic storage duration and scalar type to a fixed repeating pattern or to zero. This strategy removes the undefined behaviour but with the caveat that it never exhibits the encouraged behaviour of diagnosing an error. On the other hand, MemorySanitizer implements the actual detection of such erroneous reads, followed by termination with a diagnostic message.
+At the time of writing, two flavours of \cite{P2795R5} implementations exist. Clang and GCC offer the flag \mbox{\tcode{-ftrivial-auto-var-init}}, which initialises default-initialised variables of automatic storage duration and scalar type to a fixed repeating pattern or to zero. This strategy removes the undefined behaviour but with the caveat that it never exhibits the encouraged behaviour of diagnosing an error. On the other hand, MemorySanitizer implements the detection of such erroneous reads, terminating with a diagnostic message some time after an erroneous read happens.
 
 As the mapping of code in C++ to  post-optimisation machine instructions can often be unintuitive, the implementation  of such checks is typically done as instrumentation of compiled code.  In particular, the exact place where an erroneous read occurs can be rolled into many subsequent operations, and it is those subsequent operations where a diagnostic could potentially be emitted, not the initial read.  The case that can actually be caught is often a branch that occurs whose condition is dependent on an uninitialised value, and that branch might be very far removed from where the first read of the uninitialised value occurs in the abstraction machine. This implementation strategy is the original motivation for the current specification of erroneous behaviour.
 
@@ -55,7 +55,9 @@ On the other hand, no real-world implementation will detect an uninitialised rea
 
 \section{Proposal}
 
-To fix the issue while retaining compatibility between the specification and existing implementations such as MemorySanitizer, we propose to make erroneous values ``sticky''.  The current specification takes the approach that once you read an erroneous value, the value itself is ``cleaned'' and no longer toxic, but that comes with the downside that all following program behaviour is now erroneous and thus at risk of termination. By having erroneous values instead propagate with the data, we can extend the scope of the problematic data sufficiently to cover all realistic implementations while avoiding the more toxic threat of eventual and surprising termination at a later time.
+To fix the issue while retaining compatibility between the specification and existing implementations such as MemorySanitizer, we propose to make erroneous values ``sticky''.  The current specification takes the approach that once you read an erroneous value, the value itself is ``cleaned'' and no longer toxic, but that comes at the cost of putting your entire program in what is essentially a toxic state. By having erroneous values instead propagate with the data, we can extend the scope of the problematic data sufficiently to cover all realistic implementations while avoiding the more toxic threat of eventual and surprising termination at a later time.
+
+Of course, if we have an operation that uses an erroneous value but does not actually depend on that value --- multiplying by $0$, mod-ing by $1$, or something similar --- then we can (and should) produce a ``clean'' non-erroneous value.  Therefore, we propose that only operations whose value depends on an erroneous input have erroneous behavior and produce an erroneous output, which can depend on specific values of non-erroneous values.
 
 In practice, we do not expect the erroneous-ness of a value to transport beyond a single function or translation unit, but we should still allow for that possibility if a platform chooses to do so.   Therefore, we make any operation whose result is dependent on an erroneous value produce an erroneous value. Since any such operation is also erroneous behaviour, the implementation is free to either issue a diagnostic and/or terminate the program at that point, or to just move on (as neither the diagnostic nor the termination are normatively required). Such a program is now no longer under threat of unexpected termination, while leaving maximal flexibility for detecting the bug when it is most convenient to do so.
 
@@ -74,14 +76,12 @@ Modify [basic.indet] as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \begin{addedblock}
-If an erroneous value is produced by the evaluation of any builtin operation, the behavior is erroneous. Except in the following cases, if any operand of a built-in operator is erroneous then the value
+If an erroneous value is produced by the evaluation of any builtin operation, the behavior is erroneous. Except in the following cases, if any operand of a built-in operator is evaluated and produces an erroneous value then the value
 produced by that operator is erroneous:
 \begin{itemize}
 \item  If the built-in operation is \tcode{*} or \tcode{\&} and the other operand is a non-erroneous zero value.
 \item  If the built-in operation is \tcode{\%} and the other operand is a non-erroneous \tcode{1} value.
 \item  If the built-in operation is \tcode{|} and the other operand is a non-erroneous value with all coefficients set to \tcode{1} in its base-2 representation.
-\item  If the built-in operation is \tcode{\&\&} and the first operand is a non-erroneous \tcode{false} value.
-\item  If the built-in operation is \tcode{||} and the first operand is a non-erroneous \tcode{true} value.
 \end{itemize}
 \end{addedblock}
 %JMB: We might improve the wording later if we don't add to the list, but at the moment this is the list i've got.
@@ -89,6 +89,11 @@ produced by that operator is erroneous:
 %     byte arrays, but I keep coming down on the side of "no, that's silly, we shouldn't" and so the only thing
 %     left is expressions whose result does not depend on the value. 
 %TD: I tweaked your bitwise-OR wording, which seemed a bit broken, and added "modulo 1" (which always yields 1) as well as short-circuiting logical OR and AND (`false && erroneous` and  `true || erroneous`) to the list. That should hopefully cover all cases of C++ operators with absorbing/neutral elements. Feel free to massage this wording further.
+%JMB: i covered the logical operators by restricting this to operands that are
+%     evaluated and produce an erroneous value, which is really just saying something
+%     that was implicit before --- an operand is an expression, it can't be erroneous
+%     but it can produce an erroneous value when evaluated.  (The short-circuiting
+%     ops never evaluate their right-hand-side operators in those cases).
 
 Except in the following cases, if an indeterminate value is produced by an evaluation,
 the behavior is undefined  and if an erroneous value is produced by an evaluation, the behavior is erroneous and

@@ -57,6 +57,23 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%PROPERTIES
+
+% Macro to define custom subsubsubsections for properties
+\newcommand{\prop}[2]{
+  \paragraph*{\tcode{#1}: #2}
+  \refstepcounter{paragraph}
+  \label{#1}
+  \addcontentsline{toc}{paragraph}{\tcode{#1}: #2}
+  \mbox{}\vspace{0.5em} % hack to force the heading to not be run-in
+  \nopagebreak[4]
+}
+
+% Macro to refer to properties
+\newcommand{\propref}[1]{\hyperref[#1]{\tcode{#1}}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \begin{document}
 \title{Contract assertions on virtual functions: \\ a principled design approach}
 \author{
@@ -185,41 +202,28 @@ In the final part of our analysis, we use the conformance matrix to identify the
 
 \subsection{General approach and selection criteria}
 
-In this section, we identify the desirable properties that a design for supporting \tcode{pre} and \tcode{post} on virtual functions should exhibit. We take into account all relevant properties that were articulated by members of WG21 (whether formally in papers or informally during meetings or on the committee mailing lists).
+In this section, we identify the desirable properties that a design for supporting \tcode{pre} and \tcode{post} on virtual functions should exhibit. We take into account all relevant properties articulated by members of WG21 (whether formally in papers or informally during meetings or on the committee mailing lists)  during discussions about this feature so far.
 
-We describe each desirable property as precisely as possible and provide known motivation for and against supporting it. Where applicable, we include concrete code examples; we strive to provide realistic use cases rather than ``toy code'' whenever possible. Each property is given a short unique identifier to easily refer to it later in the paper, for example \tcode{ImplExp} for implementation experience.
-
-We follow the consensus-building method developed in \cite{P3099R0}; thus, we focus on data and objectively verifiable information rather than opinions, and do our best to minimise cognitive bias and value judgments when describing the desirable properties. In particular, we do not attempt to rank the listed properties by priority, relevance, or otherwise. However, we do point out cases where two or more properties are at odds with each other.
+Each property is given a short unique identifier to easily refer to it later in the paper, for example \propref{ImplExp} for implementation experience. The entry for each property is structured as follows:
+\begin{itemize}
+\item \emph{Description}: A section describing each property as precisely as possible.
+\item \emph{Motivation}: Known arguments for satisfying this property in a design for supporting \tcode{pre} and \tcode{post} on virtual functions.
+\item \emph{Countermotivation} (where applicable): Known arguments against satisfying this property; known incompatibilities with other properties.
+\item \emph{Example} (where applicable): Code example(s) illustrating use cases and motivation for the property. We strive to provide realistic examples rather than ``toy code'' whenever possible. 
+\end{itemize}
+We follow the consensus-building method developed in \cite{P3099R0}; thus, we focus on data and objectively verifiable information rather than opinions, and do our best to minimise cognitive bias and value judgments when describing the desirable properties. In particular, we do not attempt to rank the listed properties by priority, relevance, or otherwise. 
 
 Some of the listed properties were originally articulated as ``design principles that must be adhered to'',  ``very important use cases'', ``necessary conditions for successfully deploying the feature'', etc. For the purpose of this analysis, we carefully avoid such characterisations and instead treat all properties equally. For properties that are describing a use case, we avoid any claims of how common (or contrived) it is due to lack of data from real-world code bases backing up such claims.
 
 In a number of cases, it may be controversial whether the motivation is sound, the use case is plausible, and the property in question is actually desirable. In these cases, we strive to adopt a neutral position and limit ourselves to describing the property and the known arguments for and against supporting it.
 
-We only include properties for which we can objectively and unambiguously answer the question ``does a given language design exhibit this property?''. We therefore deliberately exclude properties that are vague, subjective, and/or cannot be measured directly, such as teachability or intuitiveness of a particular design. We also do not include properties that could in principle be measured, but for which no concrete, measurable criterion has been proposed.
+We only include properties for which we can objectively and unambiguously answer the following question: does a given language design for supporting \tcode{pre} and \tcode{post} on virtual functions exhibit this property? We therefore deliberately exclude properties that are vague, subjective, and/or cannot be measured directly, such as teachability or intuitiveness of a particular design. We also do not include properties that could in principle be measured, but for which no concrete, measurable criterion is evident and no such criterion has been proposed by the proponents of that property.
 
-For example, \cite{P3573R0} mentions the concern that \tcode{pre} and \tcode{post} on virtual functions ``have not been tried at scale''. However, the paper does not specify a measurable criterion for what would constitute sufficient ``scale''. We are happy to include this property in a future revision of this paper if the authors can provide a measurable criterion (e.g., a particular number of lines of deployed code that they consider sufficient deployment experience). Similarly, \cite{P3506R0} listed as a concern that the design proposed in \cite{P3097R0} was ``too complex''; however, since the author did not provide an objective criterion for measuring the complexity of any possible design, we exclude this concern from our analysis.
+For example, \cite{P3573R0} mentions the concern that \tcode{pre} and \tcode{post} on virtual functions ``have not been tried at scale''. However, the paper does not specify a measurable criterion for what would constitute sufficient ``scale''. We are happy to include this property in a future revision of this paper if the authors can provide a measurable criterion (e.g., a particular number of lines of deployed code that they consider sufficient deployment experience). Similarly, \cite{P3506R0} listed as a concern that the design proposed in \cite{P3097R0} was ``too complex''. However, since the author did not indicate how the complexity of any possible design could be measured, or what degree of complexity would be acceptable, we exclude this concern from our analysis.
 
-Importantly, we are not suggesting that properties like teachability or complexity are not relevant for language design; quite the opposite. However, since we cannot objectively measure them, it will be up to each member of WG21 to decide how to weigh these more subjective properties against the objective ones presented in this paper when considering a concrete proposed design for inclusion in Standard C++.
+Importantly, we are not suggesting that properties like teachability or complexity are not relevant for language design; quite the opposite. However, since they are inherently subjective, we do not consider them directly alongside other properties in our analysis. Instead, we consider more specific, objectively measurable properties that contribute to the teachability and complexity of a design. For example, property \propref{FullQualEq} is motivated by a desire to avoid complexity.
 
 \subsection{List of properties}
-
-%::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-
-% Macro to define custom subsubsubsections for properties
-\newcommand{\prop}[2]{
-  \paragraph*{\tcode{#1}: #2}
-  \refstepcounter{paragraph}
-  \label{#1}
-  \addcontentsline{toc}{paragraph}{\tcode{#1}: #2}
-  \mbox{}\vspace{0.5em} % hack to force the heading to not be run-in
-  \nopagebreak[4]
-}
-
-% Macro to refer to properties
-\newcommand{\propref}[1]{\hyperref[#1]{\tcode{#1}}}
-
-%::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-
 
 \subsubsection{Design constraints}
 
@@ -267,9 +271,9 @@ int main() {
 
 \prop{VacuousTrue}{Vacuousness of \tcode{pre(true)} and \tcode{post(true)}}
 
-\emph{Description:}
+\emph{Description:} 
 
-On the declaration of a virtual function, \tcode{pre(true)} and \tcode{pre(false)} should always be vacuous, i.e., they should be equivalent to not specifying any precondition or postcondition assertion at all on that declaration. Whether or not \tcode{pre(true)} and \tcode{pre(false)} are present should not change which function contract assertions will be evaluated; in particular, adding \tcode{pre(true)} or \tcode{pre(false)} to a function declaration should not cause other, non-vacuous contract assertions to no longer be evaluated.
+On the declaration of a virtual function, \tcode{pre(true)} and \tcode{pre(false)} should always be vacuous, i.e., they should be equivalent to not specifying any precondition or postcondition assertion at all on that declaration. Whether or not \tcode{pre(true)} and \tcode{pre(false)} are present should not change which function contract assertions will be evaluated. In particular, adding \tcode{pre(true)} or \tcode{pre(false)} to a function declaration should not cause other, non-vacuous contract assertions to no longer be evaluated.
 
 \emph{Motivation:}
 
@@ -316,15 +320,15 @@ Both programming styles seem reasonable in cross-platform code. It would arguabl
 
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should follow the \emph{substitution principle}, which stipulates that objects of a base class should be replaceable with objects of a derived class without affecting the correctness of the program.
 
-% TD: TODO: this description is too vague. It isn't explaining how this principle should relate specifically to contract assertions.
+% TD: TODO: this description is too vague. It isn't explaining how this principle should relate specifically to contract assertions (which represent only a subset of the actual contract). However, I am having a really hard time formulating that!
 
 \emph{Motivation:}
 
-The substitution principle is a well-established paradigm in object-oriented programming. It ensures that derived classes remain true to the behaviour and expectations of their base classes, allowing the user to use them interchangeably without introducing bugs. Applying this principle to the design of \tcode{pre} and \tcode{post} on virtual functions seems appropriate in situations where external clients will depend on contracts, such as when designing public APIs, libraries, and frameworks.
+The substitution principle is a well-established paradigm in object-oriented programming. It ensures that derived classes remain true to the behaviour and expectations of their base classes, allowing the user to use them interchangeably without introducing bugs. Applying this paradigm to \tcode{pre} and \tcode{post} on virtual functions facilitates robust and reliable object-oriented designs.
 
 \emph{Countermotivation:}
 
-While the substitution principle has its merits, there are use cases where full substitutability between base and derived class is a non-goal, particularly in a multi-paradigm language like C++ that does not always follow canonical object-oriented design. Such use cases are described in \propref{NarrowPre} and \propref{WidenPostIn}. A language design that requires \tcode{pre} and \tcode{post} to obey the substitution principle would make the addition of function contract assertions to a codebase difficult or impossible in these situations.
+The substitution principle is most useful in situations where external clients will depend on contracts, in particular when designing public APIs, libraries, and frameworks that follow object-oriented programming. However, there are use cases where full substitutability between base and derived class is a non-goal, particularly in a multi-paradigm language like C++ that does not always follow canonical object-oriented design. Such use cases are described in \propref{NarrowPre} and \propref{WidenPostIn}. A language design that requires \tcode{pre} and \tcode{post} to obey the substitution principle would make the addition of function contract assertions to a codebase with these use cases difficult or impossible.
 
 \emph{Example:}
 
@@ -386,11 +390,11 @@ Following the DbC paradigm when  specifying the semantics of \tcode{pre} and \tc
 
 \emph{Countermotivation:} 
 
-The DbC paradigm is not isomorphic with the substitution principle but actually imposes additional constraints. In particular, a function that has wider postconditions than the function it overrides if and only if is called \emph{outside} of the overridden function's preconditions satisfies \propref{SubstPr}, but does not satisfy \propref{MeyerDbC}. An example for such a function is \tcode{Derived3::f} in \propref{SubstPr} above.
+The DbC paradigm is not isomorphic with the substitution principle as it imposes additional constraints. In particular, a function that has wider postconditions than the function it overrides if and only if is called \emph{outside} of the overridden function's preconditions satisfies \propref{SubstPr}, but does not satisfy \propref{MeyerDbC}. Concrete use cases that are not compatible with \propref{MeyerDbC} --- beyond those that are already not compatible with \propref{SubstPr} --- are described in properties \propref{WidenPostOut} and \propref{WidenPostMult}. 
 
-Concrete use cases that are not compatible with \propref{MeyerDbC} --- beyond those that are already not compatible with \propref{SubstPr} --- are described in properties \propref{WidenPostOut} and \propref{WidenPostMult}. Therefore, this is another instance where different properties listed in this paper cannot be satisfied simultaneously. % TD: TODO: rephrase this as actual countermotivation
+\emph{Example:}
 
-% TD: TODO: do we even need an example here? 
+Consider again the example from \propref{SubstPr} above. Function \tcode{Derived3::f} in that example satisfies property \propref{SubstPr}, i.e., it is fully substitutable for \tcode{Base::f}. However, it does not satisfy property \propref{MeyerDbC}, because it widens the overridden function's postconditions. The function \tcode{Derived3::f} as written should therefore either not compile, or its semantics should be such that returning a number from this function that is larger than the number passed in will cause a postcondition assertion violation.
 
 \subsubsection{Single inheritance use cases}
 
@@ -398,9 +402,15 @@ The following properties describe the desirable default behaviour of \tcode{pre}
 
 \prop{WidenPre}{Enable widening preconditions}
 
+\emph{Description:}
+
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to \emph{widen} preconditions in an overriding function, i.e., to specify precondition assertions that are less strict than those specified on the overridden function, or even specify that there are \emph{no} precondition assertions on the overriding function. Whenever the overriding function is called \emph{directly} (i.e., it is the statically called function), those less strict precondition assertions should be evaluated instead of the overridden ones.
 
+\emph{Motivation:}
+
 A derived class should be able to extend the functionality of the base class and accept arguments that are designed to work with that extended functionality; doing so does not compromise substitutability of the base class by the derived class. Contract checking should support this practice.
+
+\emph{Example:}
 
 Consider the following motivating use case from \cite{P0247R0}:
 \begin{codeblock}
@@ -432,7 +442,15 @@ In this program, the statically called function is \tcode{XDisplay::post_message
 
 \prop{ChkPreCaller}{Check caller-facing preconditions}
 
+\emph{Description:}
+
 In a virtual function call, the precondition assertions specified on the statically called function should be evaluated by default, regardless of which function will be selected by dynamic dispatch and what  precondition assertions are specified on that function.
+
+\emph{Motivation:}
+
+Calling a virtual function in a way that violates the statically called function's preconditions is an incorrect use of that interface, regardless of the dynamic type of the called object. This bug should be detectable by contract checking. Even if the dynamic type of the object has wider preconditions and would work correctly for such a call, that dynamic type is not known at the call site and can change in the future, therefore the call site cannot rely on it.
+
+\emph{Example:}
 
 Consider again the \tcode{Display} --- \tcode{XDisplay} inheritance hierarchy from property \tcode{WidenPre}. Let us slightly alter the \tcode{test} function such that it takes a reference to the base class \tcode{Display}:
 \begin{codeblock}
@@ -445,16 +463,20 @@ int main() {
   test(xd);
 }
 \end{codeblock}
-The above program should cause a contract violation when executed, because it violates the preconditions of the statically called function (\tcode{Display::post_message}), even though the preconditions of the function that will actually be executed (\tcode{XDisplay::post_message}) are satisfied.
-
-The rationale for this property is that calling \tcode{Display::post_message} with a non-ASCII input string is an incorrect use of the \tcode{Display} interface and therefore constitutes a bug that should be detectable by contract checking. In the program above, the dynamic type of the object referenced by \tcode{d} happens to be \tcode{XDisplay}, and \tcode{XDisplay::post_message} can handle non-ASCII strings just fine; however, that dynamic type is not known at the call site and can change in the future. The call site must therefore work correctly for any type that inherits from \tcode{Display}, whether it happens to be an \tcode{XDisplay} or not.
+The above program should cause a contract violation when executed, because it violates the preconditions of the statically called function (\tcode{Display::post_message}), even though  the dynamic type of the object referenced by \tcode{d} happens to be \tcode{XDisplay}, which means the function actually executed will be \tcode{XDisplay::post_message} and the preconditions of that function are satisfied (it can handle non-ASCII strings).
 
 \prop{NarrowPost}{Enable narrowing postconditions}
-% OK
+
+\emph{Description:}
 
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to \emph{narrow} postconditions in an overriding function, i.e. to specify postcondition assertions that are more strict than those of the overridden function. Whenever the overriding function is executed, its stricter postcondition assertions should be evaluated (regardless of what the statically called function is or what its postcondition assertions are). Failure should cause a contract violation, even if all postcondition assertions of the overridden function are satisfied.
 
+\emph{Motivation:}
+
 Subclasses that have compatible contracts with their base class can often provide additional guarantees that the base class does not require of all potential subclasses. Failing to meet these additional guarantees is a bug in the subclass that should be detected by contract checking, even when the direct caller does not directly depend on that guarantee because it is using the base class interface.
+% TD: TODO: the above motivation sounds weird, read that again
+
+\emph{Example:}
 
 Consider an abstract class that is used to generate sequences of integers through a virtual function:
 
@@ -492,8 +514,16 @@ int main() {
 
 \prop{NarrowPre}{Enable narrowing preconditions}
 
+\emph{Description:}
+
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to \emph{narrow} preconditions in an overriding function, i.e., to specify precondition assertions 
  that are \emph{more strict} than those of the overridden function. Whenever the overriding function is executed (regardless of what the statically called function is), these more strict precondition assertions should be evaluated. Failure should cause a contract violation, even if all precondition assertions of the overridden function are satisfied.
+ 
+ \emph{Motivation:}
+ 
+ TODO
+ 
+ \emph{Example:}
  
 Consider a base class for rendering an image:
 
@@ -773,7 +803,9 @@ The type \tcode{Identity} is substitutable for both \tcode{EvenComputer} and \tc
 
 \subsubsection{Optional behaviour}
 
-The following properties describe use cases where multiple different behaviours for \tcode{pre} and \tcode{post} on virtual functions are possible and there may be value in offering users the option to explicitly choose between either using additional syntax.
+All properties presented so far relate to the possible \emph{default} behaviour of \tcode{pre} and \tcode{post} on virtual functions. However, during discussions of this feature a concern came up repeatedly that specifying the default behaviour, regardless of how this is done, cannot provide the flexibility needed to  satisfy all relevant use cases for \tcode{pre} and \tcode{post} on virtual functions.
+
+Therefore, the following properties describe use cases where additional syntax can be used to optionally give \tcode{pre} and \tcode{post} on virtual functions different behaviour. Note that all such additional syntax shown in this paper is strawman syntax to illustrate the idea; we do not propose any concrete new syntax in this paper.
 
 \prop{InhOptBase}{Choose in the overridden function whether to inherit}
  
@@ -933,7 +965,6 @@ public:
 \end{codeblock}
 In order to be deployable in such codebases, a design for supporting \tcode{pre} and \tcode{post} on virtual functions needs to provide a way to have the function contract assertions of \tcode{CustomWidget::}\allowbreak\tcode{addChildWidget} evaluated whenever that function is called, without having to modify the \tcode{Widget}  base class.
 
-
 \prop{NoRemoteBreak}{Avoid remote code breakage}
 
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the author of a base class to add function contract assertions to a virtual function without breaking correct uses of derived classes in remote client code.
@@ -969,6 +1000,51 @@ void drawMyApp() {
 \end{codeblock}
 As long as the client uses the \tcode{SuperWidget} interface instead of the base \tcode{Widget} interface for their widgets above, their program is correct --- there is no contract violation. In order to be deployable, adding the above function contract assertions to \tcode{Widget::}\allowbreak\tcode{addChildWidget} should not break the client's correct program by introducing a precondition assertion violation to it.
 
+\prop{NoRemoteAss}{Do not evaluate remote assertions}
+
+\emph{Description:}
+
+The set of function contract assertions evaluated during a virtual function call should be limited to the function contract assertions declared on the functions directly participating in that call: the statically called function and the function actually executed (i.e., chosen by dynamic dispatch). 
+
+\emph{Motivation:}
+
+When debugging a C++ program, being able to quickly identify the source of a problem is key to productivity. When a virtual function call causes a contract assertion to fail, it is important to be able to quickly identify the offending assertion.
+
+If a virtual function call evaluates function contract assertions declared on functions other than those directly participating in the offending call (e.g., on overridden functions further down the inheritance hierarchy), those assertions may be very difficult to locate. This is particularly true for large codebases where inheritance hierarchies can be very complex, and base and derived classes can be spread across different components of the codebase (including third-party code).
+
+\emph{Countermotivation:}
+
+This property conflicts with inheriting function contract assertions, whether this happens by default (\propref{InhDefault}) or explicitly (\propref{InhBase}, \propref{InhDerived}). Further, the \emph{members} of a base class are already inherited automatically in every derived class; this does not seem to cause problems in practice. Finally, concerns regarding efficiently navigating a codebase can usually be addressed via tooling.
+
+\emph{Example:}
+
+Consider a contract-violation handler that triggers a breakpoint:
+
+\begin{codeblock}
+void handle_contract_violation(const contract_violation& cv) {
+    std::breakpoint(); // or just a manual breakpoint set in the IDE
+}
+\end{codeblock}
+
+Now, let us assume we trigger this breakpoint while debugging a C++ program. In order to understand which contract assertion failed, we use our debugger to walk up the stack.  One stackframe up, we see a function with a precondition assertion:
+
+\begin{codeblock}
+int GzipCompressionBuffer::writeChars(char* chars, size_t count)
+pre (chars != nullptr) {   // <---
+  // some code
+}
+\end{codeblock}
+
+Another stackframe up, we see the callsite:
+
+\begin{codeblock}
+void readAppState(InputBuffer& ib) {
+  // some code
+  ib.writeChars(data, n);   // <---
+}
+\end{codeblock}
+
+Now, we inspect the function contract assertions of \tcode{GzipCompressionBuffer::}\allowbreak\tcode{writeChars} and those of \tcode{InputBuffer::}\allowbreak\tcode{writeChars} to determine what went wrong. It would be unfortunate if we would also have to consult the function contract assertions of the corresponding functions in every single other class that forms part of that inheritance hiearachy, for example \tcode{Buffer::}\allowbreak\tcode{writeChars} in some base class further up the hierarchy, or \tcode{CompressionBuffer::}\allowbreak\tcode{writeChars} in some intermediate class.
 
 \subsubsection{Standardisation requirements}
 
@@ -976,15 +1052,23 @@ The following properties describe general requirements that any proposal for sup
 
 \prop{Wording}{Fully specified in C++ wording}
 
-The proposed design should be fully specified in C++ wording that has been reviewed by at least one Core expert, and should have no known, unresolved specification issues. This is a standard requirement for language proposals before they can be forwarded to CWG for wording review and inclusion in the C++ working paper. 
+\emph{Description:}
 
-The motivation is that without this property, we cannot claim that a proposed design has been fully specified and understood.
+The proposed design should be fully specified in C++ wording that has been reviewed by at least one Core expert, and should have no known, unresolved specification issues.
+
+\emph{Motivation:}
+
+ This is a standard requirement for language proposals before they can be forwarded to CWG for wording review and inclusion in the C++ working paper.  Without this requirement, we cannot plausibly claim that a proposed design has been fully specified and understood.
 
 \prop{ImplExp}{Implementation experience}
 
+\emph{Description:}
+
 The proposed design should be implemented \emph{completely} in at least one major C++ compiler front-end such as GCC, Clang, MSVC, or EDG. We do not require that the implementation has been upstreamed into the main branch of that compiler and shipped to users; an implementation on a dev branch is sufficient. However, we do require that the implementation is freely available to users in some form, for example by publishing the source code of the implementation or by making the branch in question available on Compiler Explorer.
 
-The motivation for this requirement is that only actual implementation experience is acceptable proof of implementability. As long as a design only exists as a ``paper exercise'', even with wording, it is still possible that we overlooked some significant issues with that design.
+\emph{Motivation:}
+
+Only actual implementation experience is acceptable proof of implementability. As long as a design only exists as a ``paper exercise'', even with wording, it is still possible that we overlooked some significant issues with that design.
 
 % TD: TODO: we do not necessarily need this here, we can have it instead in the place where we discuss which designs fulfil which requirement
 %If only an incomplete implementation of the design is available, or if the implementation is feature-complete but has significant unresolved issues, we consider the property having been met only partially. Similarly, if an implementation of an analogous design is available for a different programming language, we consider  the property having been met only partially, as programming languages such as Eiffel, D, and Ada are sufficiently different from C++ that proof of implementability in one language does not necessarily constitute proof of implementability in another.

@@ -207,7 +207,7 @@ In this section, we identify the desirable properties that a design for supporti
 Each property is given a short unique identifier to easily refer to it later in the paper, for example \propref{ImplExp} for implementation experience. The entry for each property is structured as follows:
 \begin{itemize}
 \item \emph{Description}: A section describing each property as precisely as possible.
-\item \emph{Motivation}: Known arguments for satisfying this property in a design for supporting \tcode{pre} and \tcode{post} on virtual functions.
+\item \emph{Motivation}: Known arguments for satisfying this property.
 \item \emph{Countermotivation} (where applicable): Known arguments against satisfying this property; known incompatibilities with other properties.
 \item \emph{Example} (where applicable): Code example(s) illustrating use cases and motivation for the property. We strive to provide realistic examples rather than ``toy code'' whenever possible. 
 \end{itemize}
@@ -318,17 +318,19 @@ Both programming styles seem reasonable in cross-platform code. It would arguabl
 
 \emph{Description:}
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should follow the \emph{substitution principle}, which stipulates that objects of a base class should be replaceable with objects of a derived class without affecting the correctness of the program.
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should follow the \emph{substitution principle}, which stipulates that objects of a base class should be replaceable with objects of a derived class without affecting the correctness of the program. 
 
-% TD: TODO: this description is too vague. It isn't explaining how this principle should relate specifically to contract assertions (which represent only a subset of the actual contract). However, I am having a really hard time formulating that!
+% TD: TODO: this description is too vague. It isn't explaining how this principle should relate specifically to contract assertions (which represent only a subset of the actual contract). However, I am having a really hard time formulating that! Maybe the fact that they represent only a subset is actually a piece of countermotivation here? But I am having a hard time formulating that as well.
 
 \emph{Motivation:}
 
-The substitution principle is a well-established paradigm in object-oriented programming. It ensures that derived classes remain true to the behaviour and expectations of their base classes, allowing the user to use them interchangeably without introducing bugs. Applying this paradigm to \tcode{pre} and \tcode{post} on virtual functions facilitates robust and reliable object-oriented designs.
+The substitution principle is a well-established paradigm in object-oriented programming. It ensures that derived classes remain true to the behaviour and expectations of their base classes, allowing the user to use them interchangeably without introducing bugs. This is particularly important in situations where external clients will depend on contracts, such as for public APIs, libraries, and frameworks that follow object-oriented programming. Applying this paradigm to \tcode{pre} and \tcode{post} on virtual functions facilitates robust and reliable object-oriented designs.
 
 \emph{Countermotivation:}
 
-The substitution principle is most useful in situations where external clients will depend on contracts, in particular when designing public APIs, libraries, and frameworks that follow object-oriented programming. However, there are use cases where full substitutability between base and derived class is a non-goal, particularly in a multi-paradigm language like C++ that does not always follow canonical object-oriented design. Such use cases are described in \propref{NarrowPre} and \propref{WidenPostIn}. A language design that requires \tcode{pre} and \tcode{post} to obey the substitution principle would make the addition of function contract assertions to a codebase with these use cases difficult or impossible.
+There are use cases for contract assertions (see properties \propref{NarrowPre}, \propref{WidenPostIn}) that are not compatible with the substitution principle. A language design that requires \tcode{pre} and \tcode{post} to obey the substitution principle would make the addition of function contract assertions to a codebase that relies on these use cases difficult or impossible.
+
+Further, enforcing the substitution principle statically does not seem feasible for a language like C++ because it would require subsumption proofs on arbitrarily complex expressions (see \cite{P3165R0}). Thus, the only known  strategy for enforcing the substitution principle is to do so dynamically by OR-ing precondition assertions and AND-ing postcondition assertions across the inheritance hierarchy like in Eiffel or D. However, this strategy actually enforces an even stronger set of constraints, which has a number of implications (see \propref{MeyerDbC}).
 
 \emph{Example:}
 
@@ -367,6 +369,8 @@ struct Derived2 : Base {
 
 In this example, \tcode{Derived2::f} is not substitutable for \tcode{Base::f} as it is possible to pass a nonnegative number (thus satisfying the precondition assertions of \tcode{Base::f}) but get a number back that is larger than the number passed in (thus failing the postcondition assertions of \tcode{Base::f}). The design should therefore ensure that when the dynamic type of the parameter passed into  \tcode{test(Base\&)} is \tcode{Derived2}, and \tcode{Derived2::f} is implemented as above, such an implementation will be treated as incorrect and result in a postcondition assertion violation. Such a design may or may not constrain which function contract assertions are allowed in \mbox{\emph{/* ... */}}.
 
+% TD: TODO: Everything from here until the end of this property is duplicated either in MeyerDbC or in WidenPostOut; re-think where this belongs!
+
 Note that widening preconditions and narrowing postconditions in the overridden function do not violate the substitution principle. Note further that when an overriding function has wider preconditions than the overridden function (assuming the chosen language design allows this), and is called \emph{outside} of the overridden function's preconditions (i.e., in a way that is a correct call of the overriding function but would not be a correct call of the overridden function), it is not necessary to satisfy the overridden function's postconditions. Consider:
 
 \begin{codeblock}
@@ -390,17 +394,23 @@ Following the DbC paradigm when  specifying the semantics of \tcode{pre} and \tc
 
 \emph{Countermotivation:} 
 
-The DbC paradigm is not isomorphic with the substitution principle as it imposes additional constraints. In particular, a function that has wider postconditions than the function it overrides if and only if is called \emph{outside} of the overridden function's preconditions satisfies \propref{SubstPr}, but does not satisfy \propref{MeyerDbC}. Concrete use cases that are not compatible with \propref{MeyerDbC} --- beyond those that are already not compatible with \propref{SubstPr} --- are described in properties \propref{WidenPostOut} and \propref{WidenPostMult}. 
+The DbC paradigm (``widen preconditions, narrow postconditions'') is \emph{not} just an application of the substitution principle to contract checking (even though that is a common misconception), but imposes additional constraints. In particular, a function that has wider postconditions than the function it overrides if and only if is called \emph{outside} of the overridden function's preconditions satisfies \propref{SubstPr}, but does not satisfy \propref{MeyerDbC}. 
+
+Thus,  in addition to those use cases that are not compatible with any form of enforcing the substution principle (see properties \propref{NarrowPre}, \propref{WidenPostIn}), there are more use cases for contract assertions that are not compatible with the DbC paradigm (see properties  \propref{WidenPostOut} and \propref{WidenPostMult}).
+
+Further, the established strategy for enforcing the DbC paradigm --- OR-ing precondition assertions and AND-ing postcondition assertions across the inheritance hierarchy like in Eiffel or D --- is not compatible with satisfying the \propref{FailFast} property.
+
+% TD: TODO: check if there are any more properties unsatisfiable with DbC regardless of the exact design chosen!
 
 \emph{Example:}
 
-Consider again the example from \propref{SubstPr} above. Function \tcode{Derived3::f} in that example satisfies property \propref{SubstPr}, i.e., it is fully substitutable for \tcode{Base::f}. However, it does not satisfy property \propref{MeyerDbC}, because it widens the overridden function's postconditions. The function \tcode{Derived3::f} as written should therefore either not compile, or its semantics should be such that returning a number from this function that is larger than the number passed in will cause a postcondition assertion violation.
+Consider again the example from \propref{SubstPr} above. Function \tcode{Derived3::f} in that example satisfies property \propref{SubstPr}, i.e., it is fully substitutable for \tcode{Base::f}. However, it does not satisfy property \propref{MeyerDbC}, because it widens the overridden function's postconditions. Following DbC, the function \tcode{Derived3::f} as written should therefore either not compile, or its semantics should be such that returning a number from this function that is larger than the number passed in will cause a postcondition assertion violation.
 
 \subsubsection{Single inheritance use cases}
 
 The following properties describe the desirable default behaviour of \tcode{pre} and \tcode{post} for concrete use cases where a virtual function overrides at most \emph{one} other virtual function.
 
-\prop{WidenPre}{Enable widening preconditions}
+\prop{WidenPre}{Widening preconditions}
 
 \emph{Description:}
 
@@ -408,7 +418,7 @@ A design for supporting \tcode{pre} and \tcode{post} on virtual functions should
 
 \emph{Motivation:}
 
-A derived class should be able to extend the functionality of the base class and accept arguments that are designed to work with that extended functionality; doing so does not compromise substitutability of the base class by the derived class. Contract checking should support this practice.
+A derived class should be able to extend the functionality of the base class and accept arguments that are designed to work with that extended functionality. This ability to widen preconditions in an overriding function is established practice in languages like Eiffel, D, and Ada, and does not compromise substitutability of the base class by the derived class. Contract checking in C++ should support this practice.
 
 \emph{Example:}
 
@@ -427,7 +437,7 @@ public:
     pre (is_utf8(s));
  };
 \end{codeblock}
-In this example, we have a base class facility that accepts ASCII strings to display. However, the derived implementation accepts UTF-8. A program that uses the \tcode{XDisplay} class directly should be able to generate and post both ASCII and UTF-8 messages. In other words, the following program should not cause a contract violation when executed:
+In this example, we have a base class facility that accepts ASCII strings to display. However, the derived implementation accepts UTF-8. A program that does not rely on the \tcode{Display} base class interface, but uses the \tcode{XDisplay} class directly should be able to generate and post both ASCII and UTF-8 messages. In other words, the following program should not cause a contract violation when executed:
 \begin{codeblock}
 void test(XDisplay& xd) {
   xd.post_message(/* some non-ASCII UTF-8 string */);
@@ -438,9 +448,9 @@ int main() {
   test(xd);
 }
 \end{codeblock}
-In this program, the statically called function is \tcode{XDisplay::post_message}, and the dynamic type is \tcode{XDisplay} (it could also be a type deriving from \tcode{XDisplay}). The base class interface \tcode{Display::post_message} is not used, therefore satisfying its narrower precondition is not relevant to the correctness of this program.
+In this program, the statically called function is \tcode{XDisplay::post_message}, and the dynamic type is \tcode{XDisplay} (it could also be a type deriving from \tcode{XDisplay}). The overridden function \tcode{Display::post_message} is not called, therefore satisfying its narrower precondition that the input string must be ASCII is not relevant to the correctness of this program.
 
-\prop{ChkPreCaller}{Check caller-facing preconditions}
+\prop{ChkPreCaller}{Checking caller-facing preconditions}
 
 \emph{Description:}
 
@@ -465,7 +475,7 @@ int main() {
 \end{codeblock}
 The above program should cause a contract violation when executed, because it violates the preconditions of the statically called function (\tcode{Display::post_message}), even though  the dynamic type of the object referenced by \tcode{d} happens to be \tcode{XDisplay}, which means the function actually executed will be \tcode{XDisplay::post_message} and the preconditions of that function are satisfied (it can handle non-ASCII strings).
 
-\prop{NarrowPost}{Enable narrowing postconditions}
+\prop{NarrowPost}{Narrowing postconditions}
 
 \emph{Description:}
 
@@ -473,8 +483,9 @@ A design for supporting \tcode{pre} and \tcode{post} on virtual functions should
 
 \emph{Motivation:}
 
-Subclasses that have compatible contracts with their base class can often provide additional guarantees that the base class does not require of all potential subclasses. Failing to meet these additional guarantees is a bug in the subclass that should be detected by contract checking, even when the direct caller does not directly depend on that guarantee because it is using the base class interface.
-% TD: TODO: the above motivation sounds weird, read that again
+Subclasses that have compatible contracts with their base class can often provide additional guarantees that the base class does not require of all potential subclasses. Being able to express these additional guarantees in the form of postcondition assertions on the overridden function benefits users, compilers, and tools. Failing to meet these additional guarantees is a bug in the subclass that should be detected by contract checking. Importantly, this is true even when the direct caller does not directly depend on that guarantee because it is using the base class interface.
+
+The ability to narrow postconditions in an overriding function is established practice in languages like Eiffel, D, and Ada, and does not compromise substitutability of the base class by the derived class. Contract checking in C++ should support this practice.
 
 \emph{Example:}
 
@@ -512,7 +523,7 @@ int main() {
 \end{codeblock}
 
 
-\prop{NarrowPre}{Enable narrowing preconditions}
+\prop{NarrowPre}{Narrowing preconditions}
 
 \emph{Description:}
 
@@ -521,7 +532,13 @@ A design for supporting \tcode{pre} and \tcode{post} on virtual functions should
  
  \emph{Motivation:}
  
- TODO
+Narrowing preconditions becomes necessary when usage of the derived class depends on adhering to additional constraints or setting up additional state (database connections, threads, etc.) that the base class does not depend on.  Such designs can often have favourable tradeoffs such as simplicity and performance.
+
+While narrowing preconditions violates the substitution principle (\propref{SubstPr}) and Bertrand Meyer's Design by Contract paradigm (\propref{MeyerDbC}), such \emph{non-canonical} designs are correct and useful when unconditional substitutability of the base class by the derived class is not required or expected. These designs exist and are used in practice, especially in performance-critical or domain-specific systems and in situations where the same team controls the entire codebase and is aware of the expected usage patterns.
+
+Often, the narrower preconditions of the overriding function can be guaranteed non-locally by designing the program accordingly. Thus, the derived class is substitutable for the base class in \emph{that} program (even if not for all possible usages of that inheritance hierarchy). Failure to establish the substitutability criteria at runtime is a bug (an incorrect usage of the derived class). A design for supporting \tcode{pre} and \tcode{post} on virtual functions that accommodates this use case enables users to leverage contract checking to detect such bugs. 
+
+On the other hand, users may not be able to afford refactoring their existing codebase to adhere to the substitution principle or Design by Contract paradigm; instead, if C++ contract checking does not support their current design, they will simply not add contract assertions to their code.
  
  \emph{Example:}
  
@@ -549,22 +566,26 @@ public:
 };
 \end{codeblock}
 
-In order to support this use case, the precondition assertion \tcode{pre(readyToRender)} would need to be well-formed, evaluated whenever \tcode{GPUImage::render} is executed, and trigger a contract violation in case of failure, even if the statically called function is \tcode{Image::render} and all preconditions of that functions are met.
+A program that ensures a successful call to \tcode{prepare} always happens before a call to \tcode{render} is correct; failure to do so is a bug that should be detectable by contract checking. 
 
-Note that \tcode{GPUImage} is not substitutable for \tcode{Image} in the general case, because its implementation for \tcode{render} introduces an additional precondition. Supporting this use case is therefore incompatible with the substitution principle (\propref{SubstPr}) and with Bertrand Meyer's Design by Contract paradigm (\propref{MeyerDbC}).
-
-However, \tcode{GPUImage} \emph{becomes} substitutable for \tcode{Image} after successfully calling \tcode{prepare}. Substitutability therefore becomes a runtime property rather than a static one, but will still hold in a correct program. On the other hand, failure to establish the substitutability criteria at runtime (i.e., to successfully call \tcode{prepare} before calling \tcode{render}) is a bug that should be detectable by contract checking.
-
-The rationale for allowing such class hierarchies is that they exist, can be used correctly, and are used in production systems today. It may not be a good choice to include the above \tcode{GPUImage} class in a public-facing, general-purpose graphics library, but it seems perfectly acceptable to do so e.g. in an internal rendering engine where the team controls the entire codebase and knows how to use it correctly, in particular if there are positive tradeoffs such as greater performance. 
-
-If we allow \tcode{pre} and \tcode{post} on virtual functions to be used in such cases, it enables users to leverage them to detect bugs such as failure to  successfully call \tcode{prepare} before calling \tcode{render} when using \tcode{GPUImage}. On the other hand, if we do not allow such use cases, users may not be able to afford to refactor their code to adhere to the substitution principle or Design by Contract; instead, they will simply not add function contract assertions to their code.
+To support this use case and diagnose incorrect use, the precondition assertion \mbox{\tcode{pre(readyToRender)}} would need to be well-formed, evaluated whenever \tcode{GPUImage::render} is executed, and trigger a contract violation in case of failure, even if the statically called function is \tcode{Image::render} and all preconditions of that functions are met.
 
 
-\prop{WidenPostOut}{Enable widening postconditions outside of base contract}
+\prop{WidenPostOut}{Widening postconditions outside of base contract}
+
+\emph{Description:}
 
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to widen postconditions in an overriding function in cases where the overriding function is called outside of the overridden function's preconditions.
 
-This use case arises whenever an overriding function operates on a larger domain than the function it overrides. As an example of this situation, let \tcode{Number} be a generic type that can represent real or complex numbers. Now, consider a type \tcode{Sqrt} that computes a real-number square root. The function \tcode{Sqrt::compute} requires a nonnegative real number as input, and returns another nonnegative real number as output. We can specify this contract using function contract assertions:
+\emph{Motivation:}
+
+The need to widen postconditions arises when an overriding function operates on a larger domain than the function it overrides (i.e., it has wider preconditions). When the overriding function is called outside of the overridden function's preconditions (but within its own preconditions), there is no need to satisfy the overridden function's postconditions as the call in question would not be a correct use of the overridden function anyway (even though it is a correct use of the overriding function). The overriding function therefore can have wider postconditions for such outside-of-base-contract calls. Contract checking in C++ should support this scenario.
+
+When widening postconditions in this way, the overriding function is still fully substitutable for the overridden function. Supporting this use case is therefore compatible with the substitution principle (\propref{SubstPr}). However, it is not  compatible with Bertrand Meyer's Design by Contract paradigm (\propref{MeyerDbC}).
+
+\emph{Example:}
+
+Let \tcode{Number} be a generic type that can represent real or complex numbers. Now, consider a type \tcode{Sqrt} that computes a real-number square root. The function \tcode{Sqrt::compute} requires a nonnegative real number as input, and returns another nonnegative real number as output. We can specify this contract using function contract assertions:
 
 \begin{codeblock}
 struct Sqrt {
@@ -583,9 +604,22 @@ struct ComplexSqrt : public Sqrt {
   Number compute(const Number& x) override;
 };
 \end{codeblock}
-When the preconditions of the overridden function \tcode{Sqrt::compute} are satisfied, \tcode{ComplexSqrt::}\allowbreak\tcode{compute} gives clients the same guarantee: if the user passes a nonnegative real number, they will get back a nonnegative real number. Therefore, \tcode{Sqrt} is substitutable by \tcode{ComplexSqrt}. 
 
-However, when the function \tcode{ComplexSqrt::compute} is used directly, the calling code is no longer required to satisfy the preconditions of \tcode{Sqrt::compute} and can pass any complex number. In this case, satisfying the postconditions of \tcode{Sqrt::compute} is no longer necessary either. In the following program, \tcode{ComplexSqrt::compute} should return a value that is \emph{not} a nonnegative real number without causing a contract violation:
+When used as a \tcode{Sqrt}, which requires satisfying the preconditions of the overridden function \tcode{Sqrt::compute}, \tcode{ComplexSqrt::}\allowbreak\tcode{compute} gives clients the same guarantee that clients  expect from any implementation of \tcode{Sqrt}: if the user passes a nonnegative real number, they will get back a nonnegative real number. Therefore, \tcode{Sqrt} is substitutable by \tcode{ComplexSqrt}. Consider, for example, the following function that uses an instance of \tcode{Sqrt} to compute the fourth root of a given Number:
+
+\begin{codeblock}
+Number quadroot(Number value, const Sqrt& sqrt) {
+  if (!value.isReal() || value.realPart() < 0) {
+    throw std::domain_error("Must pass a nonnegative real number");
+  }
+  Value v = sqrt.compute( {value} ); // v is a nonnegative real number
+  return sqrt.compute( {v} ); // preconditions satisfied 
+}
+\end{codeblock}
+
+Client code such as this last line of \tcode{quadroot}, which invokes a virtual function through a base class interface, invariably depends on the postconditions of that base class interface. Thus, the postconditions of that base class should be checked when calling an object of derived class through a base class interface.
+
+However, the implementation \tcode{ComplexSqrt} does not --- and cannot --- guarantee that it will return a nonnegative real number in all cases. Importantly, such a guarantee is not necessary when the preconditions of the base class are not met. When the function \tcode{ComplexSqrt::compute} is used directly, the calling code is not required to satisfy the preconditions of \tcode{Sqrt::compute} and can pass any complex number:
 
 \begin{codeblock}
 int main() {
@@ -593,9 +627,9 @@ int main() {
 }
 \end{codeblock}
 
-Since the overriding function is substitutable for the overridden function, supporting this use case is compatible with the substitution principle (\propref{SubstPr}), but not with Bertrand Meyer's Design by Contract paradigm (\propref{MeyerDbC}).
+Here, \tcode{ComplexSqrt::compute} correctly returns a value that is \emph{not} a nonnegative real number. This code should not cause a contract violation; the fact that \tcode{ComplexSqrt::compute} does not satisfy the postconditions of \tcode{Sqrt::compute} in this particular case is irrelevant to the correctness of the program.
 
-\prop{WidenPostIn}{Enable widening postconditions inside base contract}
+\prop{WidenPostIn}{Widening postconditions inside base contract}
 
 A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to widen postconditions in an overriding function in the general case. This property extends property \propref{WidenPostOut} to cases where the overridden function is not fully substitutable for the overriding function. 
 

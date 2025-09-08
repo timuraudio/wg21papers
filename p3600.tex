@@ -221,99 +221,40 @@ We only include properties for which we can objectively and unambiguously answer
 
 For example, \cite{P3573R0} mentions the concern that \tcode{pre} and \tcode{post} on virtual functions ``have not been tried at scale''. However, the paper does not specify a measurable criterion for what would constitute sufficient ``scale''. We are happy to include this property in a future revision of this paper if the authors can provide a measurable criterion (e.g., a particular number of lines of deployed code that they consider sufficient deployment experience). Similarly, \cite{P3506R0} listed as a concern that the design proposed in \cite{P3097R0} was ``too complex''. However, since the author did not indicate how the complexity of any possible design could be measured, or what degree of complexity would be acceptable, we exclude this concern from our analysis.
 
-Importantly, we are not suggesting that properties like teachability or complexity are not relevant for language design; quite the opposite. However, since they are inherently subjective, we do not consider them directly alongside other properties in our analysis. Instead, we consider more specific, objectively measurable properties that contribute to the teachability and complexity of a design. For example, property \propref{FullQualEq} is motivated by a desire to avoid complexity.
+Importantly, we are not suggesting that properties like teachability or complexity are not relevant for language design; quite the opposite. However, since they are inherently subjective, we do not consider them directly alongside other properties in our analysis. Instead, we consider more specific, objectively measurable properties that contribute to the teachability and complexity of a design.
 
 \subsection{List of properties}
 
-\subsubsection{Design constraints}
 
-The following properties describe potentially desirable design constraints on the behaviour of \tcode{pre} and \tcode{post} on virtual functions.
+\subsubsection{Standardisation requirements}
 
-%-------------------------------------------------------------------------------
+The following properties describe general requirements that any proposal for supporting \tcode{pre} and \tcode{post} on virtual functions should meet in order to be considered for inclusion in the C++ Standard.
 
-\prop{FullQualEq}{Equivalence of virtual and fully qualified direct calls}
-
-% TD: Josh, I included this property anyway because it's a nice easy way to start the list of properties: surely this is one that we can all agree on. Also, it's important to JL.
+\prop{Wording}{Fully specified in C++ wording}
 
 \emph{Description:}
 
-In a virtual function call, when the statically called function and the function chosen by dynamic dispatch are the same function, the effect of such a call should be equivalent to a fully qualified (i.e., non-virtual) call to that function. In particular, the same function contract assertions should be evaluated in both cases.
+The proposed design should be fully specified in C++ wording that has been reviewed by at least one Core expert, and should have no known, unresolved specification issues.
 
 \emph{Motivation:}
 
-This equivalence exists in C++ today: the observable behaviour will always be identical in both cases. It would be arguably surprising to users if adding \tcode{pre} and \tcode{post} to virtual functions would break this equivalence.
-% TD: TODO: Is there better or more principled motivation for this property? Asked JL
+ This is a standard requirement for language proposals before they can be forwarded to CWG for wording review and inclusion in the C++ working paper.  Without this requirement, we cannot plausibly claim that a proposed design has been fully specified and understood.
 
-\emph{Example:}
+\prop{ImplExp}{Implementation experience}
 
-Consider the following simple inheritance hierarchy:
+\emph{Description:}
 
-\begin{codeblock}
-struct Base {
-  virtual void f() /* ... */;
-};
+The proposed design should be implemented \emph{completely} in at least one major C++ compiler front-end (GCC, Clang, MSVC, or EDG). We do not require that the implementation has been upstreamed into the main branch of that compiler and shipped to users; an implementation on a development branch is sufficient. However, we do require that the implementation is freely available to users in some form, for example by making the source code of that development branch public or by making that compiler version available on Compiler Explorer.
 
-struct Derived : Base {
-  void f() override /* ... */;
-};
-\end{codeblock}
-Regardless of which (if any) function contract assertions are specified in \textit{/* ... */}, both of the following function calls should evaluate the same function contract assertions when executed:
+\emph{Motivation:}
 
-\begin{codeblock}
-int main() {
-  Derived d;
-  d.f();     // (1)
-  d.D::f();  // (2)
-}
-\end{codeblock}
+Only actual implementation experience is sufficient proof of implementability. As long as a design only exists as a ``paper exercise'', even with wording, it is still possible that we overlooked some significant issues with that design that would render it non-viable.
+
+\subsubsection{Design constraints}
+
+The following properties describe design constraints that may be placed on the behaviour of \tcode{pre} and \tcode{post} on virtual functions. Some of these constraints match existing practice in other programming languages; others are motivated by the desire to avoid complexity and non-locality; others yet others aim to facilitate the deployment of a design for \tcode{pre} and \tcode{post} on virtual functions to C++ code bases at scale.
 
 %-------------------------------------------------------------------------------
-
-\prop{VacuousTrue}{Vacuousness of \tcode{pre(true)} and \tcode{post(true)}}
-
-\emph{Description:} 
-
-On the declaration of a virtual function, \tcode{pre(true)} and \tcode{pre(false)} should always be vacuous, i.e., they should be equivalent to not specifying any precondition or postcondition assertion at all on that declaration. Whether or not \tcode{pre(true)} and \tcode{pre(false)} are present should not change which function contract assertions will be evaluated. In particular, adding \tcode{pre(true)} or \tcode{pre(false)} to a function declaration should not cause other, non-vacuous contract assertions to no longer be evaluated.
-
-\emph{Motivation:}
-
-This design constraint is consistent with the vacuousness of \tcode{pre(true)} and \tcode{post(true)} on non-virtual functions, as well as the vacuousness of \tcode{assert(true)}, \mbox{\tcode{contract_assert(true)}}, \mbox{\tcode{static_assert(true)}}, \tcode{requires(true)}, etc. in C++ today. Further, if we could not rely on this constraint being satisfied, this could lead to surprising behaviour in cases where the presence of a function contract assertion is conditional.
-
-\emph{Example:}
-
-Consider a function that takes a file path as a parameter. On Windows, there is historically a strict limit on the length of such paths; however, this limit does not exist on other platforms. We could make the contract predicate platform-dependent:
-
-\begin{codeblock}
-#ifdef _WIN32
-  #define PATH_OK(path) path.size() < MAX_PATH 
-#else
-  #define PATH_OK(path) true
-#endif
-
-Class Configurator {
-public:
-  virtual void openConfigFile(const std::string& path)
-    pre(PATH_OK(path)) {
-      // ...
-};
-\end{codeblock}
-
-Alternatively, we could conditionally macro out the entire precondition assertion:
-
-\begin{codeblock}
-Class Configurator {
-public:
-  virtual void openConfigFile(const std::string& path)
-#ifdef _WIN32
-    pre(path.size() < MAX_PATH)
-#endif
-  {
-    // ...
-};
-\end{codeblock}
-
-Both programming styles seem reasonable in cross-platform code. It would arguably be surprising to users if a design for \tcode{pre} and \tcode{post} on virtual functions would introduce cases where they lead to different contract assertions being evaluated.
-
 \prop{SubstPr}{Substitution principle}
 
 \emph{Description:}
@@ -406,9 +347,191 @@ Further, the established strategy for enforcing the DbC paradigm --- OR-ing prec
 
 Consider again the example from \propref{SubstPr} above. Function \tcode{Derived3::f} in that example satisfies property \propref{SubstPr}, i.e., it is fully substitutable for \tcode{Base::f}. However, it does not satisfy property \propref{MeyerDbC}, because it widens the overridden function's postconditions. Following DbC, the function \tcode{Derived3::f} as written should therefore either not compile, or its semantics should be such that returning a number from this function that is larger than the number passed in will cause a postcondition assertion violation.
 
+\prop{FailFast}{Fail immediately on contract violation}
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should continue to ensure, as C++26 Contracts do today, that the user can configure their program to fail immediately when any contract assertion fails. Consider a virtual function with a precondition assertion as follows:
+\begin{codeblock}
+struct Y : X {
+  virtual void usePtr(void* ptr) 
+    pre (ptr != nullptr);
+}
+\end{codeblock}
+Whenever the assertion \mbox{\tcode{ptr != nullptr}} is evaluated with a checked semantic and the check fails, the contract-violation handler should be called and/or the program should be terminated (depending on the chosen evaluation semantic). The program should not attempt to evaluate other function contract assertions specified on functions overriding (or overridden by) \tcode{Y::usePtr} past the failed check. In particular, precondition assertions from different functions should not be OR-ed before determining whether a contract violation occurred.
+
+The rationale for this property is as follows. Eiffel, which OR-s precondition assertions across the inheritance hierarchy, is a memory-safe language, while C++ is not. Unlike in Eiffel, in C++ continuing past any individual failed assertion check, regardless of where in an inheritance hierarchy it occurs, is potentially unsafe and may lead to undefined behaviour and security vulnerabilities. A design for supporting \tcode{pre} and \tcode{post} on virtual functions should not introduce new opportunities for such vulnerabilities.
+
+% TD: TODO: this paragraph might be better positioned in the section talking about designs
+%Note that this property seems at odds with \propref{SubstPr} and \propref{MeyerDbC}, because as far as we are aware, OR-ing preconditions is the only practically feasible design that allows an overriding function to widen the preconditions of the function it overrides, but prevents it from narrowing them.
+
+\prop{VacuousTrue}{Vacuousness of \tcode{pre(true)} and \tcode{post(true)}}
+
+\emph{Description:} 
+
+On the declaration of a virtual function, \tcode{pre(true)} and \tcode{pre(false)} should always be vacuous, i.e., they should be equivalent to not specifying any precondition or postcondition assertion at all on that declaration. Whether or not \tcode{pre(true)} and \tcode{pre(false)} are present should not change which function contract assertions will be evaluated. In particular, adding \tcode{pre(true)} or \tcode{pre(false)} to a function declaration should not cause other, non-vacuous contract assertions to no longer be evaluated.
+
+\emph{Motivation:}
+
+This design constraint is consistent with the vacuousness of \tcode{pre(true)} and \tcode{post(true)} on non-virtual functions, as well as the vacuousness of \tcode{assert(true)}, \mbox{\tcode{contract_assert(true)}}, \mbox{\tcode{static_assert(true)}}, \tcode{requires(true)}, etc. in C++ today. Further, if we could not rely on this constraint being satisfied, this could lead to surprising behaviour in cases where the presence of a function contract assertion is conditional.
+
+\emph{Example:}
+
+Consider a function that takes a file path as a parameter. On Windows, there is historically a strict limit on the length of such paths; however, this limit does not exist on other platforms. We could make the contract predicate platform-dependent:
+
+\begin{codeblock}
+#ifdef _WIN32
+  #define PATH_OK(path) path.size() < MAX_PATH 
+#else
+  #define PATH_OK(path) true
+#endif
+
+Class Configurator {
+public:
+  virtual void openConfigFile(const std::string& path)
+    pre(PATH_OK(path)) {
+      // ...
+};
+\end{codeblock}
+
+Alternatively, we could conditionally macro out the entire precondition assertion:
+
+\begin{codeblock}
+Class Configurator {
+public:
+  virtual void openConfigFile(const std::string& path)
+#ifdef _WIN32
+    pre(path.size() < MAX_PATH)
+#endif
+  {
+    // ...
+};
+\end{codeblock}
+
+Both programming styles seem reasonable in cross-platform code. It would arguably be surprising to users if a design for \tcode{pre} and \tcode{post} on virtual functions would introduce cases where they lead to different contract assertions being evaluated.
+
+
+
+\prop{NoRemoteAss}{Do not evaluate remote assertions}
+
+\emph{Description:}
+
+The set of function contract assertions evaluated during a virtual function call should be limited to the function contract assertions declared on the functions directly participating in that call: the statically called function and the function actually executed (i.e., chosen by dynamic dispatch). 
+
+\emph{Motivation:}
+
+When debugging a C++ program, being able to quickly identify the source of a problem is key to productivity. When a virtual function call causes a contract assertion to fail, it is important to be able to quickly identify the offending assertion.
+
+If a virtual function call evaluates function contract assertions declared on functions other than those directly participating in the offending call (e.g., on overridden functions further down the inheritance hierarchy), those assertions may be very difficult to locate. This is particularly true for large codebases where inheritance hierarchies can be very complex, and base and derived classes can be spread across different components of the codebase (including third-party code).
+
+\emph{Countermotivation:}
+
+This property conflicts with inheriting function contract assertions, whether this happens by default (\propref{InhDefault}) or explicitly (\propref{InhBase}, \propref{InhDerived}). Further, the \emph{members} of a base class are already inherited automatically in every derived class; this does not seem to cause problems in practice. Finally, concerns regarding efficiently navigating a codebase could be addressed via tooling.
+
+\emph{Example:}
+
+Consider a contract-violation handler that triggers a breakpoint:
+
+\begin{codeblock}
+void handle_contract_violation(const contract_violation& cv) {
+    std::breakpoint(); // or just a manual breakpoint set in the IDE
+}
+\end{codeblock}
+
+Now, let us assume we trigger this breakpoint while debugging a C++ program. In order to understand which contract assertion failed, we use our debugger to walk up the stack.  One stackframe up, we see a function with a precondition assertion:
+
+\begin{codeblock}
+int GzipCompressionBuffer::writeChars(char* chars, size_t count)
+pre (chars != nullptr) {   // <---
+  // some code
+}
+\end{codeblock}
+
+Another stackframe up, we see the callsite:
+
+\begin{codeblock}
+void readAppState(InputBuffer& ib) {
+  // some code
+  ib.writeChars(data, n);   // <---
+}
+\end{codeblock}
+
+Now, we inspect the function contract assertions of \tcode{GzipCompressionBuffer::}\allowbreak\tcode{writeChars} and those of \tcode{InputBuffer::}\allowbreak\tcode{writeChars} to determine what went wrong. It would be unfortunate if we would also have to consult the function contract assertions of the corresponding functions in every single other class that forms part of that inheritance hiearachy, for example \tcode{Buffer::}\allowbreak\tcode{writeChars} in some base class further up the hierarchy, or \tcode{CompressionBuffer::}\allowbreak\tcode{writeChars} in some intermediate class.
+
+
+\prop{NoRemoteBreak}{Avoid remote code breakage}
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the author of a base class to add function contract assertions to a virtual function without breaking correct uses of derived classes in remote client code.
+
+Consider again the GUI framework from property \propref{BaseIndep}. As the owners of the base class \tcode{Widget}, we might want to introduce precondition assertions for checking the preconditions of \tcode{Widget::}\allowbreak\tcode{addChildWidget}, and roll out these assertions to clients that have a recent enough compiler to take advantage of them: 
+
+\begin{codeblock}
+class Widget {
+public:
+  virtual void addChildWidget(Widget* child, int zOrder) override
+    pre (child && child->isValid())
+    pre (zOrder >= -32768 && zOrder <= 32767);
+}
+\end{codeblock}
+
+At the same time, one of our clients may have a widget type in their code base that can handle a wider range of values for \tcode{zOrder} just fine, and they may be using this type in production:
+
+\begin{codeblock}
+class SuperWidget : public Widget {
+  // this version can handle any values for \tcode{zOrder}!
+  void addChildWidget(Widget* child, int zOrder) override {
+    // ....
+  } 
+}
+
+class MyWindow : public SuperWidget;
+class MyButton : public SuperWidget;
+// ...
+
+void drawMyApp() {
+  myWindow.addChildWidget(myButton, 99999);
+}
+\end{codeblock}
+As long as the client uses the \tcode{SuperWidget} interface instead of the base \tcode{Widget} interface for their widgets above, their program is correct --- there is no contract violation. In order to be deployable, adding the above function contract assertions to \tcode{Widget::}\allowbreak\tcode{addChildWidget} should not break the client's correct program by introducing a precondition assertion violation to it.
+
+
+\prop{BaseIndep}{\tcode{pre} and \tcode{post} should be usable independent of base}
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow a client of a virtual function to override that function in a derived class, add function contract assertions to the overriding function, and have those assertions evaluated, even if the base class is written against an older C++ Standard and does not use contract assertions at all.
+
+Consider a GUI framework with a \tcode{Widget} base class as follows:
+
+\begin{codeblock}
+class Widget {
+public:
+  // Preconditions:   
+  // \phantom{xxx}\tcode{child} points to a \tcode{Widget};
+  // \phantom{xxx}\tcode{child->isValid()} is \tcode{true}; 
+  // \phantom{xxx}\tcode{zOrder} is between -32768 and +32767.
+  virtual void addChildWidget (Widget* child, int zOrder);
+  
+// ...
+};
+\end{codeblock}
+This GUI framework is third-party code that we do not control and cannot modify. The function \tcode{Widget::}\allowbreak\tcode{addChildWidget} has preconditions, but those are not checked with function contract assertions as the code predates the availability of the feature.
+
+In our own codebase, we have a framework of custom widget types, all inheriting from the \tcode{Widget} class above. For our own custom widget types at least, we would like to introduce precondition assertions for checking the preconditions, in order to identify incorrect use and take advantage of the many benefits of precondition assertions over macro-based assertions:
+\begin{codeblock}
+class CustomWidget : public Widget {
+public:
+  void addChildWidget(Widget* child, int zOrder) override
+    pre (child && child->isValid())
+    pre (zOrder >= -32768 && zOrder <= 32767) 
+  {
+    // custom child/parent widget tracking logic here...
+    Widget::addChildWidget(child, zOrder);
+  }
+}
+\end{codeblock}
+In order to be deployable in such codebases, a design for supporting \tcode{pre} and \tcode{post} on virtual functions needs to provide a way to have the function contract assertions of \tcode{CustomWidget::}\allowbreak\tcode{addChildWidget} evaluated whenever that function is called, without having to modify the \tcode{Widget}  base class.
+
+
 \subsubsection{Single inheritance use cases}
 
-The following properties describe the desirable default behaviour of \tcode{pre} and \tcode{post} for concrete use cases where a virtual function overrides at most \emph{one} other virtual function.
+The following properties describe the ability of a design  for \tcode{pre} and \tcode{post} on virtual functions to support concrete use cases where a virtual function overrides at most \emph{one} other virtual function.
 
 \prop{WidenPre}{Widening preconditions}
 
@@ -754,9 +877,10 @@ int rollDice() {
 In the above case, if the implementation of \tcode{RandomNumberPicker::pick} fails to satisfy the postcondition assertion of \tcode{NumberPicker::pick}, we should get a contract violation.
 
 Note that this property is incompatible with property \propref{NoRemoteBreak}. If function contract assertions are inherited by default, then pre-existing overrides with no function contract assertions may break when function contract assertions are introduced to the overridden function. Consider for example an override of \tcode{QIODevice::}\allowbreak\tcode{readData}  that can handle null pointers just fine, or an override of \tcode{NumberPicker::}\allowbreak\tcode{pick} that returns a dummy value for some inputs, and correct uses of such functions (see also \propref{WidenPre}, \propref{WidenPostOut}, and \propref{WidenPostIn}). 
+
 \subsubsection{Multiple inheritance use cases}
 
-The following properties describe the desirable default behaviour of \tcode{pre} and \tcode{post} for concrete use cases where a virtual function overrides  more than one other virtual function.
+The following properties describe the ability of a design  for \tcode{pre} and \tcode{post} on virtual functions to support concrete use cases where a virtual function overrides more than one other virtual function.
 
 \prop{WidenPreMult}{Override multiple functions with incompatible preconditions}
 
@@ -935,180 +1059,14 @@ int main {
 };
 \end{codeblock}
 
-Note that this behaviour is incompatible with property \propref{FullQualEq}.
-
  and therefore is not subject to the same
 preconditions as any of the overriding functions when called via a fully qualified call because such a
 call can be made with any input value. The contract is therefore an interface contract, but not an
 implementation contract.
 
-% TD: TODO: Continue here
+\prop{NonVirtOnly}{Check \tcode{pre} and \tcode{post} only in a non-virtual call}
 
-\subsubsection{Deployment requirements}
-
-The following properties are relevant for the ability to deploy a design for \tcode{pre} and \tcode{post} on virtual functions to C++ code bases at scale.
-
-\prop{FailFast}{Fail immediately on contract violation}
-
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should continue to ensure, as C++26 Contracts do today, that the user can configure their program to fail immediately when any contract assertion fails. Consider a virtual function with a precondition assertion as follows:
-\begin{codeblock}
-struct Y : X {
-  virtual void usePtr(void* ptr) 
-    pre (ptr != nullptr);
-}
-\end{codeblock}
-Whenever the assertion \mbox{\tcode{ptr != nullptr}} is evaluated with a checked semantic and the check fails, the contract-violation handler should be called and/or the program should be terminated (depending on the chosen evaluation semantic). The program should not attempt to evaluate other function contract assertions specified on functions overriding (or overridden by) \tcode{Y::usePtr} past the failed check. In particular, precondition assertions from different functions should not be OR-ed before determining whether a contract violation occurred.
-
-The rationale for this property is as follows. Eiffel, which OR-s precondition assertions across the inheritance hierarchy, is a memory-safe language, while C++ is not. Unlike in Eiffel, in C++ continuing past any individual failed assertion check, regardless of where in an inheritance hierarchy it occurs, is potentially unsafe and may lead to undefined behaviour and security vulnerabilities. A design for supporting \tcode{pre} and \tcode{post} on virtual functions should not introduce new opportunities for such vulnerabilities.
-
-% TD: TODO: this paragraph might be better positioned in the section talking about designs
-%Note that this property seems at odds with \propref{SubstPr} and \propref{MeyerDbC}, because as far as we are aware, OR-ing preconditions is the only practically feasible design that allows an overriding function to widen the preconditions of the function it overrides, but prevents it from narrowing them.
-
-\prop{BaseIndep}{\tcode{pre} and \tcode{post} should be usable independent of base}
-
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow a client of a virtual function to override that function in a derived class, add function contract assertions to the overriding function, and have those assertions evaluated, even if the base class is written against an older C++ Standard and does not use contract assertions at all.
-
-Consider a GUI framework with a \tcode{Widget} base class as follows:
-
-\begin{codeblock}
-class Widget {
-public:
-  // Preconditions:   
-  // \phantom{xxx}\tcode{child} points to a \tcode{Widget};
-  // \phantom{xxx}\tcode{child->isValid()} is \tcode{true}; 
-  // \phantom{xxx}\tcode{zOrder} is between -32768 and +32767.
-  virtual void addChildWidget (Widget* child, int zOrder);
-  
-// ...
-};
-\end{codeblock}
-This GUI framework is third-party code that we do not control and cannot modify. The function \tcode{Widget::}\allowbreak\tcode{addChildWidget} has preconditions, but those are not checked with function contract assertions as the code predates the availability of the feature.
-
-In our own codebase, we have a framework of custom widget types, all inheriting from the \tcode{Widget} class above. For our own custom widget types at least, we would like to introduce precondition assertions for checking the preconditions, in order to identify incorrect use and take advantage of the many benefits of precondition assertions over macro-based assertions:
-\begin{codeblock}
-class CustomWidget : public Widget {
-public:
-  void addChildWidget(Widget* child, int zOrder) override
-    pre (child && child->isValid())
-    pre (zOrder >= -32768 && zOrder <= 32767) 
-  {
-    // custom child/parent widget tracking logic here...
-    Widget::addChildWidget(child, zOrder);
-  }
-}
-\end{codeblock}
-In order to be deployable in such codebases, a design for supporting \tcode{pre} and \tcode{post} on virtual functions needs to provide a way to have the function contract assertions of \tcode{CustomWidget::}\allowbreak\tcode{addChildWidget} evaluated whenever that function is called, without having to modify the \tcode{Widget}  base class.
-
-\prop{NoRemoteBreak}{Avoid remote code breakage}
-
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the author of a base class to add function contract assertions to a virtual function without breaking correct uses of derived classes in remote client code.
-
-Consider again the GUI framework from property \propref{BaseIndep}. As the owners of the base class \tcode{Widget}, we might want to introduce precondition assertions for checking the preconditions of \tcode{Widget::}\allowbreak\tcode{addChildWidget}, and roll out these assertions to clients that have a recent enough compiler to take advantage of them: 
-
-\begin{codeblock}
-class Widget {
-public:
-  virtual void addChildWidget(Widget* child, int zOrder) override
-    pre (child && child->isValid())
-    pre (zOrder >= -32768 && zOrder <= 32767);
-}
-\end{codeblock}
-
-At the same time, one of our clients may have a widget type in their code base that can handle a wider range of values for \tcode{zOrder} just fine, and they may be using this type in production:
-
-\begin{codeblock}
-class SuperWidget : public Widget {
-  // this version can handle any values for \tcode{zOrder}!
-  void addChildWidget(Widget* child, int zOrder) override {
-    // ....
-  } 
-}
-
-class MyWindow : public SuperWidget;
-class MyButton : public SuperWidget;
-// ...
-
-void drawMyApp() {
-  myWindow.addChildWidget(myButton, 99999);
-}
-\end{codeblock}
-As long as the client uses the \tcode{SuperWidget} interface instead of the base \tcode{Widget} interface for their widgets above, their program is correct --- there is no contract violation. In order to be deployable, adding the above function contract assertions to \tcode{Widget::}\allowbreak\tcode{addChildWidget} should not break the client's correct program by introducing a precondition assertion violation to it.
-
-\prop{NoRemoteAss}{Do not evaluate remote assertions}
-
-\emph{Description:}
-
-The set of function contract assertions evaluated during a virtual function call should be limited to the function contract assertions declared on the functions directly participating in that call: the statically called function and the function actually executed (i.e., chosen by dynamic dispatch). 
-
-\emph{Motivation:}
-
-When debugging a C++ program, being able to quickly identify the source of a problem is key to productivity. When a virtual function call causes a contract assertion to fail, it is important to be able to quickly identify the offending assertion.
-
-If a virtual function call evaluates function contract assertions declared on functions other than those directly participating in the offending call (e.g., on overridden functions further down the inheritance hierarchy), those assertions may be very difficult to locate. This is particularly true for large codebases where inheritance hierarchies can be very complex, and base and derived classes can be spread across different components of the codebase (including third-party code).
-
-\emph{Countermotivation:}
-
-This property conflicts with inheriting function contract assertions, whether this happens by default (\propref{InhDefault}) or explicitly (\propref{InhBase}, \propref{InhDerived}). Further, the \emph{members} of a base class are already inherited automatically in every derived class; this does not seem to cause problems in practice. Finally, concerns regarding efficiently navigating a codebase can usually be addressed via tooling.
-
-\emph{Example:}
-
-Consider a contract-violation handler that triggers a breakpoint:
-
-\begin{codeblock}
-void handle_contract_violation(const contract_violation& cv) {
-    std::breakpoint(); // or just a manual breakpoint set in the IDE
-}
-\end{codeblock}
-
-Now, let us assume we trigger this breakpoint while debugging a C++ program. In order to understand which contract assertion failed, we use our debugger to walk up the stack.  One stackframe up, we see a function with a precondition assertion:
-
-\begin{codeblock}
-int GzipCompressionBuffer::writeChars(char* chars, size_t count)
-pre (chars != nullptr) {   // <---
-  // some code
-}
-\end{codeblock}
-
-Another stackframe up, we see the callsite:
-
-\begin{codeblock}
-void readAppState(InputBuffer& ib) {
-  // some code
-  ib.writeChars(data, n);   // <---
-}
-\end{codeblock}
-
-Now, we inspect the function contract assertions of \tcode{GzipCompressionBuffer::}\allowbreak\tcode{writeChars} and those of \tcode{InputBuffer::}\allowbreak\tcode{writeChars} to determine what went wrong. It would be unfortunate if we would also have to consult the function contract assertions of the corresponding functions in every single other class that forms part of that inheritance hiearachy, for example \tcode{Buffer::}\allowbreak\tcode{writeChars} in some base class further up the hierarchy, or \tcode{CompressionBuffer::}\allowbreak\tcode{writeChars} in some intermediate class.
-
-\subsubsection{Standardisation requirements}
-
-The following properties describe general requirements that any proposal for supporting \tcode{pre} and \tcode{post} on virtual functions should meet in order to be considered for inclusion in the C++ Standard.
-
-\prop{Wording}{Fully specified in C++ wording}
-
-\emph{Description:}
-
-The proposed design should be fully specified in C++ wording that has been reviewed by at least one Core expert, and should have no known, unresolved specification issues.
-
-\emph{Motivation:}
-
- This is a standard requirement for language proposals before they can be forwarded to CWG for wording review and inclusion in the C++ working paper.  Without this requirement, we cannot plausibly claim that a proposed design has been fully specified and understood.
-
-\prop{ImplExp}{Implementation experience}
-
-\emph{Description:}
-
-The proposed design should be implemented \emph{completely} in at least one major C++ compiler front-end such as GCC, Clang, MSVC, or EDG. We do not require that the implementation has been upstreamed into the main branch of that compiler and shipped to users; an implementation on a dev branch is sufficient. However, we do require that the implementation is freely available to users in some form, for example by publishing the source code of the implementation or by making the branch in question available on Compiler Explorer.
-
-\emph{Motivation:}
-
-Only actual implementation experience is acceptable proof of implementability. As long as a design only exists as a ``paper exercise'', even with wording, it is still possible that we overlooked some significant issues with that design.
-
-% TD: TODO: we do not necessarily need this here, we can have it instead in the place where we discuss which designs fulfil which requirement
-%If only an incomplete implementation of the design is available, or if the implementation is feature-complete but has significant unresolved issues, we consider the property having been met only partially. Similarly, if an implementation of an analogous design is available for a different programming language, we consider  the property having been met only partially, as programming languages such as Eiffel, D, and Ada are sufficiently different from C++ that proof of implementability in one language does not necessarily constitute proof of implementability in another.
-
-
-% TD: specification existence?
+TODO 
 
 \section{Design space}
 \label{designs}

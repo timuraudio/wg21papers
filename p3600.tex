@@ -349,19 +349,33 @@ Consider again the example from \propref{SubstPr} above. Function \tcode{Derived
 
 \prop{FailFast}{Fail immediately on contract violation}
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should continue to ensure, as C++26 Contracts do today, that the user can configure their program to fail immediately when any contract assertion fails. Consider a virtual function with a precondition assertion as follows:
+\emph{Description}:
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should continue to ensure, as C++26 Contracts do today, that the user can configure their program to fail immediately when any individual contract assertion fails. When a function contract assertion on a virtual function is evaluated with a checked semantic and that check fails, the program should immediately proceed to handling the contract violation and/or terminate, and not attempt to first evaluate other function contract assertions. In particular, precondition assertions from different functions should not be OR-ed across the inheritance hierarchy before determining whether a contract violation occurred.
+
+\emph{Motivation:}
+
+Eiffel, which OR-s precondition assertions across the inheritance hierarchy, is a memory-safe language, while C++ is not. Unlike in Eiffel, in C++ continuing past any individual failed assertion check, regardless of where in an inheritance hierarchy it occurs, is potentially unsafe and may lead to undefined behaviour and security vulnerabilities. A design for supporting \tcode{pre} and \tcode{post} on virtual functions should not introduce new opportunities for such vulnerabilities.
+
+\emph{Example:}
+
+Consider a virtual function with a precondition assertion as follows:
+
 \begin{codeblock}
 struct Y : X {
   virtual void usePtr(void* ptr) 
     pre (ptr != nullptr);
 }
 \end{codeblock}
-Whenever the assertion \mbox{\tcode{ptr != nullptr}} is evaluated with a checked semantic and the check fails, the contract-violation handler should be called and/or the program should be terminated (depending on the chosen evaluation semantic). The program should not attempt to evaluate other function contract assertions specified on functions overriding (or overridden by) \tcode{Y::usePtr} past the failed check. In particular, precondition assertions from different functions should not be OR-ed before determining whether a contract violation occurred.
 
-The rationale for this property is as follows. Eiffel, which OR-s precondition assertions across the inheritance hierarchy, is a memory-safe language, while C++ is not. Unlike in Eiffel, in C++ continuing past any individual failed assertion check, regardless of where in an inheritance hierarchy it occurs, is potentially unsafe and may lead to undefined behaviour and security vulnerabilities. A design for supporting \tcode{pre} and \tcode{post} on virtual functions should not introduce new opportunities for such vulnerabilities.
+Whenever the assertion \mbox{\tcode{ptr != nullptr}} is evaluated with the \emph{enforce} or \emph{quick-enforce} semantic, the program should be terminated (with or without calling the contract-violation handler first, depending on the chosen semantic). The program should not attempt to evaluate other function contract assertions specified on functions overriding (or overridden by) \tcode{Y::usePtr} past the failed check as this may be unsafe:
 
-% TD: TODO: this paragraph might be better positioned in the section talking about designs
-%Note that this property seems at odds with \propref{SubstPr} and \propref{MeyerDbC}, because as far as we are aware, OR-ing preconditions is the only practically feasible design that allows an overriding function to widen the preconditions of the function it overrides, but prevents it from narrowing them.
+\begin{codeblock}
+struct Z : Y {
+  virtual void usePtr(void* ptr) 
+    pre (ptr->useIt());
+}
+\end{codeblock}
 
 \prop{VacuousTrue}{Vacuousness of \tcode{pre(true)} and \tcode{post(true)}}
 
@@ -408,6 +422,100 @@ public:
 
 Both programming styles seem reasonable in cross-platform code. It would arguably be surprising to users if a design for \tcode{pre} and \tcode{post} on virtual functions would introduce cases where they lead to different contract assertions being evaluated.
 
+\prop{BaseIndep}{\tcode{pre} and \tcode{post} should be usable independent of base}
+
+\emph{Description:}
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow a client of a virtual function to override that function in a derived class, add function contract assertions to the overriding function, and have those assertions evaluated, even if the base class is written against an older C++ Standard and does not use contract assertions at all.
+
+\emph{Motivation:}
+
+A base class and derived class may be located in different, independent components owned by different people or companies. A client of the base class may be deriving from it and overriding some virtual functions, yet unable to modify the base class.
+
+In order to be deployable in such scenarios, a design for supporting \tcode{pre} and \tcode{post} on virtual functions should ensure that the client can add function contract assertions to overriding functions, and have those checked, even if the base class does not specify any function contracts at all (for example, because the component that owns the base class predates the addition of contract assertions to C++).
+
+% TD: TODO: we may want to beef up this motivation
+
+\emph{Example:}
+
+Consider a GUI framework with a \tcode{Widget} base class as follows:
+
+\begin{codeblock}
+class Widget {
+public:
+  // Preconditions:   
+  // \phantom{xxx}\tcode{child} points to a \tcode{Widget};
+  // \phantom{xxx}\tcode{child->isValid()} is \tcode{true}; 
+  // \phantom{xxx}\tcode{zOrder} is between -32768 and +32767.
+  virtual void addChildWidget (Widget* child, int zOrder);
+  
+// ...
+};
+\end{codeblock}
+This GUI framework is third-party code that we do not control and cannot modify. The function \tcode{Widget::}\allowbreak\tcode{addChildWidget} has preconditions, but those are not checked with function contract assertions as the code predates the availability of the feature.
+
+In our own codebase, we have a framework of custom widget types, all inheriting from the \tcode{Widget} class above. For our own custom widget types at least, we would like to introduce precondition assertions for checking the preconditions:
+\begin{codeblock}
+class CustomWidget : public Widget {
+public:
+  void addChildWidget(Widget* child, int zOrder) override
+    pre (child && child->isValid())
+    pre (zOrder >= -32768 && zOrder <= 32767) 
+  {
+    // custom child/parent widget tracking logic here...
+    Widget::addChildWidget(child, zOrder);
+  }
+}
+\end{codeblock}
+
+The precondition assertions of \tcode{CustomWidget::}\allowbreak\tcode{addChildWidget} should be evaluated whenever that function is called, without having to modify the \tcode{Widget} base class and despite the absence of precondition assertions in that base class.
+
+\prop{NoRemoteBreak}{Avoid remote code breakage}
+
+\emph{Description:}
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the author of a base class to add function contract assertions to a virtual function without breaking correct uses of derived classes in remote client code.
+
+\emph{Motivation:}
+
+A base class and derived class may be located in different, independent components owned by different people or companies. A base class does not in general know about or control clients deriving from it. A derived class in a different component may be overriding a function in the base class and have wider preconditions than the base class (see also \propref{WidenPre}), for example accept a wider range of input values than the overridden function does. Introducing function contract assertions to the overridden function that check the preconditions of \emph{that} function should not break correct uses of overriding functions with wider preconditions.
+
+% TD: TODO: we may want to beef up this motivation
+
+% TD: TODO: we may want to have a terminology section at the front where we clarify the difference between "preconditions" and "precondition assertions"
+
+\emph{Example:}
+
+Consider again the GUI framework from property \propref{BaseIndep}. As the owners of the base class \tcode{Widget}, we might want to introduce precondition assertions for checking the preconditions of \tcode{Widget::}\allowbreak\tcode{addChildWidget}, and roll out these assertions to clients that have a recent enough compiler to take advantage of them: 
+
+\begin{codeblock}
+class Widget {
+public:
+  virtual void addChildWidget(Widget* child, int zOrder) override
+    pre (child && child->isValid())
+    pre (zOrder >= -32768 && zOrder <= 32767);
+}
+\end{codeblock}
+
+At the same time, one of our clients may have a widget type in their code base that can handle a wider range of values for \tcode{zOrder} just fine, and they may be using this type in production:
+
+\begin{codeblock}
+class SuperWidget : public Widget {
+  // this version can handle any values for \tcode{zOrder}!
+  void addChildWidget(Widget* child, int zOrder) override {
+    // ....
+  } 
+}
+
+class MyWindow : public SuperWidget;
+class MyButton : public SuperWidget;
+// ...
+
+void drawMyApp() {
+  myWindow.addChildWidget(myButton, 99999);
+}
+\end{codeblock}
+As long as the client uses the \tcode{SuperWidget} interface instead of the base \tcode{Widget} interface for their widgets above, their program is correct --- there is no contract violation. Adding the above function contract assertions to \tcode{Widget::}\allowbreak\tcode{addChildWidget} should not break the client's correct program by introducing a precondition assertion violation to it.
 
 
 \prop{NoRemoteAss}{Do not evaluate remote assertions}
@@ -455,78 +563,6 @@ void readAppState(InputBuffer& ib) {
 \end{codeblock}
 
 Now, we inspect the function contract assertions of \tcode{GzipCompressionBuffer::}\allowbreak\tcode{writeChars} and those of \tcode{InputBuffer::}\allowbreak\tcode{writeChars} to determine what went wrong. It would be unfortunate if we would also have to consult the function contract assertions of the corresponding functions in every single other class that forms part of that inheritance hiearachy, for example \tcode{Buffer::}\allowbreak\tcode{writeChars} in some base class further up the hierarchy, or \tcode{CompressionBuffer::}\allowbreak\tcode{writeChars} in some intermediate class.
-
-
-\prop{NoRemoteBreak}{Avoid remote code breakage}
-
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the author of a base class to add function contract assertions to a virtual function without breaking correct uses of derived classes in remote client code.
-
-Consider again the GUI framework from property \propref{BaseIndep}. As the owners of the base class \tcode{Widget}, we might want to introduce precondition assertions for checking the preconditions of \tcode{Widget::}\allowbreak\tcode{addChildWidget}, and roll out these assertions to clients that have a recent enough compiler to take advantage of them: 
-
-\begin{codeblock}
-class Widget {
-public:
-  virtual void addChildWidget(Widget* child, int zOrder) override
-    pre (child && child->isValid())
-    pre (zOrder >= -32768 && zOrder <= 32767);
-}
-\end{codeblock}
-
-At the same time, one of our clients may have a widget type in their code base that can handle a wider range of values for \tcode{zOrder} just fine, and they may be using this type in production:
-
-\begin{codeblock}
-class SuperWidget : public Widget {
-  // this version can handle any values for \tcode{zOrder}!
-  void addChildWidget(Widget* child, int zOrder) override {
-    // ....
-  } 
-}
-
-class MyWindow : public SuperWidget;
-class MyButton : public SuperWidget;
-// ...
-
-void drawMyApp() {
-  myWindow.addChildWidget(myButton, 99999);
-}
-\end{codeblock}
-As long as the client uses the \tcode{SuperWidget} interface instead of the base \tcode{Widget} interface for their widgets above, their program is correct --- there is no contract violation. In order to be deployable, adding the above function contract assertions to \tcode{Widget::}\allowbreak\tcode{addChildWidget} should not break the client's correct program by introducing a precondition assertion violation to it.
-
-
-\prop{BaseIndep}{\tcode{pre} and \tcode{post} should be usable independent of base}
-
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow a client of a virtual function to override that function in a derived class, add function contract assertions to the overriding function, and have those assertions evaluated, even if the base class is written against an older C++ Standard and does not use contract assertions at all.
-
-Consider a GUI framework with a \tcode{Widget} base class as follows:
-
-\begin{codeblock}
-class Widget {
-public:
-  // Preconditions:   
-  // \phantom{xxx}\tcode{child} points to a \tcode{Widget};
-  // \phantom{xxx}\tcode{child->isValid()} is \tcode{true}; 
-  // \phantom{xxx}\tcode{zOrder} is between -32768 and +32767.
-  virtual void addChildWidget (Widget* child, int zOrder);
-  
-// ...
-};
-\end{codeblock}
-This GUI framework is third-party code that we do not control and cannot modify. The function \tcode{Widget::}\allowbreak\tcode{addChildWidget} has preconditions, but those are not checked with function contract assertions as the code predates the availability of the feature.
-
-In our own codebase, we have a framework of custom widget types, all inheriting from the \tcode{Widget} class above. For our own custom widget types at least, we would like to introduce precondition assertions for checking the preconditions, in order to identify incorrect use and take advantage of the many benefits of precondition assertions over macro-based assertions:
-\begin{codeblock}
-class CustomWidget : public Widget {
-public:
-  void addChildWidget(Widget* child, int zOrder) override
-    pre (child && child->isValid())
-    pre (zOrder >= -32768 && zOrder <= 32767) 
-  {
-    // custom child/parent widget tracking logic here...
-    Widget::addChildWidget(child, zOrder);
-  }
-}
-\end{codeblock}
-In order to be deployable in such codebases, a design for supporting \tcode{pre} and \tcode{post} on virtual functions needs to provide a way to have the function contract assertions of \tcode{CustomWidget::}\allowbreak\tcode{addChildWidget} evaluated whenever that function is called, without having to modify the \tcode{Widget}  base class.
 
 
 \subsubsection{Single inheritance use cases}
@@ -698,7 +734,7 @@ To support this use case and diagnose incorrect use, the precondition assertion 
 
 \emph{Description:}
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to widen postconditions in an overriding function in cases where the overriding function is called outside of the overridden function's preconditions.
+In addition to allowing widening preconditions in overriding functions (see \propref{WidenPre}), a design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to widen postconditions in an overriding function in cases where the overriding function is called outside of the overridden function's preconditions (but within its own preconditions).
 
 \emph{Motivation:}
 
@@ -728,7 +764,9 @@ struct ComplexSqrt : public Sqrt {
 };
 \end{codeblock}
 
-When used as a \tcode{Sqrt}, which requires satisfying the preconditions of the overridden function \tcode{Sqrt::compute}, \tcode{ComplexSqrt::}\allowbreak\tcode{compute} gives clients the same guarantee that clients  expect from any implementation of \tcode{Sqrt}: if the user passes a nonnegative real number, they will get back a nonnegative real number. Therefore, \tcode{Sqrt} is substitutable by \tcode{ComplexSqrt}. Consider, for example, the following function that uses an instance of \tcode{Sqrt} to compute the fourth root of a given Number:
+This implementation may or ma use the more optimised real-numbers only \tcode{Sqrt}
+
+When used as a \tcode{Sqrt}, which requires satisfying the preconditions of the overridden function \tcode{Sqrt::compute}, \tcode{ComplexSqrt::}\allowbreak\tcode{compute} gives clients the same guarantee that clients  expect from any implementation of \tcode{Sqrt}: if the user passes a nonnegative real number, they will get back a nonnegative real number. It may even internally use the base class implementation \tcode{Sqrt::compute} for this case. \tcode{Sqrt} is therefore fully substitutable by \tcode{ComplexSqrt}. Consider, for example, the following function that uses an instance of \tcode{Sqrt} to compute the fourth root of a given \tcode{Number}:
 
 \begin{codeblock}
 Number quadroot(Number value, const Sqrt& sqrt) {
@@ -742,7 +780,7 @@ Number quadroot(Number value, const Sqrt& sqrt) {
 
 Client code such as this last line of \tcode{quadroot}, which invokes a virtual function through a base class interface, invariably depends on the postconditions of that base class interface. Thus, the postconditions of that base class should be checked when calling an object of derived class through a base class interface.
 
-However, the implementation \tcode{ComplexSqrt} does not --- and cannot --- guarantee that it will return a nonnegative real number in all cases. Importantly, such a guarantee is not necessary when the preconditions of the base class are not met. When the function \tcode{ComplexSqrt::compute} is used directly, the calling code is not required to satisfy the preconditions of \tcode{Sqrt::compute} and can pass any complex number:
+However, the implementation \tcode{ComplexSqrt} does not --- and cannot --- guarantee that it will return a nonnegative real number in \emph{all} cases. Importantly, such a guarantee is not necessary or expected when the preconditions of the base class are not met. When the function \tcode{ComplexSqrt::compute} is used directly, the calling code is not required to satisfy the preconditions of \tcode{Sqrt::compute} and can pass any complex number:
 
 \begin{codeblock}
 int main() {
@@ -754,7 +792,17 @@ Here, \tcode{ComplexSqrt::compute} correctly returns a value that is \emph{not} 
 
 \prop{WidenPostIn}{Widening postconditions inside base contract}
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to widen postconditions in an overriding function in the general case. This property extends property \propref{WidenPostOut} to cases where the overridden function is not fully substitutable for the overriding function. 
+\emph{Description}:
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should allow the user to widen postconditions in an overriding function. Whenever that overriding function is the statically called function, its wider postcondition assertions should be evaluated instead of the overridden function's postcondition assertions. However, if the overridden function is the statically called function, its narrower postcondition assertions should be evaluated, even if the overriding function is selected by dynamic dispatch.
+
+\emph{Motivation}:
+
+Widening postconditions even if the preconditions of the overriding function are met becomes necessary when the overriding function is not substitutable for the overridden function for all inputs, but \emph{is} substitutable for the overridden function for the particular inputs used. Often, additional information is available about how the polymorphic object will be put to use in particular circumstances, and such limited-use overrides can therefore be used correctly. Situations where such designs are used in practice include testing and mocking. 
+
+This use case is the dual to \propref{NarrowPre}; it is another \emph{non-canonical} design that violates the substitution principle (\propref{SubstPr}) and Bertrand Meyer's Design by Contract paradigm (\propref{MeyerDbC}). Nevertheless, it is not necessarily incorrect. A design for supporting \tcode{pre} and \tcode{post} on virtual functions that accommodates this use case enables users to leverage contract checking to verify correct usage of such a derived class and identify bugs.
+
+\emph{Example}:
 
 Consider again the base class \tcode{Sqrt} from property \propref{WidenPostOut}. We might want to add an implementation of square root \tcode{IntOnlySqrt} that is extremely efficient for perfect square integers (1, 4, 9, ...) but returns -1 for other integers, thus violating the postcondition of \tcode{Sqrt::compute} for some inputs.
 
@@ -771,7 +819,7 @@ Value sumSqrts(const std::vector<Value>& values, const Sqrt& sqrtFunction) {
 }
 \end{codeblock}
 
-Now, we would like to write unit tests to verify the correctness of \tcode{sumSqrts}, but without pulling in a fully functional \tcode{Sqrt} implementation. Instead, we might use a mocking strategy. The following generic mock function template can be set to expect any specified value as an argument for and return any specified value from the next call to \tcode{compute}:
+Now, we might want to write unit tests to verify the correctness of \tcode{sumSqrts}, but without pulling in a fully functional \tcode{Sqrt} implementation. Instead, we can use a mocking strategy. The following generic mock function template can be set to expect any specified value as an argument for and return any specified value from the next call to \tcode{compute}:
 
 \begin{codeblock}
 template <typename Base>
@@ -802,17 +850,29 @@ void testSumSqrts() {
 }
 \end{codeblock}
 
-Similarly to use case \propref{NarrowPre}, implementations such as \tcode{IntOnlySqrt} or \tcode{MockFunction<Sqrt>} are not substitutable for \tcode{Sqrt} in the general case, and therefore supporting this use case is incompatible with properties \propref{SubstPr} and \propref{MeyerDbC}.
+The function \tcode{MockFunction<Sqrt>::compute} does not \emph{always} establish the postconditions of \tcode{Sqrt::compute} (i.e., it has wider postconditions), but it does so for the inputs used in the above unit test. The unit test is therefore correct.
 
-However, they \emph{are} substitutable for certain inputs; a program that ensures only these inputs are being used is still correct and useful. Allowing \tcode{pre} and \tcode{post} on virtual functions to be used in such cases provides the benefits of improved detection and mitigation of bugs in codebases where such class hierarchies are used today.
-
-In order to support these use cases, a design should ensure that, whenever the overriding function is executed, \emph{its own} postconditions (which may be narrower and/or wider than those of the overridden function) are evaluated, diagnosing bugs in the implementation of that overriding function; at the same time, the postconditions of the statically called function also need to be evaluated, diagnosing substitutability bugs where the overriding function fails to establish the postconditions of the overridden functions for concrete inputs.
+In order to support this use case, the precondition and postcondition assertions of the overriding function  (which may be narrower and/or wider than those of the overridden function) should be evaluated whenever it is selected by dynamic dispatch, to diagnose bugs in the implementation of that overriding function. Simultaneously, the precondition and postcondition assertions of the overridden function should also be evaluated whenever it is the statically called function, to diagnose erroneous use of the base class interface as well as failure of the derived class to establish the postconditions that the call site may rely on. 
 
 \prop{InhDefault}{Inherit function contract assertions by default}
 
-When a virtual function specifies function contract assertions, and is then overridden by another virtual function in a derived class, the overriding function should, by default, \emph{inherit} the function contract assertions of the overridden function. That is, if the overriding function does not specify its own precondition or postcondition assertions, those of the overridden function should apply, even if the overriding function is called directly and not through the overridden interface.
+\emph{Description}:
 
-As a use case, consider \tcode{QIODevice}, the base interface class of all I/O devices in the Qt framework.\footnote{Documentation available here: \url{https://doc.qt.io/qt-6/qiodevice.html}} This class has a number of virtual functions such as \tcode{readData} which take a raw data pointer to read bytes from. In a future version of Qt, one might want to add a precondition assertion to check that this pointer is not null:
+When a virtual function specifies function contract assertions, and is then overridden by another virtual function in a derived class, the overriding function should, by default, \emph{inherit} the function contract assertions of the overridden function. That is, if the overriding function does not specify its own precondition or postcondition assertions, those of the overridden function should apply, even if the overriding function is called directly and not through the overridden interface.
+% TD: TODO: here and everywhere else, replace "directly" with something like "...is the statically called function and the overridden function is not used".
+
+\emph{Motivation}:
+
+Function contract assertions introduced in a base class --- to detect incorrect use, incorrect implementations, or guard against program failure and security vulnerabilities --- can be equally useful for a derived class, even if that derived class is used directly, not through the base class interface.  At the same time, authors of derived classes may fail to consider that they want and need those assertions on their own implementation. Thus, having those derived classes inherit the function contract assertions from the base class automatically is a ``safe default''.
+
+\emph{Countermotivation}:
+
+This property is incompatible with property \propref{NoRemoteBreak}. If function contract assertions are inherited by default, then a pre-existing override with no function contract assertions may break when function contract assertions are introduced to the overridden function. This may break a correct program if the overriding function has wider preconditions (\propref{WidenPre}) or wider postconditions (\propref{WidenPostIn}, \propref{WidenPostOut}) and the existing program exploits this. While it might be possible to work around such remote code breakage by explicitly opting out of inheritance (see \propref{InhOptDerived}), that requires a modification of the derived class, at which point it may be too late because the program already broke in production.
+% TD: TODO: double check you don't have duplication between here and NoRemoteBreak.
+
+\emph{Example}:
+
+As an example for inheriting \emph{precondition} assertions by default, consider \tcode{QIODevice}, the base interface class of all I/O devices in the Qt framework.\footnote{Documentation available here: \url{https://doc.qt.io/qt-6/qiodevice.html}} This class has a number of virtual functions such as \tcode{readData} which take a raw data pointer to read bytes from. In a future version of Qt, one might want to add a precondition assertion to check that this pointer is not null:
 \begin{codeblock}
 class QIODevice {
 public:
@@ -820,7 +880,7 @@ public:
     pre (data != nullptr) = 0;
 };
 \end{codeblock}
-Now, if a user inherits from \tcode{QIODevice} and overrides \tcode{readData}, the intent is that the same null pointer check will apply to their function, without them having to specify any function contract assertions. Specifically, in the following program,
+Now, if a user inherits from \tcode{QIODevice} and overrides \tcode{readData}, it would be useful if the same null pointer check automatically applied to their override, without them having to specify any function contract assertions themselves. Specifically, in the following program,
 \begin{codeblock}
 class MyIODevice : public QIODevice {
 public:
@@ -839,9 +899,7 @@ int main() {
 \end{codeblock}
 the last line of \tcode{main} should trigger a contract violation when checks are enabled, even though the derived class \tcode{MyIODevice} is used directly rather than through the base class interface \tcode{QIODevice}. 
 
-The rationale for this property is that in any reasonable implementation of \tcode{QIODevice}, this precondition check is useful to detect bugs that would otherwise lead to program failure; at the same time, it would be far too easy for non-expert authors of derived classes to forget to consider that they want and need that precondition check on their own implementation.
-
-The same argument can be extended to postcondition assertions as well. Consider a base class for different algorithms that choose one number out of a non-empty set of numbers:
+As an example for inheriting \emph{postcondition} assertions by default, consider a base class for different algorithms that choose one number out of a non-empty set of numbers:
 \begin{codeblock}
 struct NumberPicker {
   virtual int pick(const Array<int>& numbers)
@@ -863,7 +921,7 @@ struct RandomNumberPicker : NumberPicker {
   }
 };
 \end{codeblock}
-We expect that any correct implementation of  \tcode{NumberPicker} will satisfy both the precondition and postcondition assertions of \tcode{NumberPicker::pick}. Therefore, those assertions should be checked even in cases in which the derived class interface is used directly, for example in a statically polymorphic context:
+We expect that any correct implementation of  \tcode{NumberPicker} must satisfy both the precondition and postcondition assertions of \tcode{NumberPicker::pick}. Therefore, those assertions should be checked even in cases in which the derived class interface is used directly, for example in a statically polymorphic context:
 \begin{codeblock}
 template <typename T>
 int pickNumber(T& picker, const Array<int>& numbers) {
@@ -876,7 +934,7 @@ int rollDice() {
 \end{codeblock}
 In the above case, if the implementation of \tcode{RandomNumberPicker::pick} fails to satisfy the postcondition assertion of \tcode{NumberPicker::pick}, we should get a contract violation.
 
-Note that this property is incompatible with property \propref{NoRemoteBreak}. If function contract assertions are inherited by default, then pre-existing overrides with no function contract assertions may break when function contract assertions are introduced to the overridden function. Consider for example an override of \tcode{QIODevice::}\allowbreak\tcode{readData}  that can handle null pointers just fine, or an override of \tcode{NumberPicker::}\allowbreak\tcode{pick} that returns a dummy value for some inputs, and correct uses of such functions (see also \propref{WidenPre}, \propref{WidenPostOut}, and \propref{WidenPostIn}). 
+There are also examples where inheriting function contract assertions can lead to the kind of remote code breakage that property \propref{NoRemoteBreak} seeks to avoid. Consider an override of \tcode{QIODevice::}\allowbreak\tcode{readData}  that can handle null pointers just fine, or an override of \tcode{NumberPicker::}\allowbreak\tcode{pick} that returns a dummy value for some inputs, and correct uses of such functions (see also \propref{WidenPre}, \propref{WidenPostOut}, and \propref{WidenPostIn}). 
 
 \subsubsection{Multiple inheritance use cases}
 
@@ -884,7 +942,15 @@ The following properties describe the ability of a design  for \tcode{pre} and \
 
 \prop{WidenPreMult}{Override multiple functions with incompatible preconditions}
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should make it well-formed to override multiple functions with different --- and potentially mutually exclusive --- precondition assertions. Which of these precondition assertions are evaluated should depend on the statically called function. This property is an extension of property \propref{WidenPre} to multiple inheritance.
+\emph{Description}:
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should make it well-formed to override multiple functions with different --- and potentially mutually exclusive --- precondition assertions. Which of these precondition assertions are evaluated should depend on the statically called function. 
+
+\emph{Motivation}:
+
+This property is an extension of property \propref{WidenPre} to multiple inheritance. It seems reasonable to inherit from multiple base classes which have mutually exclusive preconditions on a function, and to provide an implementation with wider preconditions that satisfies both domains. Such designs are correct and do not violate the substitutability principle (\propref{SubstPr}) or Bertrand Meyer's Design by Contract paradigm (\propref{MeyerDbC}).  C++ contract checking should support such designs.
+
+\emph{Example}:
 
 Consider a function-type hierarchy that might be used, for example, when writing
 a simple expression interpreter, where all types in the hierarchy extend a common abstract base
@@ -921,11 +987,18 @@ struct VariadicFunction : public UnaryFunction, public BinaryFunction {
 \end{codeblock}
 
 Any code that uses a \tcode{UnaryFunction} is obliged to pass a single-element list of arguments to that
-code (see also \propref{ChkCallerPre}). Similarly, two arguments are necessary for anything that uses \tcode{BinaryFunction}. Functions that make use of a \tcode{UnaryFunction}, however, will work completely correctly when handed a \tcode{VariadicFunction} that could take additional arguments when used differently. Such correct uses should be allowed.
+code (see also \propref{ChkCallerPre}). Similarly, two arguments are necessary for anything that uses \tcode{BinaryFunction}. Functions that make use of a \tcode{UnaryFunction}, however, will work completely correctly when handed a \tcode{VariadicFunction} that could take additional arguments when used differently. C++ contract checking should support all of these cases.
 
 \prop{WidenPostMult}{Override multiple functions with incompatible postconditions}
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should make it well-formed to override multiple functions with different --- and potentially mutually exclusive --- postcondition assertions. Which of these postcondition assertions are evaluated should depend on the statically called function. This property is an extension of property \propref{WidenPostOut} to multiple inheritance.
+\emph{Description}:
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should make it well-formed to override multiple functions with different --- and potentially mutually exclusive --- postcondition assertions. Which of these postcondition assertions are evaluated should depend on the statically called function. 
+
+\emph{Motivation}:
+
+This property is an extension of property \propref{WidenPostOut} to multiple inheritance. A virtual function might override two functions that have not only mutually exclusive preconditions, but also mutually exclusive postconditions, and yet be fully substitutable for either. Such a design is correct and should be supported by C++ contract checking. Like  \propref{WidenPostOut}, this use case is compatible with the substitution principle (\propref{SubstPr}), but not with Bertrand Meyer’s Design by Contract paradigm (\propref{MeyerDbC}). 
+
+\emph{Example}:
 
 Consider a function type that requires
 an even number as input and guarantees an even number as output, and another that operates in
@@ -955,7 +1028,7 @@ struct Identity : EvenComputer, OddComputer {
 }
 \end{codeblock}
 
-The type \tcode{Identity} is substitutable for both \tcode{EvenComputer} and \tcode{OddComputer}. Therefore, the above definition of such a type, and correct usages of it, should be allowed and should not cause contract violations. Supporting this use case is compatible with the substitution principle (\propref{SubstPr}), but not with Bertrand Meyer's Design by Contract paradigm (\propref{MeyerDbC}).
+The type \tcode{Identity} is substitutable for both \tcode{EvenComputer} and \tcode{OddComputer}. Therefore, the above definition of such a type, and correct usages of it, should be allowed and should not cause contract violations.
 
 %TD: TODO: Do we need a property to say that virtual inheritance should work? I'm having a hard time coming up with a use case for virtual inheritance where we would have interesting things going on with pre/post
 

@@ -250,6 +250,8 @@ The proposed design should be implemented \emph{completely} in at least one majo
 
 Only actual implementation experience is sufficient proof of implementability. As long as a design only exists as a ``paper exercise'', even with wording, it is still possible that we overlooked some significant issues with that design that would render it non-viable.
 
+% TD: TODO: should we have another property in this section that the design should be deployable without an ABI break? If yes, should the requirement include only Itanium and Microsoft, or also more exotic ABIs such as IBM, HP-UX, Solaris?
+
 \subsubsection{Design constraints}
 
 The following properties describe design constraints that may be placed on the behaviour of \tcode{pre} and \tcode{post} on virtual functions. Some of these constraints match existing practice in other programming languages; others are motivated by the desire to avoid complexity and non-locality; others yet others aim to facilitate the deployment of a design for \tcode{pre} and \tcode{post} on virtual functions to C++ code bases at scale.
@@ -522,7 +524,9 @@ As long as the client uses the \tcode{SuperWidget} interface instead of the base
 
 \emph{Description:}
 
-The set of function contract assertions evaluated during a virtual function call should be limited to the function contract assertions declared on the functions directly participating in that call: the statically called function and the function actually executed (i.e., chosen by dynamic dispatch). 
+The set of function contract assertions evaluated during a virtual function call should be limited to the function contract assertions declared on the functions directly participating in that call: the statically called
+% TD: TODO: CHANGE THROUGHOUT: this is called "statically chosen" not "statically called"
+function and the function actually executed (i.e., chosen by dynamic dispatch). 
 
 \emph{Motivation:}
 
@@ -867,7 +871,11 @@ Function contract assertions introduced in a base class --- to detect incorrect 
 
 \emph{Countermotivation}:
 
-This property is incompatible with property \propref{NoRemoteBreak}. If function contract assertions are inherited by default, then a pre-existing override with no function contract assertions may break when function contract assertions are introduced to the overridden function. This may break a correct program if the overriding function has wider preconditions (\propref{WidenPre}) or wider postconditions (\propref{WidenPostIn}, \propref{WidenPostOut}) and the existing program exploits this. While it might be possible to work around such remote code breakage by explicitly opting out of inheritance (see \propref{InhOptDerived}), that requires a modification of the derived class, at which point it may be too late because the program already broke in production.
+If function contract assertions are inherited by default, then an opt-out to disable such inheritance (see \propref{InhOptDerived}) may be necessary to support use cases where precondition or postcondition assertions need to be widened in the overriding function (\propref{WidenPre}, \propref{WidenPostIn}, \propref{WidenPostOut}). 
+
+Further, this property is incompatible with property \propref{NoRemoteBreak}. If function contract assertions are inherited by default, then a pre-existing override with no function contract assertions may break when function contract assertions are introduced to the overridden function. This may break a correct program if the overriding function has wider precondition or postcondition assertions and the existing program exploits this.
+
+While it might be possible to work around such remote code breakage with the aforementioned opt-out, that requires a modification of the derived class, at which point it may be too late because the program already broke in production. Note that the base class may be coming in via a third-party component that the owner of the derived class may not control.
 % TD: TODO: double check you don't have duplication between here and NoRemoteBreak.
 
 \emph{Example}:
@@ -1036,52 +1044,112 @@ The type \tcode{Identity} is substitutable for both \tcode{EvenComputer} and \tc
 
 All properties presented so far relate to the possible \emph{default} behaviour of \tcode{pre} and \tcode{post} on virtual functions. However, during discussions of this feature a concern came up repeatedly that specifying the default behaviour, regardless of how this is done, cannot provide the flexibility needed to  satisfy all relevant use cases for \tcode{pre} and \tcode{post} on virtual functions.
 
-Therefore, the following properties describe use cases where additional syntax can be used to optionally give \tcode{pre} and \tcode{post} on virtual functions different behaviour. Note that all such additional syntax shown in this paper is strawman syntax to illustrate the idea; we do not propose any concrete new syntax in this paper.
+Therefore, the following properties describe use cases where the user might want to explicitly opt into --- or out of --- different possible behaviours for \tcode{pre} and \tcode{post} on virtual functions.
 
 \prop{InhOptBase}{Choose in the overridden function whether to inherit}
  
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should give the author of a base class the option to choose whether a particular function contract assertion should be inherited by any overriding functions or not.
+\emph{Description}: 
+ 
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should give the author of a base class the option to choose whether a particular function contract assertion should be automatically inherited by any overriding functions.
 
-Consider again the \tcode{Sqrt} type from \propref{WidenPostOut}. We might want to add another postcondition assertion verifying that the numerical value returned from the \tcode{compute} member function actually \emph{is} the square root of the value passed in, or at least an acceptable approximation of it:
+\emph{Motivation}:
+
+Some function contract assertions in a base class may not be relevant when a derived class is used directly (not through a reference to the base class). Other such assertions may be relevant for the derived class even in this case, for example because they specify expectations the author of the base class has on \emph{any} derived class in order to be considered correct, and/or because they guard against program failures and security vulnerabilities that the user of the derived class may benefit from even if they are unaware of that. 
+
+In order to cover both situations, it would be useful for the author of the base class to specify explicitly whether or not any particular function contract assertions should be automatically inherited by any overriding functions. Such an explicit choice could be useful regardless of whether such inheritance of function contract assertions happens by default (\propref{InhDefault}) or not.
+
+\emph{Countermotivation}:
+
+Any design that offers the user this choice would need to consider whether an opt-out, i.e., \emph{not} inheriting that assertion, should still be possible on the derived class, even if the base class specified that the assertion should be inherited. If such an opt-out on the derived class is allowed, it would make the design more complex; on the other hand, if no opt-out is possible, it would make widening those assertions in an overriding function outright impossible, precluding use cases like \propref{WidenPre}, \propref{WidenPostOut}, and \propref{WidenPostIn} for those assertions.
+
+\emph{Example}:
+
+Consider again the \tcode{Sqrt} type from \propref{WidenPostOut}. We might want to add another postcondition assertion verifying that the numerical value returned from the \tcode{compute} member function actually \emph{is} the square root of the value passed in, or at least some acceptable approximation of it:
 
 \begin{codeblock}
 struct Sqrt {
   virtual Number compute(const Number& x)
     pre(x.isReal() && x.realPart() >= 0)
     post(r : r.isReal() && r.realPart() >= 0)
-    post(r: approxEquals(r * r, x);
+    post(r: approxEquals(r * r, x));
 };
 \end{codeblock}
 
-We might further want to specify that the first two function contract assertions are specific to this function and can be freely widened (or narrowed) in overrides, while the last function contract assertion is considered essential for any implementation of \tcode{Sqrt::compute} and should therefore be automatically inherited by all overrides:
+Now, we might want to specify that the first two function contract assertions should not be automatically inherited by  overrides (because we expect derived classes to operate on a wider domain than the base class), while the last function contract assertion should be (because we consider it essential for any correct implementation of \tcode{Sqrt::compute} to satisfy that condition):
 
 \begin{codeblock}
 struct Sqrt {
   virtual Number compute(const Number& x)
-    pre noinherit (x.isReal() && x.realPart() >= 0)
-    post noinherit (r : r.isReal() && r.realPart() >= 0)
-    post inherit (r: approxEquals(r * r, x));
+    pre /* do not inherit */  (x.isReal() && x.realPart() >= 0)
+    post /* do not inherit */ (r : r.isReal() && r.realPart() >= 0)
+    post /* inherit */       (r: approxEquals(r * r, x));
 };
 \end{codeblock}
 
-Any design that offers the user this choice would need to answer a number of additional questions, such as the meaning of the \emph{default} syntax (see also \propref{InhDefault}) and whether an opt-out of \tcode{noinherit} should still be possible on the overridden function for use cases such as \propref{WidenPostIn}.
+On the other hand, even if the last postcondition assertion is inherited by default, a derived class like \tcode{IntOnlySqrt} or \tcode{MockFunction<Sqrt>} (as discussed in \propref{WidenPostIn}) may still need to opt out of that inheritance in order to be usable.
 
 \prop{InhOptDerived}{Choose in the overriding function whether to inherit}
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should give the author of a derived class the option to explicitly inherit the overridden function's function contract assertions.
+\emph{Description}:
 
-%TD: TODO: add example and motivation
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should give the author of a derived class the option to choose whether a particular override should inherit the function contract assertions of the overridden function. If the virtual function in question overrides multiple functions, it should be possible to choose which override(s) to inherit assertions from.
 
-\prop{CalleeOnly}{Check \tcode{pre} and \tcode{post} only when callee-facing}
+\emph{Motivation}:
 
-TODO TAKE FROM D3097R1
+Regardless of whether function contract assertions are inherited by default (\propref{InhDefault}), an overriding function should have the option to choose whether such inheritance should happen.
+
+If function contract assertions are inherited automatically, an opt-out is necessary to support use cases where precondition or postcondition assertions need to be widened in the overriding function (\propref{WidenPre}, \propref{WidenPostIn}, \propref{WidenPostOut}). 
+
+If function contract assertions are \emph{not} inherited automatically, it may still be useful to have them apply to the overriding function as well (even if that overriding function is the statically called function). Note that simply repeating the sequence of function contract assertions from the overridden function on the overriding function is not an acceptable solution: lexical repetition may be too cumbersome and verbose, it is brittle because it would need to be manually kept in sync with the overridden sequence, and it may even be impossible because the function contract assertions in the base class may be referring to private members (so the same predicates may not compile in the context of the derived class, or worse, may compile but lead to a different result because name lookup finds different entities).
+
+\emph{Example}:
+
+TODO
+
+\prop{VirtOnly}{Check \tcode{pre} and \tcode{post} only in a virtual call}
+
+\emph{Description}:
+
+TODO
+
+\emph{Motivation}:
+
+TODO
+
+\emph{Example}:
+
+TODO 
+
+\prop{NonVirtOnly}{Check \tcode{pre} and \tcode{post} only in a non-virtual call}
+
+\emph{Description}:
+
+TODO
+
+\emph{Motivation}:
+
+TODO
+
+\emph{Example}:
+
+TODO 
 
 \prop{CallerOnly}{Check \tcode{pre} and \tcode{post} only when caller-facing}
-% TD: TODO: it's actually not caller only, it's "fully qualified call only"! Fix this, think of different identifier & description
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should give users the option to specify that a particular function contract assertion should only be evaluated if it applies to the statically called function in a virtual function call.
+\emph{Description}:
+
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should give users the option to specify that a particular function contract assertion should only be evaluated if it is caller-facing, i.e., if the function it is specified on is the statically called function.
+
+% TD: TODO: make it clear that it also applies to a fully qualified call
+
+\emph{Motivation}:
+
+
+
 
 This can be useful for assertions that express contracts applying to the interface, but not the implementation of a function.
+
+\emph{Example}:
 
 Consider a virtual function hierarchy where different implementations share a common interface
 precondition:
@@ -1137,9 +1205,21 @@ preconditions as any of the overriding functions when called via a fully qualifi
 call can be made with any input value. The contract is therefore an interface contract, but not an
 implementation contract.
 
-\prop{NonVirtOnly}{Check \tcode{pre} and \tcode{post} only in a non-virtual call}
 
-TODO 
+\prop{CalleeOnly}{Check \tcode{pre} and \tcode{post} only when callee-facing}
+
+\emph{Description}:
+
+TODO
+
+\emph{Motivation}:
+
+For example, a virtual function intended to be overridden may also provide a concrete implementation — perhaps as a default, or perhaps as a utility to aid in implementation of overrides. In this case, the base class implementation might provide a set of preconditions and postconditions that should only be asserted when that base class implementation is called, never when a derived class implementation
+is called (even if the latter is called through a pointer or reference to base)
+
+\emph{Example}:
+
+TODO
 
 \section{Design space}
 \label{designs}

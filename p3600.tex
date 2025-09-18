@@ -93,7 +93,7 @@ Audience: & SG21, EWG
 \end{tabular}
 
 \begin{abstract}
-In this paper, we present a comprehensive analysis of the design space for supporting function contract assertions (\tcode{pre} and \tcode{post}) on virtual functions in C++. We begin by identifying a number of desirable properties that such a language feature should exhibit. We survey existing and proposed approaches and introduce a framework for classifying them according to a small number of key design decisions. For each decision, we examine its impact on the extent to which the desirable properties can be achieved. We find that no design that achieves all desirable properties is possible. We identify three candidate designs that realise different, meaningful subsets of these properties. We distill the choice between these candidate designs down to two design decisions with different tradeoffs. We conclude with a recommendation for a concrete design that seems to offer the best set of tradeoffs overall.
+In this paper, we present a comprehensive analysis of the design space for supporting function contract assertions (\tcode{pre} and \tcode{post}) on virtual functions in C++. We identify a number of desirable properties that such a language feature should exhibit. We survey existing and proposed approaches and introduce a framework for classifying them according to a small number of key design decisions. For each decision, we examine its impact on the extent to which the desirable properties can be achieved. We find that no design that achieves all desirable properties is possible. We identify three candidate designs that realise different, meaningful subsets of these properties. We distill the choice between these candidate designs down to two design decisions with different tradeoffs. We conclude with a recommendation for a concrete design that seems to offer the best set of tradeoffs overall.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -197,7 +197,7 @@ In the final part of our analysis, we use the conformance matrix to identify the
 
 % TD: TODO: refer to this new section above
 
-In this section, we establish the basic terms and concepts used in the remainder of the paper. We consistently follow the terms of art in the current C++ working draft \cite{N5014}. We also establish some additional concepts that help precisely describe different possible designs for supporting \tcode{pre} and \tcode{post} on virtual functions and their properties.
+In this section, we establish the basic terms and concepts used in the remainder of the paper. We consistently follow the terminology specified in the C++ working draft \cite{N5014}. We also establish some additional concepts that help precisely describe different possible designs for supporting \tcode{pre} and \tcode{post} on virtual functions and their properties.
 
 \subsection{Virtual functions and virtual function calls}
 
@@ -209,9 +209,7 @@ A non-static member function is a \emph{virtual function} if it is declared with
 
 A \emph{function call} is an expression of function type or function pointer type followed by parentheses containing a (possibly empty) argument list (\href{https://eel.is/c++draft/expr.call#1}{[expr.call]/1}). In this paper, we are primarily interested in function calls that refer to a member function of an object. If the expression refers to a virtual function other than by a qualified name, the function call is a \emph{virtual function call} (\href{https://eel.is/c++draft/expr.call#2}{[expr.call]/2}) or virtual call for short; otherwise the function call is a non-virtual call.
 
-A virtual call performs dynamic dispatch and calls the final overrider (\href{https://eel.is/c++draft/expr.call#2.sentence-2}{[class.virtual]/1}), which depends on the dynamic type of the object. On the other hand, a non-virtual call simply calls the function that the function call expression refers to. 
-
-Consider the following simple example:
+A virtual call performs dynamic dispatch and calls the final overrider (\href{https://eel.is/c++draft/expr.call#2.sentence-2}{[class.virtual]/1}), which depends on the dynamic type of the object. On the other hand, a non-virtual call simply calls the function that the function call expression refers to. Consider the following program:
 
 \begin{codeblock}
 struct Shape {
@@ -258,41 +256,44 @@ Notably, (3) \emph{is} a virtual function call, because it does not use a qualif
 
 Here, we give a brief summary of the terms and concepts used for describing contract assertions in C++; a more detailed discussion can be found in \cite{P2900R14} Section 2.1.
 
-A \emph{contract} is a set of conditions describing the expected behaviour of a program or one of its components, such as a function or a class. A \emph{contract violation} is a form of program defect that occurs when a condition that is part of a contract does not hold when the program is executed. A \emph{correct} program or component is one that does not exhibit any contract violations when executed.
+A \emph{contract} is a set of conditions describing the expected behaviour of a program or one of its components, such as a function or a class. The contract of a function consists of \emph{preconditions} and \emph{postconditions}. A precondition is a condition that is expected to hold when a function is called; a postcondition is a condition that is expected to hold when a function returns. Preconditions can be conditions on the arguments passed into a function or other program state at the point of the function call; postconditions can be conditions on the value returned by a function or other program state established by the function.
 
-\emph{Preconditions} and \emph{postconditions} are contracts that apply to functions. A precondition is a condition that is expected to hold when a function is called; a postcondition is a condition that is expected to hold when a function returns. Preconditions can be conditions on the arguments passed into a function or other program state at the point of the function call; postconditions can be conditions on the value returned by a function or other program state established by the function.
+The contract of a function is usually a \emph{plain-language contract}, specified in human language explicitly (e.g., in the documentation and/or in the form of code comments) or assumed implicitly (e.g., as part of established coding conventions). However, a contract may also be specified directly in C++ using  \emph{contract assertions} (\href{https://eel.is/c++draft/basic.contract.general}{[basic.contract.general]}).
+% TD: TODO: Consider mentioning the various benefits of assertions? Or does it not add anything valuable here?
+C++26 adds three kinds of contract assertions: precondition assertions, postcondition assertions, and assertion statements. Precondition and postcondition assertions --- spelled using the contextual keywords \tcode{pre} and \tcode{post}, respectively --- apply to the declaration of a function and are thus collectively called \emph{function contract assertions} (\href{https://eel.is/c++draft/dcl.contract.func}{[dcl.contract.func]}).
 
-Contracts may be specified in a number of ways, either explicitly (e.g., in code comments or separate documentation) or implicitly (e.g., by convention). Some contracts can also be specified in C++ code using \emph{contract assertions} (\href{https://eel.is/c++draft/basic.contract.general}{[basic.contract.general]}).
+In general, only a \emph{subset} of the plain-language contract can be expressed with contract assertions. For example, a precondition that an index passed into a function is within bounds can be expressed with a precondition assertion such as \mbox{\tcode{pre(index < size())}}, whereas a precondition that a pointer passed into a function points to a valid object of the correct type within its lifetime cannot (or at least not with the facilities available in C++26).
 
-C++26 adds three kinds of contract assertions: precondition assertions, postcondition assertions, and assertion statements, spelled with \tcode{pre}, \tcode{post}, and \mbox{\tcode{contract_assert}}, respectively. Precondition and postcondition assertions (\tcode{pre} and \tcode{post}) apply to the declaration of a function and are thus collectively called \emph{function contract assertions} (\href{https://eel.is/c++draft/dcl.contract.func}{[dcl.contract.func]}). These contract assertions can be checked at runtime.
+\subsection{Correctness}
+\label{correctness}
 
-Contract assertions can in general only express a \emph{subset} of the full contract, which we call the \emph{plain-language contract} for disambiguation. For example, a precondition that an index passed into a function can be expressed with a precondition assertion such as \mbox{\tcode{pre(index < size())}}, whereas a precondition that a pointer passed into a function points to a valid object of the correct type within its lifetime cannot (at least not in C++26).
+A program or one of its components is \emph{correct} with respect to a specification if it behaves according to that specification when executed. Since the expected behaviour is described by the contract, a program or component is correct when it does not violate its contract. % TD: TODO: THIS IS CLUMSY I'M GETTING TIRED
 
-Understanding this distinction of (plain-language) contracts that apply to functions as part of their explicit or implicit specification --- preconditions and postconditions --- on the one hand, and function contract assertions that can be checked at runtime  --- precondition assertions and postcondition assertions --- on the other hand is crucial for discussing the design of contract assertions in C++.
-
+However, in the remainder of this paper, we generally use the terms \emph{correct call} or \emph{correct implementation} of a function to mean {correct with respect to its contract assertions}, i.e., without violating them. Consistently, we use the term \emph{contract violation} to mean a violation of a contract assertion (regardless of whether that violation was detected by a runtime check), and not a violation of the plain-language contract.
+ 
 \subsection{Direct and indirect calls}
 
-The function contract assertions that \emph{apply} to a function call are the set of function contract assertions that will be evaluated\footnote{Note that \emph{evaluated} does not necessarily mean \emph{checked}, as contract assertions can also be evaluated with the \emph{ignore} evaluation semantic. However, it is recommended that implementations use checked evaluation semantics for contract assertions by default (see \href{https://eel.is/c++draft/basic.contract\#eval-3}{[basic.contract.eval]/3}).} as part of that function call. The key question that any design for supporting \tcode{pre} and \tcode{post} on virtual functions needs to answer is: which function contract assertions apply when a virtual function is called (for each possible way of doing so)?
+The function contract assertions that \emph{apply to a function call} are the set of function contract assertions that will be evaluated\footnote{Note that \emph{evaluated} does not necessarily mean \emph{checked}, as contract assertions can also be evaluated with the \emph{ignore} evaluation semantic. However, it is recommended that implementations use checked evaluation semantics for contract assertions by default (see \href{https://eel.is/c++draft/basic.contract\#eval-3}{[basic.contract.eval]/3}).} as part of that function call. The key question that any design for supporting \tcode{pre} and \tcode{post} on virtual functions needs to answer is: which function contract assertions apply when a virtual function is called (for each possible way of doing so)?
 
 To classify the possible answers to that question, it is useful to distinguish between \emph{direct} and \emph{indirect} function calls.\footnote{This terminology is not used by the C++ Standard but introduced for this paper.} A direct function call is a function call where the declaration of the function that will be called is known at the call site; an indirect function call is one where this is not the case.
 
 A virtual function call is a form of indirect call; a call through a function pointer is another form of indirect call. On the other hand, a qualified call to a virtual function is a direct call. Further, any call to a non-virtual function (qualified or non-qualified) that does not involve indirection through a function pointer is also a direct call. 
 
-The function contract assertions \emph{associated} with a function (\href{https://eel.is/c++draft/dcl.contract.func#1}{[dcl.contract.func]/1}) are the function contract assertions evaluated when \emph{that} function is called directly. For non-virtual functions  --- i.e., in all cases in C++26 today --- those are the function contract assertions defined on that function's first declaration (\href{https://eel.is/c++draft/dcl.contract.func#3.sentence-1}{[dcl.contract.func]/3}). If we allow function contract assertions on virtual functions, this may or may not continue to be the case, depending on the chosen design.
+The function contract assertions \emph{associated with a function} (\href{https://eel.is/c++draft/dcl.contract.func#1}{[dcl.contract.func]/1}) are the function contract assertions that apply to a direct call of \emph{that} function. For non-virtual functions  --- i.e., in all cases in C++26 today --- these are the function contract assertions defined on that function's first declaration (\href{https://eel.is/c++draft/dcl.contract.func#3.sentence-1}{[dcl.contract.func]/3}). If we allow function contract assertions on virtual functions, this may or may not continue to be the case, depending on the chosen design.
 
 For example, if we choose a design that follows Eiffel or D, where function contract assertions are inherited from overridden functions, there will be additional function contract assertions associated with an overriding function that are not part of \emph{that} function's declaration. On the other hand, in a design like the one proposed in \cite{P3097R0}, this is not the case as function contract assertions are not inherited or otherwise silently pulled in from other places; in a direct call, only the function contract assertions specified on the called function's declaration are evaluated.
 
 \subsection{Caller-facing and callee-facing assertions}
 
-Finally, in order to discuss the behaviour for indirect calls more precisely, it is useful to distinguish between \emph{caller-facing} and the \emph{callee-facing} function contract assertions (a concept developed in \cite{P3097R0}). The caller-facing function contract assertions are those that are known to the caller. The callee-facing function contract assertions are those that are known to the function being called.
+Finally, in order to discuss the behaviour for indirect calls more precisely, it is useful to distinguish between \emph{caller-facing} and the \emph{callee-facing} function contract assertions (a concept developed in \cite{P3097R0}). The caller-facing function contract assertions are those that are known at the call site. The callee-facing function contract assertions are those that are known at the definition of the function being called.
 
-For any direct call, the caller-facing and callee-facing function contract assertions are the same set of assertions: they are the function contract assertions associated with the function being called. For an indirect call, they are, in general, two different sets of assertions. 
-
-For a virtual function call, the caller-facing function contract assertions are those associated with the statically chosen function, and the callee-facing function contract assertions are those associated with the called function (the final overrider chosen by dynamic dispatch).
+For a direct call, the caller-facing and callee-facing function contract assertions are the same set of assertions: they are the function contract assertions associated with the function being called. On the other hand, for an indirect call they are, in general, two different sets of assertions. 
 
 For a call through a function pointer, the caller-facing function contract assertions are an empty set (as a function pointer cannot have function contract assertions in C++26; see \cite{P3327R0}), and the callee-facing contract assertions are those associated with the called function (the one whose address is contained in the value of the pointer).
 
-There is also a compound case: indirection through a pointer to member function that results in a virtual call. In this case, the caller-facing contract assertions are an empty set, while the callee-facing contract assertions are those associated with the called function (the final overrider chosen by dynamic dispatch). Importantly, the contract assertions associated with the function that the pointer points to are \emph{not} in the set of function contract assertions that apply to the function call, as they are unknown both at the call site and at the site of the function body being executed.
+For a virtual function call, the caller-facing function contract assertions are those associated with the statically chosen function, and the callee-facing function contract assertions are those associated with the called function (the final overrider chosen by dynamic dispatch). If we allow function contract assertions on virtual functions, it will depend on the chosen design whether the caller-facing and callee-facing function contract assertions that apply to a virtual function call can be different or must be the same set. For example, in Eiffel, D, and Ada, as well as in the design proposed in \cite{P3097R0}, they can be different, whereas the C++2a design (\cite{P0542R5}) requires that they be the same set.
+
+There is also a compound case: indirection through a pointer to member function that results in a virtual call. In this case, the caller-facing contract assertions are an empty set, and the callee-facing contract assertions are those associated with the called function (the final overrider chosen by dynamic dispatch). Importantly, the contract assertions associated with the function that the pointer points to are \emph{not} in the set of function contract assertions that apply to the function call, as they are neither known at the call site, nor known at the definition of the function being called.
 
 Figure~\ref{fig_callercallee} illustrates the concept of caller-facing and callee-facing function contract assertions. Note that the existence of caller-facing and callee-facing function contract assertions is not a property of any particular design for supporting \tcode{pre} and \tcode{post} on virtual functions, but a direct consequence of how indirect function calls work in C++.
 % TD: Josh, do we need to clarify that this has nothing to do with TUs? I know why you think it doesn't (TUs are an implementation detail), and yet Lisa has "caller TU" and "callee TU" on her slides with that diagram.
@@ -306,6 +307,21 @@ Figure~\ref{fig_callercallee} illustrates the concept of caller-facing and calle
 \label{fig_callercallee}
 \end{figure}
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+\subsection{Substitutability and the Liskov Substitution Principle}
+
+The Liskov Substitution Principle (LSP) is an important but often-misunderstood design principle that is key to considering contract assertions on virtual functions. 
+% TD: TODO: reformulate this. The concept of substitutability is derived from the LSP.
+
+As originally stated by Barbara Liskov (TODO REFERENCES), the LSP does not directly talk about inheritance or virtual functions. Rather, it is formulated in the context of type theory. The LSP establishes a relationship between two types, ...
+
+However, in the context of a programming language that features inheritance and polymorphism (such as C++), the term \emph{substitutable} usually means something slightly different. Given a class \tcode{Derived} that inherits from a class \tcode{Base}, \tcode{Base} is \emph{substitutable} by \tcode{Derived} if any correct use of \tcode{Base} --- in particular, any correct use of virtual functions through a reference or pointer to \tcode{Base} --- remains correct when the dynamic type of the object being accessed through such a reference or pointer is \tcode{Derived}. In this paper, we use this meaning in an even more specific sense, since by \emph{correct} we mean correct with respect to the contract assertions (see Section~\ref{correctness}). 
+
+TODO GOOD EXAMPLES
+
+\subsection{Bertrand Meyer's Design by Contract}
+
+TODO
 
 \section{Desirable properties}
 \label{properties}
@@ -368,87 +384,24 @@ Only actual implementation experience is sufficient proof of implementability. A
 
 The following properties describe design constraints that may be placed on the behaviour of \tcode{pre} and \tcode{post} on virtual functions. Some of these constraints match existing practice in other programming languages; others are motivated by the desire to avoid complexity and non-locality; others yet others aim to facilitate the deployment of a design for \tcode{pre} and \tcode{post} on virtual functions to C++ code bases at scale.
 
-%-------------------------------------------------------------------------------
-\prop{SubstPr}{Substitution principle}
+% TD: TODO: Should Subst be a property in its own right or not??
+% We probably don't want to go into OR-ing and AND-ing
+
+\prop{MeyerDbC}{Enforce Bertrand Meyer's Design by Contract}
 
 \emph{Description:}
 
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should follow the \emph{substitution principle}, which stipulates that objects of a base class should be replaceable with objects of a derived class without affecting the correctness of the program. 
-
-% TD: TODO: this description is too vague. It isn't explaining how this principle should relate specifically to contract assertions (which represent only a subset of the actual contract). However, I am having a really hard time formulating that! Maybe the fact that they represent only a subset is actually a piece of countermotivation here? But I am having a hard time formulating that as well.
-
-\emph{Motivation:}
-
-The substitution principle is a well-established paradigm in object-oriented programming. It ensures that derived classes remain true to the behaviour and expectations of their base classes, allowing the user to use them interchangeably without introducing bugs. This is particularly important in situations where external clients will depend on contracts, such as for public APIs, libraries, and frameworks that follow object-oriented programming. Applying this paradigm to \tcode{pre} and \tcode{post} on virtual functions facilitates robust and reliable object-oriented designs.
-
-\emph{Countermotivation:}
-
-There are use cases for contract assertions (see properties \propref{NarrowPre}, \propref{WidenPostIn}) that are not compatible with the substitution principle. A language design that requires \tcode{pre} and \tcode{post} to obey the substitution principle would make the addition of function contract assertions to a codebase that relies on these use cases difficult or impossible.
-
-Further, enforcing the substitution principle statically does not seem feasible for a language like C++ because it would require subsumption proofs on arbitrarily complex expressions (see \cite{P3165R0}). Thus, the only known  strategy for enforcing the substitution principle is to do so dynamically by OR-ing precondition assertions and AND-ing postcondition assertions across the inheritance hierarchy like in Eiffel or D. However, this strategy actually enforces an even stronger set of constraints, which has a number of implications (see \propref{MeyerDbC}).
-
-\emph{Example:}
-
-Consider the following correct program:
-\begin{codeblock}
-struct Base {
-  virtual int f(int i)
-    pre (i >= 0)
-    post (r: r <= i);
-};
-
-void test(Base& b) {
-  std::print(b.f(42));
-}
-\end{codeblock}
-The call to \tcode{Base::f} in function \tcode{test} is correct, i.e., it satisfies its precondition that the integer passed in must be nonnegative. This is verified by the absence of a precondition assertion violation. If the call to \tcode{Base::f} returns without a postcondition assertion violation, then \tcode{Base::f} is also implemented correctly, i.e., it satisfies its postcondition. The program can therefore rely on  the printed value never being greater than 42.
-
-A function that overrides \tcode{Base::f} but has narrower precondition assertions would break the correctness of the call and thus violate the substitution principle. Consider an override that can only handle even numbers as input:
-\begin{codeblock}
-struct Derived1 : Base {
-  int f(int i) override
-    pre (i % 2 == 0);
-}
-\end{codeblock}
-In this example, \tcode{Derived1::f} specifies a precondition assertion that may fail on inputs that are considered correct for \tcode{Base::f} (odd nonnegative integers). This precondition assertion should therefore either not compile, or its semantics should be such that failing it is not considered a contract violation, otherwise \tcode{Derived1} is not substitutable for \tcode{Base}.
-
-Further, a function that overrides \tcode{Base::f} but has wider precondition assertions for inputs that are considered correct for \tcode{Base::f} would break the expectations of the calling code and thus also violate the substitution principle. Consider:
-
-\begin{codeblock}
-struct Derived2 : Base {
-  int f(int i) override /* ... */ {
-    return 42;
-  }
-}
-\end{codeblock}
-
-In this example, \tcode{Derived2::f} is not substitutable for \tcode{Base::f} as it is possible to pass a nonnegative number (thus satisfying the precondition assertions of \tcode{Base::f}) but get a number back that is larger than the number passed in (thus failing the postcondition assertions of \tcode{Base::f}). The design should therefore ensure that when the dynamic type of the parameter passed into  \tcode{test(Base\&)} is \tcode{Derived2}, and \tcode{Derived2::f} is implemented as above, such an implementation will be treated as incorrect and result in a postcondition assertion violation. Such a design may or may not constrain which function contract assertions are allowed in \mbox{\emph{/* ... */}}.
-
-% TD: TODO: Everything from here until the end of this property is duplicated either in MeyerDbC or in WidenPostOut; re-think where this belongs!
-
-Note that widening preconditions and narrowing postconditions in the overridden function do not violate the substitution principle. Note further that when an overriding function has wider preconditions than the overridden function (assuming the chosen language design allows this), and is called \emph{outside} of the overridden function's preconditions (i.e., in a way that is a correct call of the overriding function but would not be a correct call of the overridden function), it is not necessary to satisfy the overridden function's postconditions. Consider:
-
-\begin{codeblock}
-struct Derived3 {
-  int f(int i) override {
-    return std::abs(i);
-  }
-};
-\end{codeblock}
-In this example, \tcode{Derived3::f} operates on a wider domain than \tcode{Base::f} as it is possible to pass a negative integer. In this case,  \tcode{Derived3::f} does \emph{not} satisfy the postcondition of \tcode{Base::f} as the return value will be greater than the value passed in. However, \tcode{Base} is still substitutable by \tcode{Derived3} because \tcode{Derived3::f} will always satisfy the postcondition of \tcode{Base::f} when given a nonnegative integer.
-
-\prop{MeyerDbC}{Bertrand Meyer's ``Design by Contract'' paradigm}
-
-\emph{Description:}
-
-A design for supporting \tcode{pre} and \tcode{post} on virtual functions should follow Bertrand Meyer's Design by Contract (DbC) paradigm, which stipulates that in an overriding function, preconditions can only be widened and postconditions can only be narrowed, but not vice versa.
+A design for supporting \tcode{pre} and \tcode{post} on virtual functions should follow enforce Bertrand Meyer's Design by Contract paradigm, which stipulates that in an overriding function, preconditions can only be widened and postconditions can only be narrowed, but not vice versa.
+% Do we want to go into OR-ing and AND-ing?
 
 \emph{Motivation:}
 
+% TD: TODO: REFORMULATE THIS ONCE DbC IS COVERED IN SECTION 2
 Following the DbC paradigm when  specifying the semantics of \tcode{pre} and \tcode{post} on virtual functions is a well-known approach to enforcing the substitution principle, and is existing practice in the Eiffel and D programming languages with decades of implementation and usage experience.
 
 \emph{Countermotivation:} 
 
+% TD: TODO: REFORMULATE THIS ONCE DbC IS COVERED IN SECTION 2
 The DbC paradigm (``widen preconditions, narrow postconditions'') is \emph{not} just an application of the substitution principle to contract checking (even though that is a common misconception), but imposes additional constraints. In particular, a function that has wider postconditions than the function it overrides if and only if is called \emph{outside} of the overridden function's preconditions satisfies \propref{SubstPr}, but does not satisfy \propref{MeyerDbC}. 
 
 Thus,  in addition to those use cases that are not compatible with any form of enforcing the substution principle (see properties \propref{NarrowPre}, \propref{WidenPostIn}), there are more use cases for contract assertions that are not compatible with the DbC paradigm (see properties  \propref{WidenPostOut} and \propref{WidenPostMult}).
@@ -536,6 +489,21 @@ public:
 
 Both programming styles seem reasonable in cross-platform code. It would arguably be surprising to users if a design for \tcode{pre} and \tcode{post} on virtual functions would introduce cases where they lead to different contract assertions being evaluated.
 
+\prop{EquivUnqual}{Equivalence of unqualified and qualified calls}
+
+\emph{Description}:
+
+An unqualified call of a virtual function where the statically chosen function is simultaneously also the function selected by dynamic dispatch should remain equivalent to a qualified call of the same function.
+
+\emph{Motivation}:
+
+An unqualified call of a virtual function is a virtual function call, which means that in general, the function that will be called (selected by dynamic dispatch) is not known at the call site. However, in some situations, the compiler can reason about which function will be called... TODO
+
+\emph{Example}:
+
+TODO
+
+% TD: TODO: idea; group the following two use cases in a group specific to deploying in code bases where different components are controlled by different entities. Add ABI break to this group!
 \prop{BaseIndep}{\tcode{pre} and \tcode{post} should be usable independent of base}
 
 \emph{Description:}
@@ -631,55 +599,10 @@ void drawMyApp() {
 \end{codeblock}
 As long as the client uses the \tcode{SuperWidget} interface instead of the base \tcode{Widget} interface for their widgets above, their program is correct --- there is no contract violation. Adding the above function contract assertions to \tcode{Widget::}\allowbreak\tcode{addChildWidget} should not break the client's correct program by introducing a precondition assertion violation to it.
 
-
-\prop{NoRemoteAss}{Do not evaluate remote assertions}
-
-\emph{Description:}
-
-The set of function contract assertions evaluated during a virtual function call should be limited to the function contract assertions declared on the functions directly participating in that call: the statically called
-% TD: TODO: CHANGE THROUGHOUT: this is called "statically chosen" not "statically called"
-function and the function actually executed (i.e., chosen by dynamic dispatch). 
-
-\emph{Motivation:}
-
-When debugging a C++ program, being able to quickly identify the source of a problem is key to productivity. When a virtual function call causes a contract assertion to fail, it is important to be able to quickly identify the offending assertion.
-
-If a virtual function call evaluates function contract assertions declared on functions other than those directly participating in the offending call (e.g., on overridden functions further down the inheritance hierarchy), those assertions may be very difficult to locate. This is particularly true for large codebases where inheritance hierarchies can be very complex, and base and derived classes can be spread across different components of the codebase (including third-party code).
-
-\emph{Countermotivation:}
-
-This property conflicts with inheriting function contract assertions, whether this happens by default (\propref{InhDefault}) or explicitly (\propref{InhBase}, \propref{InhDerived}). Further, the \emph{members} of a base class are already inherited automatically in every derived class; this does not seem to cause problems in practice. Finally, concerns regarding efficiently navigating a codebase could be addressed via tooling.
-
-\emph{Example:}
-
-Consider a contract-violation handler that triggers a breakpoint:
-
-\begin{codeblock}
-void handle_contract_violation(const contract_violation& cv) {
-    std::breakpoint(); // or just a manual breakpoint set in the IDE
-}
-\end{codeblock}
-
-Now, let us assume we trigger this breakpoint while debugging a C++ program. In order to understand which contract assertion failed, we use our debugger to walk up the stack.  One stackframe up, we see a function with a precondition assertion:
-
-\begin{codeblock}
-int GzipCompressionBuffer::writeChars(char* chars, size_t count)
-pre (chars != nullptr) {   // <---
-  // some code
-}
-\end{codeblock}
-
-Another stackframe up, we see the callsite:
-
-\begin{codeblock}
-void readAppState(InputBuffer& ib) {
-  // some code
-  ib.writeChars(data, n);   // <---
-}
-\end{codeblock}
-
-Now, we inspect the function contract assertions of \tcode{GzipCompressionBuffer::}\allowbreak\tcode{writeChars} and those of \tcode{InputBuffer::}\allowbreak\tcode{writeChars} to determine what went wrong. It would be unfortunate if we would also have to consult the function contract assertions of the corresponding functions in every single other class that forms part of that inheritance hiearachy, for example \tcode{Buffer::}\allowbreak\tcode{writeChars} in some base class further up the hierarchy, or \tcode{CompressionBuffer::}\allowbreak\tcode{writeChars} in some intermediate class.
-
+% TD: There are other possible properties, somewhat related, that we could consider here (some of them I have written up already but did not include in the paper):
+% - a qualified (i.e., non-virtual) call to a virtual function should evaluate the same FCAs as a virtual call to the same function if it is both the statically chosen function and the final overrider selected by virtual dispatch;
+% - the only FCAs that should be evaluated in a virtual function call are those associated with the statically chosen function and the final overrider; when debugging a contract violation, the developer should not have to browse the entire inheritance hierarchy (which may be complex and spread over different components) to find the offending assertion
+% - P2900R14 Principle 10: The evaluation of a function contract assertion must be tied to the evaluation of the function to which the function contract assertion is attached so that the assertion will verify the plain-language contract (or some proper subset of the plain-language contract) of that function, not of some other function.
 
 \subsubsection{Single inheritance use cases}
 

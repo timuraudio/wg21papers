@@ -80,7 +80,7 @@ In the future, the Standard can also further narrow the set of values that are t
 \item One operand is an erroneous operand of a type that has no NaN or trapping values.
 \item The other operand is a non-errroneous .
 \end{itemize}
-Similar rules could be written when using the mod (\tcode{%}) operator with a $1$ value as the righthand argument, using bitwise operators with $0$ and all-$1$ operands, or various bit-shift operations.   On the other hand, these rules are complicated, not universally portable, and do nothing but make questionable code slightly less questionable.   Therefore we recommend, at least initially, having all expressions that make use of an erroneous value result in an erroneous value.
+Similar rules could be written when using the mod (\tcode{\%}) operator with a $1$ value as the righthand argument, using bitwise operators with $0$ and all-$1$ operands, or various bit-shift operations.   On the other hand, these rules are complicated, not universally portable, and do nothing but make questionable code slightly less questionable.   Therefore we recommend, at least initially, having all expressions that make use of an erroneous value result in an erroneous value.
 
 One subtlety to note is how this interacts with the short-circuiting logical operators.  These do not even evaluate their second operand if the first operand determines their result.  For these operators we will never actually evaluate a short-circuited subexpression to even know if its values is erroneous, and thus we need to restrict our propagation of erronneous values to come only from those operands that are themselves actually evaluated.
 
@@ -117,7 +117,10 @@ the result of the evaluation is the value so produced \removed{but is not errone
 \end{adjustwidth}
 
 
-%JMB: TODO: add acknowledgements for Richard Smith, Thurston Dang, Iain Sandoe, Thomas K\"{o}ppe
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgements}
+Thanks to  Richard Smith, Thurston Dang, Thomas K\"{o}ppe, and Iain Sandoe for providing valuable feedback on this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

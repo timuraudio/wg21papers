@@ -79,8 +79,8 @@ In the future, the Standard can also further narrow the set of values that are t
 \begin{itemize}
 \item The operator is multiplication (\tcode{*}).
 \item The result type is an integer type.
-\item One operand is an erroneous operand of a type that has no NaN or trapping values.
-\item The other operand is a non-erroneous.
+\item One operand is an erroneous value of a type that has no NaN or trapping values.
+\item The other operand is a non-erroneous zero value.
 \end{itemize}
 Similar rules could be written when using the mod (\tcode{\%}) operator with a $1$ value as the righthand argument, using bitwise operators with $0$ and all-$1$ operands, or various bit-shift operations.   On the other hand, these rules are complicated, not universally portable, and do nothing but make questionable code slightly less questionable.   Therefore we recommend, at least initially, having all expressions that make use of an erroneous value result in an erroneous value.
 

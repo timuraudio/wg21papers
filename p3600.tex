@@ -180,7 +180,7 @@ A more detailed history of function contract assertions on virtual functions in 
 
 \subsection{Methodology}
 
-The goals of this paper are twofold: to identify the design for supporting \tcode{pre} and \tcode{post} on virtual functions that best satisfies the needs of the C++ community, and to facilitate establishing consensus in WG21 in favour of such a design. To achieve these goals, we analyse the available design space as exhaustively and objectively as possible. Our analysis follows the method for finding consensus on technical design questions developed in \cite{P3099R0}. This method is an evolution and adaptation of the Principled Design method developed in \cite{P3004R0} and \cite{P3005R0}.
+The goals of this paper are twofold: to identify the design for supporting \tcode{pre} and \tcode{post} on virtual functions that best satisfies the needs of the C++ community, and to facilitate establishing consensus in WG21 in favour of such a design. To achieve these goals, we analyse the available design space as exhaustively and objectively as possible. Our analysis follows the method for finding consensus on technical design questions developed in \cite{P3850R0}. This method is an evolution and adaptation of the Principled Design method developed in \cite{P3004R0} and \cite{P3005R0}.
 
 We begin by establishing the basic terms and concepts used in the remainder of the paper (Section~\ref{prerequisites}). We then identify the desirable properties that a design for this language feature should exhibit (Section~\ref{properties}). We take into account all relevant properties that were articulated by members of WG21. We describe each property as precisely as possible, along with motivation for and against, use cases, and code examples. To minimise bias, we treat all properties equally and do not attempt to rank them by importance or other criteria.
 
@@ -339,7 +339,7 @@ Each property is given a short unique identifier to easily refer to it later in 
 \item \emph{Countermotivation} (where applicable): Known arguments against satisfying this property; known incompatibilities with other properties.
 \item \emph{Example} (where applicable): Code example(s) illustrating use cases and motivation for the property. We strive to provide realistic examples rather than ``toy code'' whenever possible. 
 \end{itemize}
-We follow the consensus-building method developed in \cite{P3099R0}; thus, we focus on data and objectively verifiable information rather than opinions, and do our best to minimise cognitive bias and value judgments when describing the desirable properties. In particular, we do not attempt to rank the listed properties by priority, relevance, or otherwise. 
+We follow the consensus-building method developed in \cite{P3850R0}; thus, we focus on data and objectively verifiable information rather than opinions, and do our best to minimise cognitive bias and value judgments when describing the desirable properties. In particular, we do not attempt to rank the listed properties by priority, relevance, or otherwise. 
 
 Some of the listed properties were originally articulated as ``design principles that must be adhered to'',  ``very important use cases'', ``necessary conditions for successfully deploying the feature'', etc. For the purpose of this analysis, we carefully avoid such characterisations and instead treat all properties equally. For properties that are describing a use case, we avoid any claims of how common (or contrived) it is due to lack of data from real-world code bases backing up such claims.
 

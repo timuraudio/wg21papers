@@ -17,10 +17,10 @@
 \maketitle
 
 \begin{tabular}{ll}
-Document \#: & P3684R0 \\
-Date: &2025-09-18 \\
+Document \#: & P3684R1 \\
+Date: &2025-11-07 \\
 Project: & Programming Language C++ \\
-Audience: & EWG
+Audience: & EWG, CWG
 \end{tabular}
 
 \begin{abstract}
@@ -86,6 +86,8 @@ Similar rules could be written when using the mod (\tcode{\%}) operator with a $
 
 One subtlety to note is how this interacts with the short-circuiting logical operators.  These do not even evaluate their second operand if the first operand determines their result.  For these operators we will never actually evaluate a short-circuited subexpression to even know if its values is erroneous, and thus we need to restrict our propagation of erroneous values to come only from those operands that are themselves actually evaluated.
 
+This proposal resolves NB comment GB 02-036.
+
 \section{Wording}
 
 The proposed wording is relative to \cite{N5014}. 
@@ -93,7 +95,7 @@ The proposed wording is relative to \cite{N5014}.
 Modify [intro.abstract] paragraph 6 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
-A conforming implementation executing a well-formed program shall produce the same observable behavior as one of the possible executions of the corresponding instance of the abstract machine with the same program and the same input. However, if any such execution contains an undefined operation, this document places no requirement on the implementation executing that program with that input (not even with regard to operations preceding the first undefined operation). If the execution contains an operation specified as having erroneous behavior, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution\removed{ at an unspecified time after that operation}.
+A conforming implementation executing a well-formed program shall produce the same observable behavior of the defined prefix of one of the possible executions of the corresponding instance of the abstract machine with the same program and the same input. If the selected execution contains an undefined operation, the implementation executing that program with that input may produce arbitrary additional observable behavior afterwards. If the execution \removed{contains}\added{of} an operation\added{ is} specified as having erroneous behavior, the implementation is permitted to issue a diagnostic and is permitted to terminate the execution \removed{at an unspecified time after that operation}\added{of the program}.
 \end{adjustwidth}
 
 
@@ -101,15 +103,16 @@ Modify [basic.indet], paragraph 2 as follows:
 
 \begin{adjustwidth}{0.5cm}{0.5cm}
 \begin{addedblock}
-If an erroneous value is produced by the evaluation of any builtin operation, the behavior is erroneous.
-If any operand of a built-in operator is evaluated and produces an erroneous value then the value
-produced by that operator is erroneous.
+If any operand of a built-in operator that produces a prvalue is evaluated, is not a discarded-value expression ([expr.context]), and produces an erroneous value, then the value produced by that operator is erroneous.
+% TODO:
+% - discarded values (comma operator)
+% - lvaue-to-rvalue conversion
+% - all the other conversions as well
 \end{addedblock}
 
 Except in the following cases, if an indeterminate value is produced by an evaluation,
 the behavior is undefined  and if an erroneous value is produced by an evaluation, the behavior is erroneous and
-the result of the evaluation is the value so produced \removed{but is not erroneous}
-\added{and it is erroneous}:
+the result of the evaluation is \removed{the value so produced but is not erroneous}\added{that erroneous value}:
 \begin{itemize}
 \item If an indeterminate or erroneous value of unsigned ordinary character type ([basic.\allowbreak{}fundamental]) or \tcode{std::byte} type ([cstddef.syn]) is produced by the evaluation of:  \\ ...
 \end{itemize}
@@ -119,12 +122,12 @@ the result of the evaluation is the value so produced \removed{but is not errone
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\pagebreak % MANUAL
 \section*{Acknowledgements}
 Thanks to  Richard Smith, Thurston Dang, Thomas K\"{o}ppe, and Iain Sandoe for providing valuable feedback.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\pagebreak
 \renewcommand{\bibname}{References}  % custom name for bibliography
 \bibliographystyle{abstract}
 \bibliography{ref}

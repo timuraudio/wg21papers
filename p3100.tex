@@ -94,7 +94,7 @@
 
 \begin{tabular}{ll}
 Document \#: & D3100R5 \\
-Date: &2025-10-22 \\
+Date: &2025-11-07 \\
 Project: & Programming Language C++ \\
 Audience: & EWG
 \end{tabular}
@@ -118,16 +118,20 @@ Building on Contracts as adopted for C++26, we provide a generic framework for a
 \tableofcontents*
 \pagebreak
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%\section*{Revision history}
+\section*{Revision history}
+\begin{itemize}
+\item \textbf{R5}, 2025-11-07: Added one more case of UB that was initially overlooked because it did not use the word ``undefined' in the wording
+\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3754R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; added discussion of interaction with \tcode{noexcept}; improved paper structure; changed title to reflect the wider scope.
+\item \textbf{R3}, 2025-06-28: Removed preprocessor UB due to adoption of \cite{P2843R3} into C++26.
+\item \textbf{R2}, 2025-05-19: Complete rewrite after the WG21 meeting in Hagenberg.
+\item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.
+\item \textbf{R0}, 2023-03-08: Initial version.
+\end{itemize}
 
-%Revision 0 (2024-04-16)
-%\begin{itemize}
-%\item Original version
-%\end{itemize}
-
-%\pagebreak
+\pagebreak
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -967,17 +971,6 @@ Such a label would be a vast improvement over today's \tcode{[[assume]]} attribu
 Thanks to Ga\v{s}per A\v{z}man, Herb Sutter, Oliver Rosten, Andrzej Krzemie{\'n}ski, Roger Orr, Phil Nash, and Peter Bindels for their helpful feedback on previous revisions of this paper.
 
 Thanks to Lori Hughes for reviewing a previous revision this paper and providing editorial feedback. 
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-\section*{Document history}
-\begin{itemize}
-\item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3754R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; added discussion of interaction with \tcode{noexcept}; improved paper structure; changed title to reflect the wider scope.
-\item \textbf{R3}, 2025-06-28: Removed preprocessor UB due to adoption of \cite{P2843R3} into C++26.
-\item \textbf{R2}, 2025-05-19: Complete rewrite after the WG21 meeting in Hagenberg.
-\item \textbf{R1}, 2024-10-16: Complete rewrite after the WG21 meeting in St. Louis.
-\item \textbf{R0}, 2023-03-08: Initial version.
-\end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

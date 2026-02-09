@@ -298,7 +298,7 @@ are partially locally diagnosable (only if the array bound is statically known).
 \{expr.static.cast.downcast.wrong.derived.type\},
 \{expr.unary.dereference\}, 
 \{conv.ptr.virtual.base\}, and
-\{expr.dynamic.cast.lifetime\}
+\{expr.dynamic.cast.pointer.lifetime\}
 are partially locally diagnosable (for the null pointer case).
 \{expr.mptr.oper.member.func.null\} is locally diagnosable because this case requires \emph{only} a null pointer check.
 \{basic.align.object.alignment\} is locally diagnosable by checking the alignment of storage when creating an object at run time.
@@ -353,7 +353,7 @@ A slightly more expensive but still cheap and optimiser-friendly kind of check i
 (\{expr.static.cast.downcast.wrong.derived.type\},
 \{expr.unary.deref\-erence\},
 \{conv.ptr.virtual.base\},
-\{expr.dynamic.cast.lifetime\}, 
+\{expr.dynamic.cast.pointer.lifetime\}, 
 \{expr.mptr.oper.member.\linebreak[3]func.null\}, and
 \{expr.new.non.allocating.null\})
 as well as division by zero (\{expr.mul.div.by.zero\}).

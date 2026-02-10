@@ -1048,7 +1048,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \\ \hline
 \ubxref{lifetime.outside.glvalue.member} & \raggedright [basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used to call a non-static member function of the object [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.glvalue.ref.virtual} & \raggedright[basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is bound to a reference to a virtual base class ([dcl.init.ref]) [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
+\ubxref{lifetime.outside.glvalue.virtual} & \raggedright[basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is bound to a reference to a virtual base class ([dcl.init.ref]) [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
 \ubxref{lifetime.outside.glvalue.dynamic.cast} & \raggedright[basic.life]/8: [...] The program has undefined behavior if [...] the glvalue is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]) or as the operand of \tcode{typeid}. & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline

@@ -167,7 +167,7 @@ will enable programmatically identifying the category of UB that has occurred an
 
 We manually inspected all occurrences of the words ``undefined'' and ``assume'' in revision \cite{N5008} of the C++ working paper.
 %TD: Should we repeat this exercise for the more current revision N5014? Is there a way to do this more efficiently than having to search for all occurrences again?
-We then constructed a list of all cases of explicitly specified core language UB. We found 80 instances of explicit language UB introduced with phrases containing the word ``undefined'' (``...the behaviour is undefined'', ``...has undefined behaviour'', ``...results in undefined behaviour'', etc.) and one instance of explicit language UB introduced with a phrase containing the word ``assume'' (``the implementation may assume...'').\footnote{Except for this one occurrence, which is in [intro.progress]/1, the verb ``assume'' in core wording does not imply that there may be undefined behaviour, but instead means things like ``this case will be treated as the default'' or ``other cases will be ignored''. To remove ambiguity, \cite{CWG2816} proposes to change the wording in [intro.progress]/1 to use the phrase ``the behaviour is undefined'' instead of ``the implementation may assume''.} We thus obtained a list with 81 cases of explicit language UB; it can be found in \hyperref[appendix]{Appendix~A} of this paper. 
+We then constructed a list of all cases of explicitly specified core language UB. We found 79 instances of explicit language UB introduced with phrases containing the word ``undefined'' (``...the behaviour is undefined'', ``...has undefined behaviour'', ``...results in undefined behaviour'', etc.) and one instance of explicit language UB introduced with a phrase containing the word ``assume'' (``the implementation may assume...'').\footnote{Except for this one occurrence, which is in [intro.progress]/1, the verb ``assume'' in core wording does not imply that there may be undefined behaviour, but instead means things like ``this case will be treated as the default'' or ``other cases will be ignored''. To remove ambiguity, \cite{CWG2816} proposes to change the wording in [intro.progress]/1 to use the phrase ``the behaviour is undefined'' instead of ``the implementation may assume''.} We thus obtained a list with 80 cases of explicit language UB; it can be found in \hyperref[appendix]{Appendix~A} of this paper. 
 
 Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ working paper's clause identifiers, which we place between [square brackets].
 
@@ -221,7 +221,7 @@ that case is, therefore, also excluded from our list.
                after number = \,,   % keeps numbers tidy (adds thin space)
                /tikz/nodes={font=\small} % tweak font size if needed
             ]
-            {1/I. Initialisation, 5/II. Bounds, 51/III. Type and Lifetime, 9/IV. Arithmetic, 2/V. Threading, 1/VI. Sequencing, 1/VII. Assumptions, 5/VIII. Control Flow, 3/IX. Replacement Functions, 3/X. Coroutines}
+            {1/I. Initialisation, 5/II. Bounds, 50/III. Type and Lifetime, 9/IV. Arithmetic, 2/V. Threading, 1/VI. Sequencing, 1/VII. Assumptions, 5/VIII. Control Flow, 3/IX. Replacement Functions, 3/X. Coroutines}
     \end{tikzpicture}
     \caption{Distribution of identified cases of explicit language UB across specified categories}
     \label{piechart_categories}
@@ -234,7 +234,7 @@ We found that all identified cases of core language UB can be classified into te
 \begin{enumerate}
 \item \textbf{Initialisation} --- 1 case. Evaluating an expression that produces an indeterminate value.
 \item \textbf{Bounds} --- 5 cases. Using a pointer in a way that fails to respect the range of the pointed-to object or array. Examples: incrementing a pointer beyond the past-the-end position; performing single-object delete on an operand obtained from an array-new expression;  dereferencing a pointer returned from a request for zero size.
-\item \textbf{Type and Lifetime} --- 51 cases. Operations that access storage and/or use pointers or references to storage in an inappropriate way that is not already covered by Initialisation and Bounds. Examples: attempting to access a value of one type through  a pointer of a different, incompatible type; attempting to access the value of an object after its lifetime has ended. 
+\item \textbf{Type and Lifetime} --- 50 cases. Operations that access storage and/or use pointers or references to storage in an inappropriate way that is not already covered by Initialisation and Bounds. Examples: attempting to access a value of one type through  a pointer of a different, incompatible type; attempting to access the value of an object after its lifetime has ended. 
 \item \textbf{Arithmetic} --- 9 cases. Executing an arithmetic operation whose operands fail to meet certain preconditions. Examples: division by zero; conversion of a value to a different arithmetic type that cannot represent that value. 
 \item \textbf{Threading} --- 2 cases. Data races; non-trivial infinite loops with no side effects.
 \item \textbf{Sequencing} --- 1 case. Performing two concurrent accesses, at least one of which is modifying, to the same memory location from the same thread where neither access is sequenced before the other.
@@ -244,13 +244,13 @@ We found that all identified cases of core language UB can be classified into te
 \item \textbf{Coroutines} --- 3 cases. Misusing coroutine machinery. Examples: destroying a coroutine that is not suspended; failing to provide a \tcode{return_void} function for a coroutine that does not return a value.
 \end{enumerate}
 
-Figure \ref{piechart_categories} shows the distribution of the 81 identified cases of explicit core language UB across these ten basic categories. 
+Figure \ref{piechart_categories} shows the distribution of the 80 identified cases of explicit core language UB across these ten basic categories. 
 
 The categories of Initialisation, Bounds, and Type and Lifetime correspond to the common terms \emph{initialisation safety}, \emph{bounds safety}, \emph{type safety},  and \emph{lifetime safety}, respectively, and collectively represent UB that is commonly referred to with the umbrella term \emph{memory safety}. Much of the ongoing work around how to ``make C++ safe'' is focused on these  categories (see \cite{P3081R2}, \cite{P3700R0}, and references therein).
 
 Because unambiguously categorising a particular case of UB into either \emph{type safety} or \emph{lifetime safety} is often impossible since it concerns both, we grouped them into a single combined category, Type and Lifetime. While some cases of UB are primarily caused by type aliasing and others are primarily caused by out-of-lifetime accesses, they form a spectrum, and many common operations in C++ (e.g., using a reference) rely on \emph{both} type and lifetime constraints to be satisfied.
 
-Remarkably, these three categories related to memory safety account for 57 cases of UB, or 70.4\% of all identified cases; the Type and Lifetime category alone accounts for 51 cases of UB, or 63.0\% of all identified cases.
+Remarkably, these three categories related to memory safety account for 56 cases of UB, or 70\% of all identified cases; the Type and Lifetime category alone accounts for 50 cases of UB, or 62.5\% of all identified cases.
 
 The next two categories, Arithmetic and Threading, correspond to the common terms \emph{arithmetic safety} and \emph{thread safety}, respectively. Note that  the term thread safety is often used to refer to data races specifically and does not include the other case of UB we placed in the Threading category (infinite loops with no side effects).
 
@@ -276,7 +276,7 @@ The second question \cite{P3656R1} asks is which cases of UB are ``efficiently l
 \subsubsection{Static vs. dynamic diagnosis}
 \label{statically}
 
-A commonly asked question is ``why does the committee not simply make all the UB ill-formed instead''? The answer is that in order for that to happen, it would be necessary to determine statically --- i.e., at compile time --- whether a given operation in a C++ program would lead to UB when executed at run time. However, whether a C++ program will have UB when executed is fundamentally a \emph{runtime} property, i.e., the answer depends on runtime values unknown at compile time (for example, the runtime value of a pointer or an integer). Therefore, in the vast majority of cases, such a compile-time determination cannot be made. In fact, in our entire list of 81 cases of UB, we cannot identify \emph{any} cases that can unconditionally be diagnosed at compile time.
+A commonly asked question is ``why does the committee not simply make all the UB ill-formed instead''? The answer is that in order for that to happen, it would be necessary to determine statically --- i.e., at compile time --- whether a given operation in a C++ program would lead to UB when executed at run time. However, whether a C++ program will have UB when executed is fundamentally a \emph{runtime} property, i.e., the answer depends on runtime values unknown at compile time (for example, the runtime value of a pointer or an integer). Therefore, in the vast majority of cases, such a compile-time determination cannot be made. In fact, in our entire list of 80 cases of UB, we cannot identify \emph{any} cases that can unconditionally be diagnosed at compile time.
 
 Of course, static analysis is still useful and widely used in the field. There are many situations where static analysis \emph{can} detect a bug that would lead to UB when executed, because the relevant values or conditions happen to be known at compile time in the particular program at hand. However, given an existing C++ program, any approach based on static analysis fundamentally has to choose between \emph{false positives} (rejecting code for which no proof can be constructed one way or another, even if that code happens to be correct) and \emph{false negatives} (accepting incorrect code that will lead to UB when executed). 
 
@@ -317,7 +317,7 @@ Some cases of UB in the Replacement Function category are partially or fully loc
 
 Finally, one case of UB in the Coroutine category, {stmt.return.coroutine.flow.off\}, is locally diagnosable in a way analogous to \{stmt.return.flow.off\} by inserting a check at the end of a coroutine for which no \tcode{return_void} function is provided. The remaining two cases of UB in that category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations. 
 
-Overall, as shown in Figure~\ref{piechart_locally}, only 19 cases of UB (23.5\% of all cases) are unconditionally locally diagnosable at run time, while 58 cases of UB (72.5\%) are not; these cases require instrumentation of the code in order to be diagnosed at run time. We will discuss these requirements in more detail in Section~\ref{cost_nonlocal}. In addition, 4 cases of UB (4.9\%) are not checkable at all in the general case, even with additional instrumentation.
+Overall, as shown in Figure~\ref{piechart_locally}, only 19 cases of UB (23.75\% of all cases) are unconditionally locally diagnosable at run time, while 58 cases of UB (72.5\%) are not; these cases require instrumentation of the code in order to be diagnosed at run time. We will discuss these requirements in more detail in Section~\ref{cost_nonlocal}. In addition, 4 cases of UB (5\%) are not checkable at all in the general case, even with additional instrumentation.
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 \vspace{5mm} % added manually to create enough space between text and piechart
@@ -333,7 +333,7 @@ Overall, as shown in Figure~\ref{piechart_locally}, only 19 cases of UB (23.5\% 
                after number = \,,   % keeps numbers tidy (adds thin space)
                /tikz/nodes={font=\small} % tweak font size if needed
             ]
-            {19/Checkable locally, 6/Checkable locally in some cases, 52/Checking requires instrumentation, 4/Checking not possible in general}
+            {19/Checkable locally, 6/Checkable locally in some cases, 51/Checking requires instrumentation, 4/Checking not possible in general}
     \end{tikzpicture}
     \caption{Runtime diagnosability of explicit core language UB}
     \label{piechart_locally}
@@ -425,8 +425,6 @@ On the other hand, producing an erroneous value (instead of, for example, the va
 
 Further, we cannot in general define replacement behaviour for uninitialised variables of user-defined type. Even if we could zero out all the underlying storage for user-defined types (or overwrite it with some other known bit pattern), doing so does not always produce, for that type, a valid value that can be accessed without UB. (Consider a user-defined type that relies on a member pointer always being dereferenceable.) Therefore, \{basic.indet.value\} does not have replacement behaviour for the general case.
 
-
-
 Practically \emph{none} of the UB in the categories of Bounds and Type and Lifetime have any plausible replacement behaviour. The only exception is \{conv.lval.valid.representation\}: if the bits in the value representation of an object of built-in type are not valid for that type, the compiler could instead coerce the value into an erroneous value.\footnote{This property of \{conv.lval.valid.representation\} is a potential argument for placing this case of UB into the Arithmetic category instead of the Type and Lifetime category as we did here.} For example, in the code example given in the C++ working paper,
 
 \begin{codeblock}
@@ -452,7 +450,7 @@ The replacement behaviour for UB in the Assumption category (\{dcl.attr.assume.f
 Finally, we can define partial replacement behaviour for one cases of UB in the Control Flow category  (\{stmt.return.flow.off\}) and an analogous case of UB in the Coroutines category (\{stmt.return.
 coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is effectively handled in the same way as \{basic.indet.value\}; again, no plausible replacement behaviour exists for user-defined return types in the general case.
 
-Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful replacement behaviour for only 17 cases of UB (1.0\% of all cases). Out of these 17 cases, for 3 cases this is only possible when the operation in question produces a value of built-in type. Unconditional replacement behaviour exists for only 14 cases of UB (17.3\% of all cases). In all of these cases, the replacement behaviour consists of erroneous behaviour; in most cases, removing the UB in this manner introduces significant runtime cost.
+Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful replacement behaviour for only 17 cases of UB (21.25\% of all cases). Out of these 17 cases, for 3 cases this is only possible when the operation in question produces a value of built-in type. Unconditional replacement behaviour exists for only 14 cases of UB (17.5\% of all cases). In all of these cases, the replacement behaviour consists of erroneous behaviour; in most cases, removing the UB in this manner introduces significant runtime cost.
 % TD: "replacement behaviour consists of erroneous behaviour" sounds awkward
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -469,7 +467,7 @@ Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful
                after number = \,,   % keeps numbers tidy (adds thin space)
                /tikz/nodes={font=\small} % tweak font size if needed
             ]
-            {14/Can be replaced by EB, 3/Can be replaced by EB in some cases, 64/No meaningful replacement exists}
+            {14/Can be replaced by EB, 3/Can be replaced by EB in some cases, 63/No meaningful replacement exists}
     \end{tikzpicture}
     \caption{Existence of well-defined replacement behaviour for explicit core language UB}
     \label{piechart_replacement}
@@ -549,7 +547,7 @@ In this paper, we go further and propose to introduce erroneous behaviour for \e
 \subsubsection{Runtime checks}
 \label{checks}
 
-As we saw in Section~\ref{diagnose}, the large majority of UB (77 cases out of 81) can in principle be diagnosed by inserting and performing a suitable runtime check. The check verifies the conditions necessary for the operation in question to have well-defined behaviour at run time. It also acts as a guard against UB: if the check fails, the program can be terminated, thus preventing the undefined behaviour from occurring.
+As we saw in Section~\ref{diagnose}, the vast majority of UB (77 cases out of 80, or 96.25\% of all cases) can in principle be diagnosed by inserting and performing a suitable runtime check. The check verifies the conditions necessary for the operation in question to have well-defined behaviour at run time. It also acts as a guard against UB: if the check fails, the program can be terminated, thus preventing the undefined behaviour from occurring.
 
 While such runtime checks invariably add runtime overhead, they are very effective at both diagnosing bugs and removing security vulnerabilities. In Sections~\ref{design} and \ref{wording} of this paper, we propose a generic framework for systematically adding runtime checks to C++ core language constructs via implicit contract assertions.
 % TD: Explain that some of these runtime checks are theoretically possible but really infeasible - race conditions
@@ -647,7 +645,7 @@ Other than being an implicit precondition assertion automatically generated by t
 \subsection{Applying implicit contract assertions}
 \label{applyicas}
 
-Having specified precisely what an implicit contract assertion is and how it behaves, we can now apply that specification to \emph{every} case of UB  that is --- at least in principle --- checkable at run time. As we saw in Section~\ref{analysis}, this is true for 77 cases, that is, 95\% of all identified cases of explicit core language UB in C++.
+Having specified precisely what an implicit contract assertion is and how it behaves, we can now apply that specification to \emph{every} case of UB  that is --- at least in principle --- checkable at run time. As we saw in Section~\ref{analysis}, this is true for 77 cases, that is, 96.25\% of all identified cases of explicit core language UB in C++.
 
 This feat can be accomplished by applying the following transformation across the entire C++ Standard: change every occurrence of “if $A$ is not \tcode{true}, operation $X$ has undefined behaviour'' to ``operation $X$ has an implicit precondition that $A$ is \tcode{true}; continuing execution past a violation of this precondition is undefined behaviour''.
 
@@ -873,7 +871,7 @@ Modify all cases of UB checkable at run time \emph{without} replacement behaviou
 For an object with a non-trivial destructor, referring to any non-static member or base class of the object \added{has an implicit precondition assertion that the destructor has not yet finished}\removed{after the destructor finishes} execution\added{; continuing execution past a violation of this precondition assertion} results in undefined behavior.
 \end{adjustwidth}
 
-Written-out wording for all 79 cases of UB checkable at run time listed in \hyperref[appendix]{Appendix~A} can be provided in a future revision of this paper.
+Written-out wording for all 77 cases of UB checkable at run time listed in \hyperref[appendix]{Appendix~A} can be provided in a future revision of this paper.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1038,9 +1036,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \\ \hline
 \ubxref{lifetime.outside.pointer.member} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used to access a non-static data member or call a non-static member function of the object, [...]  & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
-\ubxref{lifetime.outside.pointer.virtual} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is implicitly converted ([conv.ptr]) to a pointer to a virtual base class [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
-\\ \hline
-\ubxref{lifetime.outside.pointer.static.cast} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{static_cast} ([expr.static.cast]), except when the conversion is to pointer to $cv$ \tcode{void}, or to pointer to $cv$ \tcode{void} and subsequently to pointer to $cv$ \tcode{char}, $cv$ \tcode{unsigned char}, or $cv$ \tcode{std::byte} ([cstddef.syn]) [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
+\ubxref{lifetime.outside.pointer.virtual} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is converted ([conv.ptr], [expr.static.cast]) to a pointer to a virtual base class or a base class thereof [...] & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline
 \ubxref{lifetime.outside.pointer.dynamic.cast} & \raggedright[basic.life]/7: [...] The program has undefined behavior if [...] the pointer is used as the operand of a \tcode{dynamic_cast} ([expr.dynamic.cast]). & Yes & No & \raggedright Track whether storage is associated with an object of correct type within its lifetime & None
 \\ \hline

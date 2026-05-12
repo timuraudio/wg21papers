@@ -123,7 +123,7 @@ Building on Contracts as adopted for C++26, we provide a generic framework for a
 
 \section*{Revision history}
 \begin{itemize}
-\item \textbf{R6}, 2026-05-12: Added full wording for all cases of UB; rebased on \cite{P3596R1}; added history and polls section
+\item \textbf{R6}, 2026-05-12: Added full wording for all cases of UB; rebased on \cite{P3596R1}; simplified diagnosability criteria; added history and polls section
 \item \textbf{R5}, 2025-11-07: Added one more case of UB that was initially overlooked because it did not use the word ``undefined' in the wording
 \item \textbf{R4}, 2025-08-13: Updated the paper to align with \cite{P3754R0}; incorporated feedback from the WG21 meeting in Sofia; removed items from UB list that should not be specified as UB and have Core issues to make it so; added discussion of interaction with \tcode{noexcept}; improved paper structure; changed title to reflect the wider scope.
 \item \textbf{R3}, 2025-06-28: Removed preprocessor UB due to adoption of \cite{P2843R3} into C++26.
@@ -362,35 +362,30 @@ As we will see in Section~\ref{strategy}, despite these fundamental limitations 
 
 An important property for diagnosis of UB is whether such diagnosis (whether static or dynamic) can be performed \emph{locally}, i.e. without keeping track of additional information across the entire program that is not available within the C++ abstract machine (achievable with additional instrumentation of the kind that is implemented in sanitisers, such as ASan and UBSan) and without analysing code in other branches (which is limited by the Halting problem) or on the other side of a function call boundary (which might be located in another TU and therefore inaccessible).
 
-Most cases of UB in the Initialisation, Bounds, and Type and Lifetime categories are, in general, \emph{not} locally diagnosable but require instrumentation applied across the entire program to be diagnosed. They could potentially be made locally diagnosable in the future with the introduction of novel features such as lifetime annotations \cite{P2771R1} or ``ghost data'' \cite{Lippincott2025} which are the subject of ongoing research. We discuss some of these approaches in Section~\ref{strategy}; here, we focus on the status quo in  Standard C++.
+Most cases of UB in the Initialisation, Bounds, and Type and Lifetime categories are, in the \emph{general} case, \emph{not} locally diagnosable --- and this is an inherent limitation of the C++ object model, see \cite{Baxter2024} --- but require instrumentation applied across the entire program to be reliably diagnosed.
 
-In the Bounds category, 
-\{expr.add.out.of.bounds\} 
-and \{expr.add.sub.diff.pointers\} 
-are partially locally diagnosable (only if the array bound is statically known). In the Type and Lifetime category,
-\{expr.static.cast.downcast.wrong.derived.type\},
-\{expr.unary.dereference\}, 
-\{conv.ptr.virtual.base\}, and
-\{expr.dynamic.cast.pointer.lifetime\}
-are partially locally diagnosable (for the null pointer case).
+Of course, ``not locally diagnosable in general'' does not mean ``\emph{never} locally diagnosable'': under special circumstances, such cases of UB can be locally diagnosable --- for example, if an array bound happens to be statically known, if a pointer happens to be null and not otherwise invalid/dangling, or if additional information about control flow and object values can be inferred from local analysis --- and existing static analysis tools diagnose such cases today. This set of special cases could be further enlarged in the future with the introduction of novel features such as lifetime annotations \cite{P2771R1} or ``ghost data'' \cite{Lippincott2025}, which are the subject of ongoing research. We discuss some of these approaches in Section~\ref{strategy}; here, we focus on the status quo in  Standard C++.
+
+In the Initialisation category, no cases of UB are generally locally diagnosable, as C++ does not enforce initialisation and unitialised objects can be passed around arbitrarily. In the Bounds category, no cases of UB are generally locally diagnosable because array bounds are generally not known.
+
+In the Type and Lifetime category, 
 \{expr.mptr.oper.member.func.null\} is locally diagnosable because this case requires \emph{only} a null pointer check.
 \{basic.align.object.alignment\} is locally diagnosable by checking the alignment of storage when creating an object at run time.
-\{expr.assign.overlap\} is locally diagnosable by checking the overlap of the two address ranges. (The ranges are known because the address and \tcode{sizeof} are known at run time for both the source and the destination object.) \{class.abstract.pure.virtual\} is locally diagnosable by adding a runtime check to  the pure virtual function stub to which the base class vtable points. None of the other cases of UB in the Initialisation, Bounds, and Type and Lifetime categories are locally diagnosable.
+\{expr.assign.overlap\} is locally diagnosable by checking the overlap of the two address ranges. (The ranges are known because the address and \tcode{sizeof} are known at run time for both the source and the destination object.) \{class.abstract.pure.virtual\} is locally diagnosable by adding a runtime check to  the pure virtual function stub to which the base class vtable points. None of the other cases of UB in the Type and Lifetime categories are locally diagnosable in general.
 
-All cases of UB in the Arithmetic category are locally diagnosable since they are all cases of an arithmetic operation producing a value that is somehow inappropriate (mathematically invalid, not representable in the target type, etc.) and that value can be inspected at run time.
+However, all 9 cases of UB in the Arithmetic category are locally diagnosable since they are all cases of an arithmetic operation producing a value that is somehow inappropriate (mathematically invalid, not representable in the target type, etc.) and that value can be inspected at run time.
 
 UB in the Threading category is either not locally diagnosable (\{intro.races.data\}) or not diagnosable at all (\{intro.progress.stops\}. However, UB in the Sequencing category (\{intro.execution.unsequenced.modification\}) is locally diagnosable.
 
 UB in the Assumption category (\{dcl.attr.assume.false\}) is, in principle, locally diagnosable by evaluating the operand of the assumption and verifying that the resulting value, contextually converted to \tcode{bool}, equals \tcode{true}. However, if that evaluation has any side effects, such a check could alter the observable state of the program. Therefore, even if the given assumption holds and no UB occurs, the check itself might render the program invalid by altering its state. Thus, this case of UB is meaningfully diagnosable in any automated fashion only if the operand has no side effects when evaluated. However, proving that the operand has no side effects is generally impossible to do efficiently and is outright impossible in the presence of an opaque function call. We therefore consider this case not diagnosable at all.
-% TD: TODO: CONTINUE FROM HERE: pie chart shows 3 cases as "Not checkable in some cases", you need to find the other 2 and then revise the chart. Then, start over at the top and fix all numbers.
 
 Two cases of UB in the Control Flow category are locally diagnosable. \{stmt.return.flow.off\} can be diagnosed by inserting a check at the end of every function body that does not end with a \tcode{return} statement. \{dcl.attr.noreturn.eventually.returns\} can be diagnosed by inserting a check into every function declared \tcode{[[noreturn]]}. The remaining three cases of UB in that category are not locally diagnosable.
 
-Some cases of UB in the Replacement Function category are partially or fully locally diagnosable. In particular, some of the constraints specified in \{basic.stc.alloc.dealloc.constraint\} and \{expr.new.non.allocating.null\} are locally diagnosable, while others are not. In particular, we can check locally that a deallocation function does not exit via an exception and that an allocation function does not return null. However, checking the other constraints (locally or at all) is generally not possible.
+In the Replacement Function category,  \{basic.stc.alloc.dealloc.throw\} and \{expr.new.non.allocating.null\} are locally diagnosable because we can check locally that a function does not exit via an exception, or that it does not return null. However, the more complex set of constraints specified in \{basic.stc.alloc.dealloc.constraint\} is not fully diagnosable  (locally or at all).
 
 Finally, one case of UB in the Coroutine category, {stmt.return.coroutine.flow.off\}, is locally diagnosable in a way analogous to \{stmt.return.flow.off\} by inserting a check at the end of a coroutine for which no \tcode{return_void} function is provided. The remaining two cases of UB in that category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations. 
 
-Overall, as shown in Figure~\ref{piechart_locally}, only 17 cases of UB (21.25\% of all cases) are unconditionally locally diagnosable at run time, while 8 cases of UB (10\%) are only locally diagnosable under some conditions, and 52 cases of UB (65\%) are not locally diagnosable at all, requiring instrumentation of the code in order to be diagnosed at run time. We will discuss these requirements in more detail in Section~\ref{cost_nonlocal}. In addition, 3 cases of UB (3.75\%) are not diagnosable at all in the general case, even with additional instrumentation.
+Overall, as shown in Figure~\ref{piechart_locally}, only 19 cases of UB (23.75\% of all cases) are unconditionally locally diagnosable at run time, while 58 cases of UB (72.5\%) are not locally diagnosable in the general case, requiring instrumentation of the code in order to be diagnosed at run time. We will discuss these requirements in more detail in Section~\ref{cost_nonlocal}. In addition, 3 cases of UB (3.75\%) are not diagnosable at all in the general case, even with additional instrumentation.
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 \vspace{5mm} % added manually to create enough space between text and piechart
@@ -401,14 +396,14 @@ Overall, as shown in Figure~\ref{piechart_locally}, only 17 cases of UB (21.25\%
                radius=3, 
                rotate=90,
                change direction,
-               color={Emerald, Goldenrod, RedOrange, OrangeRed, Gray},
+               color={Emerald, Goldenrod, OrangeRed},
                sum=auto,
                after number = \,,   % keeps numbers tidy (adds thin space)
                /tikz/nodes={font=\small} % tweak font size if needed
             ]
-            {17/Checkable locally, 8/Checkable locally in some cases, 52/Checking requires instrumentation, 3/Checking not possible in general}
+            {19/Checkable locally, 58/Requires global instrumentation, 3/Not checkable}
     \end{tikzpicture}
-    \caption{Runtime diagnosability of explicit core language UB}
+    \caption{Runtime diagnosability of explicit core language UB for the general case}
     \label{piechart_locally}
 \end{figure}
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -478,7 +473,6 @@ Given the substantial overhead of such instrumentation in both runtime cost and 
 
 \subsection{Existence of replacement behaviour}
 \label{replacement}
-
 
 For existing code that cannot be modified in-source, removing runtime UB requires redefining 
 the semantics of the affected C++ operations, for the cases where UB would occur today, to have well-defined behaviour instead. A useful question is therefore: for which cases of UB is it actually possible to  specify such well-defined \emph{replacement behaviour} in a meaningful way?
@@ -1227,7 +1221,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \multicolumn{6}{c}{\textbf{V. Threading}} 
 \\ \hline
 
-\ubxref{intro.races.data} & \raggedright[intro.races]/17: Any such data race results in undefined behavior. & Partially & No & \raggedright Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & \raggedright Make all primitive memory accesses implicitly atomic
+\ubxref{intro.races.data} & \raggedright[intro.races]/17: Any such data race results in undefined behavior. & Yes & No & \raggedright Track from which threads memory is accessed and when accesses synchronise with each other; only practical for a subset of cases (see TSan) & \raggedright Make all primitive memory accesses implicitly atomic
 \tabularnewline \hline
 \ubxref{intro.progress.stops} & \raggedright[intro.progress]/1: The implementation may assume that any thread will eventually do one of the following: terminate, invoke the function \tcode{std::this_thread::yield} ([thread.thread.this]), make a call to a library I/O function, perform an access through a volatile glvalue, 
 perform an atomic or synchronization operation other than an atomic modify-write operation ([atomics.order]), or
@@ -1265,9 +1259,9 @@ continue execution of a trivial infinite loop ([stmt.iter.general]). & No & No &
 \multicolumn{6}{c}{\textbf{IX. Replacement Functions}} 
 \\ \hline
 
-\ubxref{basic.stc.alloc.dealloc.constraint} & \raggedright[basic.stc.dynamic.general]/3: If the behavior of an allocation or deallocation function does not satisfy the semantic constraints specified in [basic.stc.dynamic.allocation] and [basic.stc.dynamic.deallocation], the behavior is undefined. & \raggedright Partially: some constraints can be checked locally (e.g., allocation function does not return null); others cannot be checked at all. & Partially & \raggedright Insert checks where possible & None
+\ubxref{basic.stc.alloc.dealloc.constraint} & \raggedright[basic.stc.dynamic.general]/3: If the behavior of an allocation or deallocation function does not satisfy the semantic constraints specified in [basic.stc.dynamic.allocation] and [basic.stc.dynamic.deallocation], the behavior is undefined. & \raggedright No & No & \raggedright Insert checks where possible & None
 \\ \hline
-\ubxref{basic.stc.alloc.dealloc.throw} & \raggedright [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. &   \raggedright  Make ill-formed via \cite{P3424R0} & --- & --- &
+\ubxref{basic.stc.alloc.dealloc.throw} & \raggedright [basic.stc.dynamic.deallocation]/4: If a deallocation function terminates by throwing an exception, the behavior is undefined. &   \raggedright   Yes & Yes & Make ill-formed via \cite{P3424R0} & None
 \\ \hline
 \ubxref{expr.new.non.allocating.null} & \raggedright[expr.new]/22: If the allocation function is a non-allocating form ([new.delete.placement]) that returns null, the behavior is undefined. & Yes & Yes & \raggedright  Insert \tcode{post(r: r)} & None
 \\ \hline

@@ -970,10 +970,9 @@ Thanks to Lori Hughes for reviewing a previous revision this paper and providing
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% Remove ToC entry for bibliography
-\renewcommand{\addcontentsline}[3]{}% Make \addcontentsline a no-op to disable auto ToC entry
-
-%\renewcommand{\bibname}{References}  % custom name for bibliography
+\renewcommand{\bibname}{References}  % custom name for bibliography
+\nobibintoc  % disable default "bold font" ToC entry for bibliography
+\addcontentsline{toc}{section}{References} % add normal font ToC entry instead
 \bibliographystyle{abstract}
 \bibliography{ref}
 
@@ -982,7 +981,7 @@ Thanks to Lori Hughes for reviewing a previous revision this paper and providing
 \pagebreak
 \begin{landscape}
 
-\addcontentsline{toc}{section}{Appendix: UB list}
+\addcontentsline{toc}{section}{Appendix A: List of language UB}
 \section*{Appendix A: List of language UB}
 \label{appendix}
 

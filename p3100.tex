@@ -549,9 +549,9 @@ Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful
 \section{Strategy}
 \label{strategy}
 
-Having performed an in-depth analysis of all explicit core language UB in the C++ working paper in Section~\ref{analysis}, we can use the results of this analysis to develop a holistic strategy for systematically detecting, mitigating, and ultimately removing UB across the entire C++ programming language specification. Our goal is for this strategy to guide the development of the core language UB white paper \cite{P3656R1} as well as future versions of Standard C++.
+Having performed an in-depth analysis of all explicit core language UB in the C++ working paper in Section~\ref{analysis}, we can use the results of this analysis to develop a holistic strategy for systematically detecting, mitigating, and ultimately removing UB across the entire C++ programming language specification. Our goal is for this strategy to guide the evolution of the C++ programming language.
 
-The outline of this strategy is illustrated in Figure~\ref{fig_magicslide}, an updated version of the diagram on slide 53 in \cite{P3754R0} (a.k.a. the ``magic slide'') that we presented to EWG in Sofia and that EWG approved as a basis for the core language UB white paper.
+The outline of this strategy is illustrated in Figure~\ref{fig_magicslide}, an updated version of the diagram on slide 53 in \cite{P3754R0} (a.k.a. the ``magic slide'') that we presented to EWG in Sofia, gaining strong approval from that group.
 
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -579,7 +579,7 @@ Our proposed strategy for removal of explicit core language UB focuses on tools 
 
 Further, as discussed in \cite{P3700R0}, making C++ ``safe''\footnote{In this paper, we avoid unqualified uses of the terms ``safe'' and ``safety'' because of their ambiguity. As discussed in \cite{P3376R0}, \cite{P3500R1}, and \cite{P3578R0}, it is critically important to distinguish between conflicting usages of those terms, such as functional safety, language safety, memory safety, etc.} consists of more than mitigating explicit core language UB. We already touched upon implicit UB and language UB in Section~\ref{enum_scope}. Beyond those, there are many other classes of bugs unrelated to UB that can compromise the functional safety, security, and correctness of a C++ program. Such bugs include resource leaks, termination errors, and logic errors. 
 
-While there are tools available to address these classes of bugs (for example, logic errors can often be avoided by using strongly typed utilities such as \cite{P3045R6}), and there is interesting ongoing work in those areas, they are out of scope for the strategy proposed here. At least for now, we explicitly target the core language UB white paper \cite{P3656R1} and therefore limit the scope of the strategy described here to explicit core language UB. 
+While there are tools available to address these classes of bugs (for example, logic errors can often be avoided by using strongly typed utilities such as \cite{P3045R6}), and there is interesting ongoing work in those areas, they are out of scope for the strategy proposed here. At least for now, we explicitly limit the scope of the strategy described here to explicit core language UB. 
 
 \subsection{Tools}
 \label{tools}

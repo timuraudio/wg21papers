@@ -145,7 +145,7 @@ treatment of core language UB in C++: the pursuit of a \emph{core language UB wh
 
 This paper directly addresses the major work items proposed by \cite{P3656R1}. At WG21's June 2025 meeting in Sofia, EWG reviewed revision R2 of this paper and approved its adoption into the core language UB white paper working draft. 
 
-In Section~\ref{analysis}, we identify and enumerate all core language UB explicitly specified in the current C++ working paper \cite{N5008}. We group all core language UB into ten categories. We then classify cases of UB along several relevant criteria, such as whether they are locally diagnosable, how expensive that diagnosis is, and in which cases the UB can be replaced with meaningful, well-defined behaviour.
+In Section~\ref{analysis}, we identify and enumerate all core language UB explicitly specified in the current C++ working paper \cite{N5008}. We group all core language UB into ten categories. We then classify cases of UB along several relevant criteria, such as whether they are checkable at compile time or at runtime, whether a check can be performed locally, how expensive a check would be, and in which cases the UB can be replaced with meaningful, well-defined behaviour.
 
 In Section~\ref{strategy}, we present a holistic strategy for systematically detecting, mitigating, and ultimately removing UB across the entire C++ programming language specification. The present revision of this paper incorporates the presentation \cite{P3754R0} we gave to EWG in Sofia outlining this strategy. It also includes an updated version of the diagram on slide 53 from that presentation (a.k.a. the ``magic slide'') visualising this strategy. EWG reached consensus in Sofia to use this diagram as a basis for the core language UB white paper.
 
@@ -165,8 +165,7 @@ will enable programmatically identifying the category of UB that has occurred an
 
 \subsubsection{Methodology}
 
-We manually inspected all occurrences of the words ``undefined'' and ``assume'' in revision \cite{N5008} of the C++ working paper.
-%TD: Should we repeat this exercise for the more current revision N5014? Is there a way to do this more efficiently than having to search for all occurrences again?
+We manually inspected all occurrences of the words ``undefined'' and ``assume'' in revision \cite{N5014} of the C++ working paper.
 We then constructed a list of all cases of explicitly specified core language UB. We found 79 instances of explicit language UB introduced with phrases containing the word ``undefined'' (``...the behaviour is undefined'', ``...has undefined behaviour'', ``...results in undefined behaviour'', etc.) and one instance of explicit language UB introduced with a phrase containing the word ``assume'' (``the implementation may assume...'').\footnote{Except for this one occurrence, which is in [intro.progress]/1, the verb ``assume'' in core wording does not imply that there may be undefined behaviour, but instead means things like ``this case will be treated as the default'' or ``other cases will be ignored''. To remove ambiguity, \cite{CWG2816} proposes to change the wording in [intro.progress]/1 to use the phrase ``the behaviour is undefined'' instead of ``the implementation may assume''.} We thus obtained a list with 80 cases of explicit language UB; it can be found in \hyperref[appendix]{Appendix~A} of this paper. 
 
 Each individual case of UB in our list has a stable identifier. We place those identifiers between \{curly braces\} to visually distinguish them from the C++ working paper's clause identifiers, which we place between [square brackets].
@@ -289,7 +288,7 @@ As we will see in Section~\ref{strategy}, despite these fundamental limitations 
 
 An important property for diagnosis of UB is whether such diagnosis (whether static or dynamic) can be performed \emph{locally}, i.e. without keeping track of additional information across the entire program that is not available within the C++ abstract machine (achievable with additional instrumentation of the kind that is implemented in sanitisers, such as ASan and UBSan) and without analysing code in other branches (which is limited by the Halting problem) or on the other side of a function call boundary (which might be located in another TU and therefore inaccessible).
 
-Most cases of UB in the Initialisation, Bounds, and Type and Lifetime categories are, in general, \emph{not} locally diagnosable. They could potentially be made locally diagnosable in the future with the introduction of novel features such as lifetime annotations \cite{P2771R1} or ``ghost data'' \cite{Lippincott2025} which are the subject of ongoing research. We discuss some of these approaches in Section~\ref{strategy}; here, we focus on the status quo in  Standard C++.
+Most cases of UB in the Initialisation, Bounds, and Type and Lifetime categories are, in general, \emph{not} locally diagnosable but require instrumentation applied across the entire program to be diagnosed. They could potentially be made locally diagnosable in the future with the introduction of novel features such as lifetime annotations \cite{P2771R1} or ``ghost data'' \cite{Lippincott2025} which are the subject of ongoing research. We discuss some of these approaches in Section~\ref{strategy}; here, we focus on the status quo in  Standard C++.
 
 In the Bounds category, 
 \{expr.add.out.of.bounds\} 
@@ -317,7 +316,7 @@ Some cases of UB in the Replacement Function category are partially or fully loc
 
 Finally, one case of UB in the Coroutine category, {stmt.return.coroutine.flow.off\}, is locally diagnosable in a way analogous to \{stmt.return.flow.off\} by inserting a check at the end of a coroutine for which no \tcode{return_void} function is provided. The remaining two cases of UB in that category are not locally diagnosable since being so would require tracking runtime state information that is not currently maintained within the coroutine handle in most implementations. 
 
-Overall, as shown in Figure~\ref{piechart_locally}, only 19 cases of UB (23.75\% of all cases) are unconditionally locally diagnosable at run time, while 58 cases of UB (72.5\%) are not; these cases require instrumentation of the code in order to be diagnosed at run time. We will discuss these requirements in more detail in Section~\ref{cost_nonlocal}. In addition, 4 cases of UB (5\%) are not checkable at all in the general case, even with additional instrumentation.
+Overall, as shown in Figure~\ref{piechart_locally}, only 17 cases of UB (21.25\% of all cases) are unconditionally locally diagnosable at run time, while 8 cases of UB (10\%) are only locally diagnosable under some conditions, and 52 cases of UB (65\%) are not locally diagnosable at all, requiring instrumentation of the code in order to be diagnosed at run time. We will discuss these requirements in more detail in Section~\ref{cost_nonlocal}. In addition, 3 cases of UB (3.75\%) are not diagnosable at all in the general case, even with additional instrumentation.
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 \vspace{5mm} % added manually to create enough space between text and piechart
@@ -333,7 +332,7 @@ Overall, as shown in Figure~\ref{piechart_locally}, only 19 cases of UB (23.75\%
                after number = \,,   % keeps numbers tidy (adds thin space)
                /tikz/nodes={font=\small} % tweak font size if needed
             ]
-            {19/Checkable locally, 6/Checkable locally in some cases, 51/Checking requires instrumentation, 4/Checking not possible in general}
+            {17/Checkable locally, 8/Checkable locally in some cases, 52/Checking requires instrumentation, 3/Checking not possible in general}
     \end{tikzpicture}
     \caption{Runtime diagnosability of explicit core language UB}
     \label{piechart_locally}
@@ -450,8 +449,7 @@ The replacement behaviour for UB in the Assumption category (\{dcl.attr.assume.f
 Finally, we can define partial replacement behaviour for one cases of UB in the Control Flow category  (\{stmt.return.flow.off\}) and an analogous case of UB in the Coroutines category (\{stmt.return.
 coroutine.flow.off\}): when the function or coroutine would return a value of built-in type, we can define that flowing off the end returns an erroneous value. This case is effectively handled in the same way as \{basic.indet.value\}; again, no plausible replacement behaviour exists for user-defined return types in the general case.
 
-Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful replacement behaviour for only 17 cases of UB (21.25\% of all cases). Out of these 17 cases, for 3 cases this is only possible when the operation in question produces a value of built-in type. Unconditional replacement behaviour exists for only 14 cases of UB (17.5\% of all cases). In all of these cases, the replacement behaviour consists of erroneous behaviour; in most cases, removing the UB in this manner introduces significant runtime cost.
-% TD: "replacement behaviour consists of erroneous behaviour" sounds awkward
+Overall, as shown in Figure~\ref{piechart_replacement}, we can define meaningful replacement behaviour for only 17 cases of UB (21.25\% of all cases). Out of these 17 cases, for 3 cases this is only possible when the operation in question produces a value of built-in type. Unconditional replacement behaviour exists for only 14 cases of UB (17.5\% of all cases). In all of these cases, the replacement behaviour is \emph{erroneous} behaviour (and not refined, correct behaviour); in most cases, removing the UB in this manner introduces significant runtime cost.
 
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 \vspace{5mm} % added manually to create enough space between text and piechart
@@ -547,10 +545,10 @@ In this paper, we go further and propose to introduce erroneous behaviour for \e
 \subsubsection{Runtime checks}
 \label{checks}
 
-As we saw in Section~\ref{diagnose}, the vast majority of UB (77 cases out of 80, or 96.25\% of all cases) can in principle be diagnosed by inserting and performing a suitable runtime check. The check verifies the conditions necessary for the operation in question to have well-defined behaviour at run time. It also acts as a guard against UB: if the check fails, the program can be terminated, thus preventing the undefined behaviour from occurring.
+As we saw in Section~\ref{diagnose}, the vast majority of UB (77 cases out of 80, or 96.25\% of all cases) can in principle be diagnosed by inserting and performing a suitable runtime check (which may or may not require additional instrumentation). The check verifies the conditions necessary for the operation in question to have well-defined behaviour at run time. It also acts as a guard against UB: if the check fails, the program can be terminated, thus preventing the undefined behaviour from occurring.
 
 While such runtime checks invariably add runtime overhead, they are very effective at both diagnosing bugs and removing security vulnerabilities. In Sections~\ref{design} and \ref{wording} of this paper, we propose a generic framework for systematically adding runtime checks to C++ core language constructs via implicit contract assertions.
-% TD: Explain that some of these runtime checks are theoretically possible but really infeasible - race conditions
+% TD: TODO: Explain that some of these runtime checks are theoretically possible but really infeasible - race conditions
 
 Implicitly generated runtime checks are widely deployed in the field today. Checks that can be generated locally by the compiler are often provided via compiler flags, for example the \tcode{-ftrapv} flag in GCC that checks for signed integer overflow and terminates the program on failure. Checks that require additional instrumentation to perform are provided by various flavours of sanitisers such as ASan, UBSan, etc.
 
@@ -1140,7 +1138,7 @@ $i + j$ of \tcode{x} if $0 \leq i + j \leq n$ and the expression \tcode{P - J} p
 \tabularnewline \hline
 \ubxref{expr.static.cast.enum.outside.range} & \raggedright[expr.static.cast]/9: If the enumeration type does not have a fixed underlying type, the value is unchanged if the original value is within the range of the enumeration values ([dcl.enum]), and otherwise, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
 \tabularnewline \hline
-\ubxref{expr.static.cast.fp.outside.range} & \raggedright[expr.static.cast]/10: A prvalue of floating-point type can be explicitly converted to any other floating-point type. If the source value can be exactly represented in the destination type, the result of the conversion has that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
+\ubxref{expr.static.cast.fp.outside.range} & \raggedright[expr.static.cast]/10: A prvalue of floating-point type caqn be explicitly converted to any other floating-point type. If the source value can be exactly represented in the destination type, the result of the conversion has that exact representation. If the source value is between two adjacent destination values, the result of the conversion is an implementation-defined choice of either of those values. Otherwise, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the value is valid & \raggedright Coerce into erroneous value
 \tabularnewline \hline
 \ubxref{expr.mul.div.by.zero} & \raggedright[expr.mul]/4: The binary \tcode{/} operator yields the quotient, and the binary \tcode{\%} operator yields the remainder from the division of the first expression by the second. If the second operand of \tcode{/} or \tcode{\%} is zero, the behavior is undefined. & Yes & Yes & \raggedright Insert a check of whether the second operand is zero & \raggedright Coerce into erroneous value
 \tabularnewline \hline
@@ -1185,7 +1183,7 @@ continue execution of a trivial infinite loop ([stmt.iter.general]). & No & No &
 \ubxref{dcl.attr.noreturn.eventually.returns} & \raggedright[dcl.attr.noreturn]/2: If a function \tcode{f} is invoked where \tcode{f} was previously declared with the \tcode{noreturn} attribute and that invocation eventually returns, the behavior is runtime-undefined. & Yes & Yes & \raggedright Insert \tcode{post(false)} & None
 \\ \hline
 
-\pagebreak % MANUAL PAGEBREAK INSERTED HERE
+\pagebreak % MANUAL PAGEBREAK INSERTED HERE to make the category header be on the same page as the first case of UB in that category
 
 \multicolumn{6}{c}{\textbf{IX. Replacement Functions}} 
 \\ \hline
@@ -1197,7 +1195,7 @@ continue execution of a trivial infinite loop ([stmt.iter.general]). & No & No &
 \ubxref{expr.new.non.allocating.null} & \raggedright[expr.new]/22: If the allocation function is a non-allocating form ([new.delete.placement]) that returns null, the behavior is undefined. & Yes & Yes & \raggedright  Insert \tcode{post(r: r)} & None
 \\ \hline
 
-\pagebreak % MANUAL PAGEBREAK INSERTED HERE
+\pagebreak % MANUAL PAGEBREAK INSERTED HERE to make the category header be on the same page as the first case of UB in that category
 
 \multicolumn{6}{c}{\textbf{X. Coroutines}} 
 \\ \hline

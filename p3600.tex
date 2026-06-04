@@ -19,7 +19,7 @@
 
 \usepackage{titlesec}
 \usepackage{tocloft}
-
+ 
 % Custom ToC layout because the default sucks
 \cftsetindents{section}{0in}{0.24in}
 \cftsetindents{subsection}{0.24in}{0.34in}
@@ -77,17 +77,14 @@
 \begin{document}
 \title{Contract assertions on virtual functions: \\ a principled design approach}
 \author{
-Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) \\
-Joshua Berne \small(\href{mailto:jberne4@bloomberg.net}{jberne4@bloomberg.net}) \\
-John Lakos \small(\href{mailto:jlakos@bloomberg.net}{jlakos@bloomberg.net}) 
-% TD: TODO: get Ville on board?
+Timur Doumler \small(\href{mailto:papers@timur.audio}{papers@timur.audio}) 
 }
 \date{}
 \maketitle
 
 \begin{tabular}{ll}
 Document \#: & D3600R0 \\
-Date: &2025-08-25 \\
+Date: &2026-05-26 \\
 Project: & Programming Language C++ \\
 Audience: & SG21, EWG
 \end{tabular}
@@ -125,7 +122,7 @@ preconditions and postconditions of a function directly in C++ code, and optiona
 
 Unlike assertion statements (\tcode{contract_assert}) or pre-C++26 macro-based assertions, function contract assertions are a part of the function's \emph{declaration} and are thus readily found by humans, compilers, IDEs, and static analysis tools without having to inspect the function's definition. 
 
-However, a major limitation of the initial feature set in C++26 is that \tcode{pre} and \tcode{post} cannot be placed on a \emph{virtual} function; doing so renders the program ill-formed. This limitation exists due to ongoing disagreements in WG21 regarding the desired behaviour of \tcode{pre} and \tcode{post} on virtual functions that could not be resolved in the C++26 timeframe.
+However, a major limitation of the initial feature set in C++26 is that \tcode{pre} and \tcode{post} cannot be placed on a \emph{virtual} function; doing so renders the program ill-formed. This limitation exists due to disagreements in WG21 regarding the desired behaviour of \tcode{pre} and \tcode{post} on virtual functions that could not be resolved in the C++26 timeframe.
 
 At the same time, virtual functions are widely used in C++ today. Many codebases and popular libraries rely on runtime polymorphism as a key aspect of their design. Therefore, to ensure a successful adoption of contract assertions across the C++ ecosystem, we must add meaningful and user-friendly support for \tcode{pre} and \tcode{post} on virtual functions (as pointed out in \cite{P3173R0}).
 
@@ -267,12 +264,20 @@ In general, only a \emph{subset} of the plain-language contract can be expressed
 \subsection{Correctness}
 \label{correctness}
 
-A program or one of its components is \emph{correct} with respect to a specification if it behaves according to that specification when executed. Since the expected behaviour is described by the contract, a program or component is correct when it does not violate its contract. % TD: TODO: THIS IS CLUMSY I'M GETTING TIRED
+A program or one of its components is \emph{correct} with respect to a specification if it behaves according to that specification when executed. Since the expected behaviour is described by the contract, a program or component is correct when it does not violate its contract.
 
-However, in the remainder of this paper, we generally use the terms \emph{correct call} or \emph{correct implementation} of a function to mean {correct with respect to its contract assertions}, i.e., without violating them. Consistently, we use the term \emph{contract violation} to mean a violation of a contract assertion (regardless of whether that violation was detected by a runtime check), and not a violation of the plain-language contract.
+However, in the remainder of this paper, we generally use the terms \emph{correct call} or \emph{correct implementation} of a function to mean {correct with respect to its contract assertions}, i.e., without violating them. 
+% TD: TODO: Don't do this. Don't corrupt the meaning of "Correct", invent a different term
+Consistently, we use the term \emph{contract violation} to mean a violation of a contract assertion (regardless of whether that violation was detected by a runtime check), and not a violation of the plain-language contract.
+% TD: TODO: Do we need a new term for violating a contract covered by an assertion? Or can we just say that some are not detected, or that they *can* be detected but not always are?
+
+% TD: TODO: Somewhere also introduce canonical and non-canonical, and group use cases accordingly
+
+% TD: TODO: Search below: "Enforce DbC" is not a use case. Maybe frame these things as use cases, not properties? Then the wording and impl experience also kinda goes away. Or maybe this is a "sanity" use case (see categories in DbC)
  
 \subsection{Direct and indirect calls}
 
+% TD: TODO: rewrite this: a virtual function call through a non-reference non-pointer is a direct call and should be treated as such.
 The function contract assertions that \emph{apply to a function call} are the set of function contract assertions that will be evaluated\footnote{Note that \emph{evaluated} does not necessarily mean \emph{checked}, as contract assertions can also be evaluated with the \emph{ignore} evaluation semantic. However, it is recommended that implementations use checked evaluation semantics for contract assertions by default (see \href{https://eel.is/c++draft/basic.contract\#eval-3}{[basic.contract.eval]/3}).} as part of that function call. The key question that any design for supporting \tcode{pre} and \tcode{post} on virtual functions needs to answer is: which function contract assertions apply when a virtual function is called (for each possible way of doing so)?
 
 To classify the possible answers to that question, it is useful to distinguish between \emph{direct} and \emph{indirect} function calls.\footnote{This terminology is not used by the C++ Standard but introduced for this paper.} A direct function call is a function call where the declaration of the function that will be called is known at the call site; an indirect function call is one where this is not the case.

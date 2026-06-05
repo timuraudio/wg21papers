@@ -88,7 +88,7 @@ The Lakos Rule was first proposed in \cite{N3248} and adopted via \cite{N3279} i
 
 While no policy to abandon the Lakos Rule has been formally adopted, LEWG nevertheless moved away from adhering to the Lakos Rule. LEWG leadership assumed the position that no formally adopted policy exists for how preconditions and \tcode{noexcept} should interact (\cite{P2920R0}); instead, we should consider each new proposal that contains narrow-contract functions on a case-by-case basis. This led to newer library facilities (e.g., \tcode{std::hive}) diverging from the Lakos Rule.
 
-We believe that the Lakos Rule should remain a design principle for the C++ Standard Library. There are important engineering reasons why the Lakos Rule is still valid and useful today; abandoning it would inflict avoidable damage to the C++ language . To argue this case, we published two papers in the May 2023 mailing, \cite{P2831R0} and \cite{P2861R0}, to be presented at the June 2023 meeting in Varna.
+We believe that the Lakos Rule should remain a design principle for the C++ Standard Library. There are important engineering reasons why the Lakos Rule is still valid and useful today; abandoning it would inflict avoidable damage to the C++ language . To argue this case, we published two papers in the May 2023 mailing, \cite{P2831R0} and \cite{P2861R0}, and had planned to present them at the June 2023 meeting in Varna.
 
 However, neither paper was scheduled for discussion in LEWG at the Varna meeting, nor at the following meeting in Kona in November 2023. Instead of considering our papers, LEWG has decided to first agree on a general process for adopting design policies for the C++ Standard Library. This has been done in \cite{SD-9}, with the actual policy-adoption process explained in \cite{P2267R1}.
 
@@ -157,16 +157,18 @@ Violations of the Lakos Rule are not random, but principled (at least, before C+
 \item Functions that cannot throw by the very nature of their operation, even if called out-of-contract, such as \tcode{std::launder} and \tcode{std::start_lifetime_as};
 \item Lakos Rule violations in facilities newly introduced in C++26, such as \tcode{std::hive} and \tcode{std::saturating_div}.
 \end{itemize}
-The first and fourth clusters are well-motivated divergences from the policy established via \cite{P0884R0}; the second and third are in line with the policy; the last one indicates recent divergence in the absence of an oficial policy.
+The first and fourth clusters are deliberate, well-motivated divergences from the \tcode{noexcept} policy established via \cite{P0884R0}; the second and third are in line with the policy; the last one indicates recent divergence in the absence of a policy.
 
-Conditionally-\tcode{noexcept} functions with narrow contracts are few, and are localised in the following clusters:
+Conditionally-\tcode{noexcept} functions with narrow contracts are few. They are localised in the following two clusters:
 \begin{itemize}
 \item Swap and move operations: \tcode{std::swap}, member \tcode{swap}, \mbox{\tcode{iter_swap}}, \tcode{iter_move}, move-assign operators;
-\item Forwarding \tcode{operator()(Args...)} in \tcode{std::move_only_function} and \tcode{std::copyable_function}.
+\item Forwarding \tcode{operator()(Args...)} in function wrappers \tcode{std::move_only_function} and \mbox{\tcode{std::copyable_function}}.
 \end{itemize}
 In all of the above cases, the throwing behaviour tracks that of a template parameter, in line with the policy in \cite{P0884R0}. This is a narrow, well-defined idiom that has been explicitly designed with the Lakos Rule in mind, carving out precise exceptions to the rule where algorithmically necessary.
 
-Apart from the above clusters and a small handful of isolated cases, the C++ Standard Library consistently adheres to the Lakos Rule. Many popular and widely used C++ Standard Library facilities adhere to the Lakos Rule \emph{without any exceptions}: all containers introduced before C++26 (\tcode{std::vector}, \tcode{std::array}, associative containers), all algorithms introduced before C++26, as well as \tcode{std::variant}, \tcode{std::pair}, \tcode{std::tuple},  \tcode{std::mutex}, and \tcode{std::chrono}. Other popular facilities such as \tcode{std::thread} are entirely wide-contract so the question does not arise. The use of  the ``\emph{Throws:} Nothing'' specification idiom  is widespread, but not rigorous -- sometimes the ``\emph{Throws:}'' clause is missing even if a non-\tcode{noexcept} function will not throw in-contract.
+Apart from the above clusters and a small handful of isolated cases, the C++ Standard Library consistently adheres to the Lakos Rule. Many popular and widely used C++ Standard Library facilities adhere to the Lakos Rule \emph{without any exceptions}: all containers introduced before C++26 (\tcode{std::vector}, \tcode{std::array}, associative containers), all algorithms introduced before C++26, as well as \tcode{std::variant}, \tcode{std::pair}, \tcode{std::tuple},  \tcode{std::mutex}, and \tcode{std::chrono}. Other popular facilities such as \tcode{std::thread} are entirely wide-contract so the question does not arise.
+
+The use of  the ``\emph{Throws:} Nothing'' specification idiom  is widespread, but not rigorous -- sometimes the ``\emph{Throws:}'' clause is missing even if a non-\tcode{noexcept} function will not throw in-contract, such as for \tcode{operator[](size_t)} for array \tcode{std::unique_ptr}.
 
 Our analysis demonstrates that the Lakos Rule is the norm in the C++ Standard Library today. Therefore, reinstating the Lakos Rule as official LEWG policy is the only choice consistent with the status quo in the C++ Standard Library specification.
 
@@ -177,9 +179,11 @@ Our analysis demonstrates that the Lakos Rule is the norm in the C++ Standard Li
 
 Community surveys such as the JetBrains Developer Ecosystem survey, the Meeting C++ Community Survey, and the Standard C++ Foundation's Annual C++ Developer Survey consistently show that about half of C++ developers work on codebases where exceptions are either partially or completely banned from use; for the latter in particular, the \tcode{noexcept} policy is of little relevance.
 
-Codebases that \emph{do} use exceptions fall into different camps. Many C++ libraries generously sprinkle \tcode{noexcept} all over their code, while codebases relying on techniques like exception-aided recovery and negative testing adhere to the Lakos Rule (see \cite{P2831R0} for case studies of several companies with such codebases, across different industries). Quantifying the relative size of these camps is difficult and we did not attempt to do so for this paper. However, we expect the use of these techniques to become significantly more widespread with the adoption of C++26 contract assertions, which permit attaching a throwing contract-violation handler to any failing precondition check.
+Codebases that \emph{do} use exceptions fall into different camps. Many C++ libraries generously sprinkle \tcode{noexcept} all over their code, while codebases relying on techniques like exception-based recovery and negative testing adhere to the Lakos Rule (see \cite{P2831R0} for case studies of several companies with such codebases, across different industries).
 
-The three major implementations of the C++ Standard Library (GCC, Clang, and Microsoft) do not use the Lakos Rule and generally tighten \emph{Throws: nothing} to \tcode{noexcept}, making them incompatible with these techniques; other implementations of the Standard Library, or parts of it, such as Bloomberg's BDE, follow the Lakos Rule and make extensive use of throwing violation handlers and negative testing.
+Quantifying the relative size of these camps is difficult and we did not attempt to do so for this paper. However, we expect the use of these techniques to become significantly more widespread with the adoption of C++26 contract assertions, which permit attaching a throwing contract-violation handler as a \emph{standard}, portable mechanism for exception-based recovery from assertion failures.
+
+The three major implementations of the C++ Standard Library (GCC, Clang, and Microsoft) do not use the Lakos Rule and generally tighten \emph{Throws: nothing} to \tcode{noexcept}, making them incompatible with these techniques; other implementations of the Standard Library, or parts of it, such as Bloomberg's BDE, follow the Lakos Rule and make extensive use of exception-based recovery and negative testing.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

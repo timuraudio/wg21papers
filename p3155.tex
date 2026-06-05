@@ -149,16 +149,24 @@ A pie chart visualising this distribution is shown in Figure \ref{fig:piechart}.
 \end{figure}
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Violations of the Lakos Rule are not random, but principled (at least, before C++26). Almost all of them are clearly localised in the following clusters:
+Violations of the Lakos Rule are not random, but principled (at least, before C++26). Almost all narrow-contract functions that are conditionally \tcode{noexcept} are clearly localised in the following clusters, ordered from most to least common:
 \begin{itemize}
-\item Functions whose body cannot throw by the very nature of the operation, even if called out-of-contract: \tcode{std::atomic} and \tcode{std::atomic_ref}, compiler intrinsics with no runtime effect such as \tcode{std::launder} and \tcode{std::start_lifetime_as};
-\item Accessors for smart pointers, \tcode{std::optional},  \tcode{std::expected}, \tcode{std::span}, and \tcode{std::mdspan};
-\item Deallocation functions;
-\item A few Lakos Rule violations in facilities newly introduced in C++26, such as \tcode{std::hive} and \tcode{std::saturating_div}, showing divergence in the absence of a policy.
+\item Dereferencing observers and accessors in smart pointers, \tcode{std::optional},  \tcode{std::expected}, \tcode{std::span}, and \tcode{std::mdspan};
+\item Low-level, concurrency-related facilities such as \tcode{std::atomic}, \tcode{std::atomic_ref}, hazard pointers, RCU;
+\item Deallocation functions such as \tcode{operator delete(void*)}, which are forbidden from throwing by core language rules;
+\item Functions that cannot throw by the very nature of their operation, even if called out-of-contract, such as \tcode{std::launder} and \tcode{std::start_lifetime_as};
+\item Lakos Rule violations in facilities newly introduced in C++26, such as \tcode{std::hive} and \tcode{std::saturating_div}.
 \end{itemize}
-Conditionally-\tcode{noexcept} functions with narrow contracts are few. All of them fall into a narrow, well-defined idiom that has been explicitly designed with the Lakos Rule in mind: \tcode{swap}, \mbox{\tcode{iter_swap}}, \tcode{iter_move}, and the forwarding \tcode{operator()(Args...)} in \tcode{std::move_only_function} and \tcode{std::copyable_function}, where conditional \tcode{noexcept} tracks the throwing behaviour of a template parameter while the precondition stays narrow. These functions carve out precise exceptions to the Lakos Rule where algorithmically necessary, exactly as intended by the original \tcode{noexcept} policy.
+The first and fourth clusters are well-motivated divergences from the policy established via \cite{P0884R0}; the second and third are in line with the policy; the last one indicates recent divergence in the absence of an oficial policy.
 
-Apart from the above clusters and a small handful of isolated cases, the C++ Standard Library consistently adheres to the Lakos Rule. The most popular and widely used C++ Standard Library facilities adhere to the Lakos Rule \emph{without any exceptions}: all containers introduced before C++26 (\tcode{std::vector}, \tcode{std::array}, associative containers), all algorithms introduced before C++26, as well as \tcode{std::variant}, \tcode{std::pair}, \tcode{std::tuple},  \tcode{std::mutex}, \tcode{std::chrono}, etc. Other popular facilities such as \tcode{std::thread} are entirely wide-contract so the question does not arise. The use of  the ``\emph{Throws:} Nothing'' specification idiom  is widespread, but not rigorous -- sometimes the ``\emph{Throws:}'' clause is missing even if a non-\tcode{noexcept} function will not throw in-contract.
+Conditionally-\tcode{noexcept} functions with narrow contracts are few, and are localised in the following clusters:
+\begin{itemize}
+\item Swap and move operations: \tcode{std::swap}, member \tcode{swap}, \mbox{\tcode{iter_swap}}, \tcode{iter_move}, move-assign operators;
+\item Forwarding \tcode{operator()(Args...)} in \tcode{std::move_only_function} and \tcode{std::copyable_function}.
+\end{itemize}
+In all of the above cases, the throwing behaviour tracks that of a template parameter, in line with the policy in \cite{P0884R0}. This is a narrow, well-defined idiom that has been explicitly designed with the Lakos Rule in mind, carving out precise exceptions to the rule where algorithmically necessary.
+
+Apart from the above clusters and a small handful of isolated cases, the C++ Standard Library consistently adheres to the Lakos Rule. Many popular and widely used C++ Standard Library facilities adhere to the Lakos Rule \emph{without any exceptions}: all containers introduced before C++26 (\tcode{std::vector}, \tcode{std::array}, associative containers), all algorithms introduced before C++26, as well as \tcode{std::variant}, \tcode{std::pair}, \tcode{std::tuple},  \tcode{std::mutex}, and \tcode{std::chrono}. Other popular facilities such as \tcode{std::thread} are entirely wide-contract so the question does not arise. The use of  the ``\emph{Throws:} Nothing'' specification idiom  is widespread, but not rigorous -- sometimes the ``\emph{Throws:}'' clause is missing even if a non-\tcode{noexcept} function will not throw in-contract.
 
 Our analysis demonstrates that the Lakos Rule is the norm in the C++ Standard Library today. Therefore, reinstating the Lakos Rule as official LEWG policy is the only choice consistent with the status quo in the C++ Standard Library specification.
 
@@ -194,7 +202,7 @@ specification.
 \item Library functions designed for compatibility with C code (such as the atomics facility)
 may be marked as unconditionally \tcode{noexcept}. 
 \end{enumerate}
-Note that this set of rules corresponds to Policy C in \cite{P3005R0}, which considers seven possible \tcode{noexcept} policies B-H in addition to the null policy A (``no policy''). We believe that all these policies should be considered, via the process proposed in \cite{P3005R0}, in order to be confident that we are adopting the correct one.
+Note that this set of rules corresponds to Policy C in \cite{P3005R0}, which considers seven possible \tcode{noexcept} policies B-H in addition to the null policy A (``no policy'').
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
